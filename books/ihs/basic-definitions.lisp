@@ -153,7 +153,6 @@ Motorola MC68020.</p>")
       (eql b 1)))
 
 (define bfix (b)
-  :parents (logops-definitions bitp)
   :short "Bit fix.  @('(bfix b)') is a fixing function for @(see bitp)s.  It
  coerces any object to a bit (0 or 1) by coercing non-1 objects to 0."
   :long "<p>See also @(see lbfix).</p>"
@@ -166,7 +165,6 @@ Motorola MC68020.</p>")
     0))
 
 (defsection lbfix
-  :parents (logops-definitions bitp)
   :short "Logical bit fix.  @('(lbfix b)') is logically identical to @('(bfix
 b)') but executes as the identity.  It requires @('(bitp b)') as a guard, and
 expands to just @('b')."
@@ -176,7 +174,6 @@ expands to just @('b')."
     `(mbe :logic (bfix ,x) :exec ,x)))
 
 (define zbp
-  :parents (logops-definitions bitp)
   :short "Zero bit recognizer.  @('(zbp x)') tests for zero bits.  Any object
 other than @('1') is considered to be a zero bit."
   ((x bitp))
@@ -253,7 +250,6 @@ for inlined functions on Lisps like SBCL.</p>"
   (- x y))
 
 (define binary--
-  :parents (logops-definition)
   :short "@('(binary-- x y)') is the same as @('(- x y)'), but may symbolically
 simulate more efficiently in @(see gl)."
   ((x acl2-numberp)
@@ -486,8 +482,8 @@ long word.</p>
   (logapp size i (logtail size j)))
 
 (define logext
-  :short "@('(logext size i)') sign-extends @('i') to a @('size')-bit signed
-integer."
+  :short "Logical sign extension, signed version.  @('(logext size i)')
+sign-extends @('i') to an integer with @('size - 1') significant bits."
   ((size (and (integerp size)
               (< 0 size))
          :type unsigned-byte)
@@ -545,7 +541,11 @@ function that is optimized for better performance.</p>"
               (<= 0 size)))
    (i integerp)
    (j integerp))
-  :returns (nat)
+  :returns (nat natp
+                :hyp (>= j 0)
+                :rule-classes :type-prescription
+                :name logrev1-type
+                :hints(("Goal" :in-theory (disable imod ifloor))))
   :split-types t
   (declare (type unsigned-byte size)
            (type integer i j))
@@ -556,12 +556,6 @@ function that is optimized for better performance.</p>"
     (logrev1 (the unsigned-byte (- size 1))
              (logcdr i)
              (logcons (logcar i) j))))
-
-(local (defthm logrev1-type
-         (implies (>= j 0)
-                  (natp (logrev1 size i j)))
-         :rule-classes :type-prescription
-         :hints(("Goal" :in-theory (disable imod ifloor)))))
 
 (define logrev
   :short "Logical reverse.  @('(logrev size i)') bit-reverses the @('size')
@@ -583,10 +577,9 @@ the performance of the FFT.</p>
 <p>@('logrev') entails a recursive definition of bit-reversing via the helper
 function @(see logrev1).</p>
 
-<p>See also @(see bitops::bitops/fast-logrev) for some optimized definitions of
-@(see logrev).</p>"
+<p>See also @(see bitops/fast-logrev) for some optimized definitions of @(see
+logrev).</p>"
   :inline t
-  :enabled t
   (logrev1 size i 0))
 
 (define logsat
@@ -696,7 +689,6 @@ unsigned integer.</p>
 
 
 (defxdoc logops-bit-functions
-  :parents (logops-definitions bitp)
   :short "Versions of the standard logical operations that operate on single bits."
   :long "<p>We provide versions of the non-trivial standard logical operations
 that operate on single bits.</p>
@@ -832,35 +824,33 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                        (the (unsigned-byte 1)
                          (logxor 1 (the (unsigned-byte 1) j)))))))
 
-(defsection bit-functions-type
-  :short "Basic type rules for the @(see logops-bit-functions)."
-
-  (defthm bit-functions-type
-    (and (bitp (b-not i))
-         (bitp (b-and i j))
-         (bitp (b-ior i j))
-         (bitp (b-xor i j))
-         (bitp (b-eqv i j))
-         (bitp (b-nand i j))
-         (bitp (b-nor i j))
-         (bitp (b-andc1 i j))
-         (bitp (b-andc2 i j))
-         (bitp (b-orc1 i j))
-         (bitp (b-orc2 i j)))
-    :rule-classes
-    ((:rewrite)
-     (:type-prescription :corollary (natp (b-not i)))
-     (:type-prescription :corollary (natp (b-and i j)))
-     (:type-prescription :corollary (natp (b-ior i j)))
-     (:type-prescription :corollary (natp (b-xor i j)))
-     (:type-prescription :corollary (natp (b-eqv i j)))
-     (:type-prescription :corollary (natp (b-nand i j)))
-     (:type-prescription :corollary (natp (b-nor i j)))
-     (:type-prescription :corollary (natp (b-andc1 i j)))
-     (:type-prescription :corollary (natp (b-andc2 i j)))
-     (:type-prescription :corollary (natp (b-orc1 i j)))
-     (:type-prescription :corollary (natp (b-orc2 i j))))))
-
 
 (defmacro loglist* (&rest args)
   (xxxjoin 'logcons args))
+
+(defrule bit-functions-type
+  :short "Basic type rules for the @(see logops-bit-functions)."
+  (and (bitp (b-not i))
+       (bitp (b-and i j))
+       (bitp (b-ior i j))
+       (bitp (b-xor i j))
+       (bitp (b-eqv i j))
+       (bitp (b-nand i j))
+       (bitp (b-nor i j))
+       (bitp (b-andc1 i j))
+       (bitp (b-andc2 i j))
+       (bitp (b-orc1 i j))
+       (bitp (b-orc2 i j)))
+  :rule-classes
+  ((:rewrite)
+   (:type-prescription :corollary (natp (b-not i)))
+   (:type-prescription :corollary (natp (b-and i j)))
+   (:type-prescription :corollary (natp (b-ior i j)))
+   (:type-prescription :corollary (natp (b-xor i j)))
+   (:type-prescription :corollary (natp (b-eqv i j)))
+   (:type-prescription :corollary (natp (b-nand i j)))
+   (:type-prescription :corollary (natp (b-nor i j)))
+   (:type-prescription :corollary (natp (b-andc1 i j)))
+   (:type-prescription :corollary (natp (b-andc2 i j)))
+   (:type-prescription :corollary (natp (b-orc1 i j)))
+   (:type-prescription :corollary (natp (b-orc2 i j)))))
