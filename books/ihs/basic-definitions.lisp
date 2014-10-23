@@ -140,7 +140,6 @@ Motorola MC68020.</p>")
                      (logand i (1- (ash 1 size)))))
      :hints(("Goal" :induct (my-induct i size))))))
 
-
 (define bitp (b)
   :short "Bit recognizer.  @('(bitp b)') recognizes 0 and 1."
   :long "<p>This is a predicate form of the @(see type-spec) declaration
@@ -153,6 +152,7 @@ Motorola MC68020.</p>")
       (eql b 1)))
 
 (define bfix (b)
+  :parents (logops-definitions bitp)
   :short "Bit fix.  @('(bfix b)') is a fixing function for @(see bitp)s.  It
  coerces any object to a bit (0 or 1) by coercing non-1 objects to 0."
   :long "<p>See also @(see lbfix).</p>"
@@ -165,6 +165,7 @@ Motorola MC68020.</p>")
     0))
 
 (defsection lbfix
+  :parents (logops-definitions bitp)
   :short "Logical bit fix.  @('(lbfix b)') is logically identical to @('(bfix
 b)') but executes as the identity.  It requires @('(bitp b)') as a guard, and
 expands to just @('b')."
@@ -174,6 +175,7 @@ expands to just @('b')."
     `(mbe :logic (bfix ,x) :exec ,x)))
 
 (define zbp
+  :parents (logops-definitions bitp)
   :short "Zero bit recognizer.  @('(zbp x)') tests for zero bits.  Any object
 other than @('1') is considered to be a zero bit."
   ((x bitp))
@@ -689,6 +691,7 @@ unsigned integer.</p>
 
 
 (defxdoc logops-bit-functions
+  :parents (logops-definitions bitp)
   :short "Versions of the standard logical operations that operate on single bits."
   :long "<p>We provide versions of the non-trivial standard logical operations
 that operate on single bits.</p>
@@ -823,7 +826,6 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
                (logior (the (unsigned-byte 1) i)
                        (the (unsigned-byte 1)
                          (logxor 1 (the (unsigned-byte 1) j)))))))
-
 
 (defmacro loglist* (&rest args)
   (xxxjoin 'logcons args))

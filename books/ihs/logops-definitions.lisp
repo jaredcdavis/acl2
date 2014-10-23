@@ -539,7 +539,6 @@
 
 (local (in-theory (disable logext)))
 
-
 (defsection logrev-basics
   :parents (logrev)
 
