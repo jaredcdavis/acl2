@@ -31,19 +31,76 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "BIB")
+(include-book "entries")
+(include-book "centaur/clex/top" :dir :system)
 (include-book "std/strings/top" :dir :system)
-(include-book "std/util/defalist" :dir :system)
-(include-book "std/util/defaggregate" :dir :system)
-(include-book "std/util/deflist-base" :dir :system)
+(local (include-book "local"))
 
 (defsection parser
-  :parents (bibliography)
-  :short "A simple Bibtex parser."
-  :long "<p>This is a very basic parser for converting Bibtex files into Lisp
-data structures that we can easily load into XDOC.  The general format we
-produce is a simple list of @(see bibentry-p) structures.</p>")
+  :parents (bibtex)
+  :short "A basic Bibtex parser."
+
+  :long "<p>This is a very basic parser for converting Bibtex files into a list
+of @(see entries) that we can easily load into @(see xdoc::xdoc) or process in
+other ways.  The parser can load a load files into lists of @(see bibentry-p)
+structures.</p>")
 
 (local (set-default-parents parser))
+
+(defcharset whitespace
+  (or (eql x #\Space)
+      (eql x #\Newline)
+      (eql x #\Tab)
+      (eql (char-code x) 13) ;; carriage return
+      (eql (char-code x) 12) ;; form feed
+      (eql (char-code x) 11) ;; vertical tab
+      )
+  :short "Recognize basic whitespace.")
+
+(defcharset letter
+  (let ((code (char-code x)))
+    (or (and (<= (char-code #\a) code)
+             (<= code (char-code #\z)))
+        (and (<= (char-code #\A) code)
+             (<= code (char-code #\Z)))))
+  :short "Recognize alphabetic characters, upper or lower case.")
+
+(define skip-whitespace (sin)
+  :short "Skip past and ignore any whitespace."
+  :returns sin
+  (b* (((mv ?match sin)
+        (sin-match-charset* (whitespace-chars) sin)))
+    sin)
+  ///
+  (defthm skip-whitespace-progress
+    (<= (len (strin-left (skip-whitespace sin)))
+        (len (strin-left sin)))
+    :rule-classes ((:rewrite) (:linear))))
+
+(define match-@foo (sin)
+  :short "Recognize the start of an entry, e.g., @('@Book'), @('@Article'), etc."
+  :returns (mv (foo (iff (keywordp foo) foo))
+               (sin))
+  (b* (((when (sin-endp sin))
+        (mv nil sin))
+       (car (sin-car sin))
+       ((unless (eql car #\@))
+        (mv nil sin))
+       ((mv body sin) (sin-match-charset* (letter-chars) sin))
+       ((unless body)
+        (mv nil sin)))
+    (mv (intern$ (str::upcase-string body) "KEYWORD")
+        sin))
+  ///
+  (def-sin-progress match-@foo :hyp foo)
+  (more-returns
+   (foo symbolp :rule-classes :type-prescription)))
+
+zz
+
+(define 
+
+http://thedailyshow.cc.com/full-episodes/tc3345/october-27--2014---wendy-davis
 
 
 

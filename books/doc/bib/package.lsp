@@ -33,12 +33,16 @@
 #!ACL2 (in-package "ACL2")
 
 (include-book "std/portcullis" :dir :system)
+(include-book "centaur/clex/portcullis" :dir :system)
 
 (defpkg "BIB"
-  (union-eq *standard-acl2-imports*
+  (union-eq (set-difference-equal *standard-acl2-imports*
+                                  '(sin))
             set::*sets-exports*
             std::*std-exports*
+            clex::*clex-exports*
             '(bibliography
+              b*
               defpointer
               xdoc-extend
               defxdoc
@@ -48,5 +52,8 @@
               set-default-parents
               maybe-stringp
               maybe-natp
+              clex::defcharset
               )))
+              
+
 
