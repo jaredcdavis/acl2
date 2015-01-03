@@ -159,6 +159,7 @@
        (base-pkg (cdr (assoc :base-pkg x)))
        (short    (or (cdr (assoc :short x)) ""))
        (long     (or (cdr (assoc :long x)) ""))
+       (authors  (cdr (assoc :authors x)))
        (parents  (cdr (assoc :parents x)))
        (suborder (cdr (assoc :suborder x)))
        ((unless (symbolp name))
@@ -172,7 +173,9 @@
        ((unless (stringp long))
         (er hard? 'check-topic-wellformed "Long is not a string or nil: ~x0" x))
        ((unless (symbol-listp suborder))
-        (er hard? 'check-topic-wellformed "Suborder is not a symbol-listp: ~x0" x)))
+        (er hard? 'check-topic-wellformed "Suborder is not a symbol-listp: ~x0" x))
+       ((unless (string-listp authors))
+        (er hard? 'check-topic-wellformed "Authors is not a string-listp: ~x0" x)))
     t))
 
 (defun apply-suborder (suborder children-names)

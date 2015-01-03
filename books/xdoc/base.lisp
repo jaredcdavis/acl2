@@ -61,20 +61,39 @@
   (declare (xargs :mode :program))
   (cdr (assoc-eq 'default-parents (table-alist 'xdoc world))))
 
-(defun check-defxdoc-args (name parents short long)
+(defmacro set-default-authors (&rest authors)
+  `(table xdoc 'default-authors
+          (let ((authors ',authors))
+            (cond ((string-listp authors)
+                   authors)
+                  ((and (consp authors)
+                        (atom (cdr authors))
+                        (string-listp (car authors)))
+                   (car authors))
+                  (t
+                   (er hard? 'set-default-authors
+                       "Expected a string-listp, but found ~x0" authors))))))
+
+(defun get-default-authors (world)
+  (declare (xargs :mode :program))
+  (cdr (assoc-eq 'default-authors (table-alist 'xdoc world))))
+
+(defun check-defxdoc-args (name parents authors short long)
   (declare (xargs :guard t))
   (or (and (not (symbolp name))
            "name is not a symbol!~%")
       (and (not (symbol-listp parents))
            ":parents are not a symbol list~%")
+      (and (not (string-listp authors))
+           ":authors are not a string list~%")
       (and short (not (stringp short))
            ":short is not a string (or nil)~%")
       (and long (not (stringp long))
            ":long is not a string (or nil)~%")))
 
-(defun guard-for-defxdoc (name parents short long)
+(defun guard-for-defxdoc (name parents authors short long)
   (declare (xargs :guard t))
-  (let* ((err (check-defxdoc-args name parents short long)))
+  (let* ((err (check-defxdoc-args name parents authors short long)))
     (or (not err)
         (cw err))))
 
@@ -92,9 +111,9 @@
                      (subseq bookname lds nil))
       bookname)))
 
-(defun defxdoc-fn (name parents short long state)
+(defun defxdoc-fn (name parents authors short long state)
   (declare (xargs :mode :program :stobjs state))
-  (let* ((err (check-defxdoc-args name parents short long)))
+  (let* ((err (check-defxdoc-args name parents authors short long)))
     (if err
         (er hard? 'defxdoc
             "Bad defxdoc arguments: ~s0" err)
@@ -106,9 +125,11 @@
                          "Current Interactive Session"))
              (bookname (normalize-bookname bookname state))
              (parents (or parents (get-default-parents (w state))))
+             (authors (or authors (get-default-authors (w state))))
              (entry (list (cons :name name)
                           (cons :base-pkg (acl2::pkg-witness pkg))
                           (cons :parents parents)
+                          (cons :authors authors)
                           (cons :short short)
                           (cons :long long)
                           (cons :from bookname)))
@@ -122,27 +143,27 @@
            ,@(and post-event (list post-event))
            (value-triple '(defxdoc ,name)))))))
 
-(defmacro defxdoc (name &key parents short long)
+(defmacro defxdoc (name &key parents authors short long)
   `(with-output :off (event summary)
      (make-event
-      (defxdoc-fn ',name ',parents ,short ,long state))))
+      (defxdoc-fn ',name ',parents ',authors ,short ,long state))))
 
-(defun defxdoc-raw-fn (name parents short long)
+(defun defxdoc-raw-fn (name parents authors short long)
   (declare (xargs :guard t)
-           (ignore name parents short long))
+           (ignore name parents authors short long))
   (er hard? 'defxdoc-raw-fn
       "Under-the-hood definition of defxdoc-raw-fn not installed.  You ~
        probably need to load the defxdoc-raw book."))
 
-(defun defxdoc-raw-after-check (name parents short long)
-  (let* ((err (check-defxdoc-args name parents short long)))
+(defun defxdoc-raw-after-check (name parents authors short long)
+  (let* ((err (check-defxdoc-args name parents authors short long)))
     (if err
         (er hard? 'defxdoc-raw
             "Bad defxdoc-raw arguments: ~s0" err)
-      (defxdoc-raw-fn name parents short long))))
+      (defxdoc-raw-fn name parents authors short long))))
 
-(defmacro defxdoc-raw (name &key parents short long)
-  `(defxdoc-raw-after-check ',name ',parents ,short ,long))
+(defmacro defxdoc-raw (name &key parents authors short long)
+  `(defxdoc-raw-after-check ',name ',parents ',authors ,short ,long))
 
 (defun find-topic (name x)
   (declare (xargs :mode :program))

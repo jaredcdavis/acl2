@@ -391,10 +391,15 @@
                   (princ$ (str::cat " -- " from) *standard-co* state)
                 state))
        (parents (cdr (assoc :parents x)))
+       (authors (cdr (assoc :authors x)))
        (state (if parents
                   (fms "Parents: ~&0.~%" (list (cons #\0 parents))
                        *standard-co* state nil)
-                (newline *standard-co* state)))
+                state))
+       (state (if authors
+                  (fms "By ~&0.~%" (list (cons #\0 authors))
+                       *standard-co* state nil)
+                state))
        (state (newline *standard-co* state))
        (state (princ$ terminal *standard-co* state))
        (state (newline *standard-co* state)))

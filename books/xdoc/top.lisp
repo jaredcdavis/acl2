@@ -290,7 +290,7 @@
         original
       acc)))
 
-(defun defsection-autodoc-fn (name parents short long extension marker state)
+(defun defsection-autodoc-fn (name parents authors short long extension marker state)
   (declare (xargs :mode :program :stobjs state))
   (let* ((wrld      (w state))
          (trips     (acl2::reversed-world-since-event wrld marker nil))
@@ -306,6 +306,7 @@
         `(xdoc-extend ,extension ,long)
       `(defxdoc ,name
          :parents ,parents
+         :authors ,authors
          :short ,short
          :long ,long))))
 
@@ -323,6 +324,7 @@
                       name args)
   (declare (xargs :mode :program))
   (let* ((parents     (cdr (extract-keyword-from-args :parents args)))
+         (authors     (cdr (extract-keyword-from-args :authors args)))
          (short       (cdr (extract-keyword-from-args :short args)))
          (long        (cdr (extract-keyword-from-args :long args)))
          (extension   (cdr (extract-keyword-from-args :extension args)))
@@ -350,9 +352,9 @@
            (er hard? 'defsection "Section name must be a non-nil symbol; found
                                   ~x0." name))
           ((and extension
-                (or parents short))
+                (or parents short authors))
            (er hard? 'defsection "In section ~x0, you are using :extension, ~
-                                  so :parents and :short are not allowed." name))
+                                  so :parents, :short, and :authors are not allowed." name))
           ((not autodoc-p)
            `(with-output
               :stack :push
@@ -362,6 +364,7 @@
                 ,@(and defxdoc-p
                        `((defxdoc ,name
                            :parents ,parents
+                           :authors ,authors
                            :short ,short
                            :long ,long)))
                 (with-output :stack :pop
@@ -396,7 +399,7 @@
                      (value-triple :invisible)
                      . ,new-args))
                   (make-event
-                   (defsection-autodoc-fn ',name ',parents ,short ,long ',extension ',marker state))
+                   (defsection-autodoc-fn ',name ',parents ',authors ,short ,long ',extension ',marker state))
                   (value-triple ',name))))))))
 
 (defmacro defsection (name &rest args)

@@ -63,6 +63,24 @@
           (change-parents-fn ',name ',new-parents
                              (get-xdoc-table world))))
 
+(defun change-authors-fn (name new-authors all-topics)
+  (declare (xargs :mode :program))
+  (b* (((when (atom all-topics))
+        (er hard? 'change-authors-fn "Topic ~x0 was not found." name))
+       (topic (car all-topics))
+       ((unless (equal (cdr (assoc :name topic)) name))
+        (cons (car all-topics)
+              (change-authors-fn name new-authors (cdr all-topics))))
+       (topic (cons (cons :authors new-authors)
+                    (delete-assoc-equal :authors topic))))
+    (cons topic (cdr all-topics))))
+
+(defmacro change-authors (name new-authors)
+  `(table xdoc 'doc
+          (change-authors-fn ',name ',new-authors
+                             (get-xdoc-table world))))
+
+
 (defun change-short-fn (name new-short all-topics)
   (declare (xargs :mode :program))
   (b* (((when (atom all-topics))
