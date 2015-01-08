@@ -98,9 +98,50 @@ structures.</p>")
 
 zz
 
-(define 
 
-http://thedailyshow.cc.com/full-episodes/tc3345/october-27--2014---wendy-davis
+(define sin-match-through-lit
+  :parents (matching-functions)
+  :short "Match anything that occurs up to, and including, the first occurrence
+of a particular string literal."
+  ((lit stringp "The literal to search for.")
+   (sin         "The @(see sin) stobj."))
+  :returns (mv (match "@('nil') when no text is matched, or a non-empty string
+                       containing the matched text."
+                      (or (stringp match)
+                          (not match))
+                      :rule-classes :type-prescription)
+               (sin   "The remainder of the input stream, with the @('match')
+                       removed, if applicable."))
 
+  :long "<p>You could use this, for instance, after reading @('/*'), to match
+everything until and through @('*/').</p>
 
+<p>Examples:</p>
+
+@({
+    (sin-match-through-lit \"apple\" [snake])
+      -->
+    (nil [snake])
+
+    (sin-match-through-lit \"apple\" [snakeapplesauce])
+      -->
+    (\"snakeapple\" [sauce])
+})
+
+<p>Corner case: as in @(see sin-match-lit), when @('lit') is the empty string
+we always fail.</p>"
+
+  (b* (((when (or (mbe :logic (not (stringp lit))
+                       :exec nil)
+                  (equal lit "")))
+        (mv nil sin))
+       (pos (sin-find lit sin))
+       ((unless pos)
+        (mv nil sin))
+       (stop   (+ pos (length lit)))
+       (match1 (sin-firstn stop sin))
+       (sin    (sin-nthcdr stop sin)))
+    (mv match1 sin))
+  ///
+  (def-match-thms sin-match-through-lit))
 
