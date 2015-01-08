@@ -37,6 +37,7 @@
 
 (in-package "XDOC")
 (include-book "import-acl2doc")  ;; For base acl2 documentation
+(local (set-default-authors "Jared Davis"))
 
 (defxdoc xdoc
   :parents (documentation)
@@ -80,18 +81,55 @@ can be viewed from a web browser.  You can do this quite easily with XDOC's
 that your manual is automatically regenerated when you build your project.</p>
 
 
-<h3>New Features</h3>
+<h3>New as of ACL2 7.1</h3>
 
-<p><b><color rgb='#ff0000'>NEW</color></b> (experimental): XDOC now
-supports @(see katex-integration) for writing LaTeX-like formulas like
-@($
-\\left( \\sum_{i=0}^{n} \\sqrt{f(i)} \\right) < \\frac{n^2}{k}
-$)
-within your documentation.</p>
+<p>XDOC topics can now have an @(see authors) field to say who wrote the
+documentation and/or code being documented.  Macros like @(see defxdoc) and
+@(see defsection) can take an explicit @(':authors') argument, but typically
+you may just want to add a @(see set-default-authors) command to your
+file.</p>")
 
-<p><b><color rgb='#ff0000'>NEW</color></b> (experimental): When writing
-documentation, you can now optionally have XDOC topics automatically displayed
-as you submit new @(see defxdoc) forms&mdash;just add:</p>
+(local (set-default-parents xdoc))
+
+(defxdoc authors
+  :short "The XDOC mechanism for specifying authors of documentation and
+libraries."
+
+  :long "<p>XDOC topics can now have authorship information attached to them.
+This can be done explicitly by giving an @(':authors') keyword to @(see
+defxdoc) forms, for instance:</p>
+
+@({
+    (defxdoc bamboo
+      :authors (\"Roy Hinkley\" \"Ginger Grant\")
+      ...)
+})
+
+<p>or, less tediously, by setting up default authors for a whole book or
+section of a book, for instance:</p>
+
+@({
+    (local (xdoc::set-default-authors \"Buffy Summers\" \"Willow Rosenberg\"))
+    ...
+})
+
+<p>Normally the authors are just the names of the authors of the documentation.
+However, in certain cases it may be useful to specify the roles authors have
+played.  For instance:</p>
+
+@({
+    (local (xdoc::set-default-authors
+             (\"
+
+
+(defxdoc advanced-features
+  :short "Notes about some advanced features of XDOC."
+
+  :long "<h3>Previews and Quicker Manual Rebuilds</h3>
+
+<p>When writing documentation, you can now optionally have XDOC topics
+automatically displayed as you submit new @(see defxdoc) forms&mdash;just
+add:</p>
 
 @({
  (include-book \"xdoc/debug\" :dir :system)
@@ -100,9 +138,17 @@ as you submit new @(see defxdoc) forms&mdash;just add:</p>
 <p>to your @(see acl2::acl2-customization) file, or include it while you are
 developing your book.  Afterward, each @(see defxdoc) form you submit will be
 immediately shown at the terminal, giving you a quick, text-mode preview that
-may help you to diagnose any markup problems.</p>")
+may help you to diagnose any markup problems.</p>
 
-(local (set-default-parents xdoc))
+<p>If you are writing documentation and want to get web-based documentation
+previews, you might try using the ACL2 @(see sidekick): its @(':show') command
+can be used to give you a preview of your documentation that is rendered like
+the web-based manual.</p>
+
+<p>If you are trying to rearrange or organize topics, you may want to quickly
+rebuild the whole manual instead of just particular topics.  You may wish to
+see the macro @('doc-rebuild'), at the end of @('books/doc/top.lisp'), for a
+quick way to rebuild modified versions of the manual.</p>")
 
 (defxdoc defxdoc
   :short "Add documentation to the @(see xdoc) database."
@@ -118,6 +164,7 @@ command.</p>
 @({
  (defxdoc name
    [:parents parents]
+   [:authors authors]
    [:short   short]
    [:long    long])
 })
@@ -127,6 +174,7 @@ command.</p>
 @({
  (defxdoc duplicity
    :parents (std/lists defsort count no-duplicatesp)
+   :authors (\"Jared Davis\")
    :short \"@(call duplicity) counts how many times the
             element @('a') occurs within the string @('x').\"
    :long \"<p>This function is similar to ACL2's built-in
@@ -149,6 +197,11 @@ inlining in other pages.  For instance, it may be displayed in subtopic listing
 and in \"hover\" text on navigation pages.</li>
 
 <li>@('long') should be the full, detailed documentation for this topic.</li>
+
+<li>@('authors') lets you specify authorship information.  Usually you won't
+want to explicitly say the authors of individual topics.  Instead, see @(see
+set-default-authors), which describes the format of authors and how to set up
+authors for a whole file.</li>
 
 </ul>
 

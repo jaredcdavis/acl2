@@ -61,18 +61,33 @@
   (declare (xargs :mode :program))
   (cdr (assoc-eq 'default-parents (table-alist 'xdoc world))))
 
+
+(defun author-p (x)
+  (declare (xargs :guard t))
+  (or (stringp x)
+      (and (true-listp x)
+           (eql (len x) 3)
+           (stringp (first x))
+           (eql (second x) :for)
+           (stringp (third x)))))
+
+(defun authorlist-p (x)
+  (declare (xargs :guard t))
+  (if (atom x)
+      (not x)
+    (and (author-p (car x))
+         (authorlist-p (cdr x)))))
+
 (defmacro set-default-authors (&rest authors)
   `(table xdoc 'default-authors
           (let ((authors ',authors))
-            (cond ((string-listp authors)
+            (cond ((authorlist-p authors)
                    authors)
-                  ((and (consp authors)
-                        (atom (cdr authors))
-                        (string-listp (car authors)))
-                   (car authors))
+                  ((author-p authors)
+                   (list authors))
                   (t
                    (er hard? 'set-default-authors
-                       "Expected a string-listp, but found ~x0" authors))))))
+                       "Expected an author list but found ~x0" authors))))))
 
 (defun get-default-authors (world)
   (declare (xargs :mode :program))
@@ -84,8 +99,8 @@
            "name is not a symbol!~%")
       (and (not (symbol-listp parents))
            ":parents are not a symbol list~%")
-      (and (not (string-listp authors))
-           ":authors are not a string list~%")
+      (and (not (authorlist-p authors))
+           ":authors are not a author list~%")
       (and short (not (stringp short))
            ":short is not a string (or nil)~%")
       (and long (not (stringp long))
