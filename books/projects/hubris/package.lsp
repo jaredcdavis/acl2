@@ -43,7 +43,9 @@
             fty::deflist
             fty::deftypes
             fty::defflexsum
-            fty::deftagsum)
+            fty::deftagsum
+            b*
+            )
           set::*sets-exports*
           (set-difference-equal std::*std-exports*
                                 '(std::deflist))
