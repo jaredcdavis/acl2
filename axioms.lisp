@@ -2076,6 +2076,49 @@ evaluated.  See :DOC certify-book, in particular, the discussion about ``Step
   (cond ((atom x) acc)
         (t (len2 (cdr x) (1+ acc)))))
 
+   #-acl2-loop-only
+   (eval-when (:compile-toplevel)
+     (progn
+       (cl:format t "Compiler policy at the :compile-toplevel time of my-len1-a and my-len1-b~%")
+       (sb-ext:describe-compiler-policy)))
+
+   #-acl2-loop-only
+   (eval-when (:load-toplevel)
+     (progn
+       (cl:format t "Compiler policy at the :load-toplevel time of my-len1-a and my-len1-b~%")
+       (sb-ext:describe-compiler-policy)))
+
+   #-acl2-loop-only
+   (eval-when (:execute)
+     (progn
+       (cl:format t "Compiler policy at the :execute time of my-len1-a and my-len1-b~%")
+       (sb-ext:describe-compiler-policy)))
+
+#-acl2-loop-only
+(defun my-len1-a (x acc)
+  (declare (type fixnum acc))
+  (cond ((atom x) acc)
+        ((eql (the fixnum acc) most-positive-fixnum)
+         #+(or gcl ccl allegro sbcl cmu
+               (and lispworks lispworks-64bit))
+         (error "We have encountered a list whose length exceeds ~
+                       most-positive-fixnum!")
+         -1)
+        (t (my-len1-a (cdr x) (the fixnum (+ (the fixnum acc) 1))))))
+
+#-acl2-loop-only
+(defun my-len1-b (x acc)
+  (declare (type fixnum acc))
+  (the fixnum
+       (cond ((atom x) acc)
+             ((eql (the fixnum acc) most-positive-fixnum)
+              #+(or gcl ccl allegro sbcl cmu
+                    (and lispworks lispworks-64bit))
+              (error "We have encountered a list whose length exceeds ~
+                       most-positive-fixnum!")
+              -1)
+             (t (my-len1-b (cdr x) (the fixnum (+ (the fixnum acc) 1)))))))
+
 #-acl2-loop-only
 (defun len1 (x acc)
 
