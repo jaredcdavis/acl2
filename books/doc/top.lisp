@@ -285,8 +285,6 @@
 ;; Jared moved the documentation that used to be here into more-topics.lisp so
 ;; that it can be easily included in other manuals without including top.
 (include-book "more-topics")
-
-
 (include-book "xdoc/topics" :dir :system)
 (include-book "xdoc/alter" :dir :system)
 

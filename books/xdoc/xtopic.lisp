@@ -28,26 +28,3 @@
 ;
 ; Original author: Jared Davis <jared@centtech.com>
 
-; defxdoc-raw.lisp
-;
-; This book requires a TTAG.  You should typically not need to include it
-; directly unless you want to document some raw-lisp code with xdoc.
-
-(in-package "XDOC")
-(include-book "base")
-(include-book "tools/include-raw" :dir :system)
-; (depends-on "defxdoc-raw-impl.lsp")
-(set-state-ok t)
-
-(defttag :xdoc)
-
-(defun all-xdoc-topics (state)
-  (declare (xargs :stobjs state :verify-guards t))
-  (prog2$
-   (er hard? 'all-xdoc-topics "all-xdoc-topics not yet defined.")
-   (mv-let (err val state)
-     (read-acl2-oracle state)
-     (declare (ignore err))
-     (mv val state))))
-
-(acl2::include-raw "defxdoc-raw-impl.lsp")
