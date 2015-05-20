@@ -23,7 +23,7 @@ Instructions for reproducing:
    specific configuration was used.  My version is:
      Welcome to Clozure Common Lisp Version 1.11-dev-r16393M-trunk  (LinuxX8664)!
 
-2. Get a copy of the "ccl-bug" branch of MY fork of ACL2 from Github.
+2. Get a copy of the "cclbug" branch of MY fork of ACL2 from Github.
 
    (This is the exact version I am using and has modifications to rule out many
     books that aren't necessary to provoke the bug.)
@@ -31,14 +31,14 @@ Instructions for reproducing:
        # Starting in some fresh directory
        git clone https://github.com/jaredcdavis/acl2.git
        cd acl2
-       git checkout ccl-bug
+       git checkout cclbug
 
 3. Build ACL2 using your CCL and certify some books.
 
        # Starting in the acl2 directory:
        make LISP=/path/to/your/ccl
        cd books
-       make ACL2=`pwd`/../saved_acl2 -j 4 USE_QUICKLISP=1 basic quicklisp centaur/esim/defmodules.cert
+       make ACL2=`pwd`/../saved_acl2 -j 4 centaur/esim/defmodules.cert
 
 4. Make a custom save-exec image with the defmodules book built in.
 
