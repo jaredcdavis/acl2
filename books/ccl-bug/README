@@ -1,0 +1,116 @@
+Hi,
+
+We are experiencing instability on CCL when using (set-gc-strategy :delay).
+
+With some luck, I have distilled one of these crashes into something that is
+reproducible and reasonable small.  It looks vaguely like a fast alist (which
+is backed by a weak hashtable and involves static conses) is somehow being
+corrupted by GC.
+
+This is using many things that have been suspect in the past:
+
+  - It is happening in a save-exec image.
+  - The save-exec almost surely has static conses built into it.
+  - It is using the :delay strategy, not EGC.
+  - The :delay strategy installs set-and-reset-gc-thresholds as a gc hook,
+    which is basically like what sol-gc-strategy used to be but does not
+    invoke any interrupts.
+
+
+Instructions for reproducing:
+
+1. Get the latest CCL.  Do two (rebuild-ccl :full t)s per usual.  No Centaur
+   specific configuration was used.  My version is:
+     Welcome to Clozure Common Lisp Version 1.11-dev-r16393M-trunk  (LinuxX8664)!
+
+2. Get a copy of the "ccl-bug" branch of MY fork of ACL2 from Github.
+
+   (This is the exact version I am using and has modifications to rule out many
+    books that aren't necessary to provoke the bug.)
+
+       # Starting in some fresh directory
+       git clone https://github.com/jaredcdavis/acl2.git
+       cd acl2
+       git checkout ccl-bug
+
+3. Build ACL2 using your CCL and certify some books.
+
+       # Starting in the acl2 directory:
+       make LISP=/path/to/your/ccl
+       cd books
+       make ACL2=`pwd`/../saved_acl2 -j 4 USE_QUICKLISP=1 basic quicklisp centaur/esim/defmodules.cert
+
+4. Make a custom save-exec image with the defmodules book built in.
+
+       # Starting in the acl2/books directory:
+       cd ccl-bug
+       ACL2_CUSTOMIZATION=NONE ../../saved_acl2 < make-image.lsp
+
+5. Try to use the new image to load the test file:
+
+       # In the acl2/books/ccl-bug directory:
+       ACL2_CUSTOMIZATION=NONE ./test-image < crash.lisp
+
+On my copy of CCL this results in the error shown below.
+
+Cheers,
+Jared
+
+------------------------
+
+ACL2 !>Simplifying 1 modules.
+> Error: The value #<BOGUS object @ #x3020269657AD> is not of the expected type SEQUENCE.
+> While executing: CCL::SEQUENCE-TYPE, in process listener(1).
+> Type :GO to continue, :POP to abort, :R for a list of available restarts.
+> If continued: Skip evaluation of (acl2::acl2-default-restart)
+> Type :? for other options.
+1 > :b
+:b
+ (2B02F80185E0) : 0 (SEQUENCE-TYPE #<BOGUS object @ #x3020269657AD>) 197
+ (2B02F8018600) : 1 (LENGTH #<BOGUS object @ #x3020269657AD>) 37
+ (2B02F8018618) : 2 (VL-PGENSTR-P "vl_gte" #<BOGUS object @ #x3020269657AD>) 61
+ (2B02F8018640) : 3 (VL-PGENSTR-HIGHEST-OF-ALIST-KEYS "vl_gte" ((#<BOGUS object @ #x3020269657AD> . T) (#<BOGUS object @ #x30202696526D> . T) (#<BOGUS object @ #x302026964D2D> . T) (#<BOGUS object @ #x30202696472D> . T) (#<BOGUS object @ #x302026963E5D> . T) ...)) 77
+ (2B02F8018670) : 4 (VL-NAMEDB-INDEXED-NAME "vl_gte" (:VL-NAMEDB (# # # # # ...) NIL)) 277
+ (2B02F80186C0) : 5 (VL-NAMEFACTORY-INDEXED-NAME "vl_gte" (:VL-NAMEFACTORY (:VL-MODULE # # # # ...) :VL-NAMEDB NIL NIL)) 93
+ (2B02F80186F0) : 6 (VL-GTE-OCCFORM (:VL-ASSIGN (# #) NIL NIL :VL-LOCATION ...) (:VL-NAMEFACTORY (:VL-MODULE # # # # ...) :VL-NAMEDB NIL NIL) (:VL-MODULE (# # # NIL) (# NIL NIL) (# # . "alu16") (# # # # # ...) ...) (("temp_49" :VL-VARDECL # # # ...) ("temp_48" :VL-VARDECL # # # ...) ("temp_47" :VL-VARDECL # # # ...) ("temp_46" :VL-VARDECL # # # ...) ("temp_45" :VL-VARDECL # # # ...) ...) ((:VL-WARNING # # # # ...))) 1261
+ (2B02F80187B0) : 7 (VL-ASSIGNLIST-OCCFORM ((:VL-ASSIGN # NIL NIL :VL-LOCATION ...) (:VL-ASSIGN # NIL NIL :VL-LOCATION ...) (:VL-ASSIGN # NIL NIL :VL-LOCATION ...) (:VL-ASSIGN # NIL NIL :VL-LOCATION ...) (:VL-ASSIGN # NIL NIL :VL-LOCATION ...) ...) (:VL-NAMEFACTORY (:VL-MODULE # # # # ...) :VL-NAMEDB NIL NIL) (:VL-MODULE (# # # NIL) (# NIL NIL) (# # . "alu16") (# # # # # ...) ...) (("temp_49" :VL-VARDECL # # # ...) ("temp_48" :VL-VARDECL # # # ...) ("temp_47" :VL-VARDECL # # # ...) ("temp_46" :VL-VARDECL # # # ...) ("temp_45" :VL-VARDECL # # # ...) ...) ((:VL-WARNING # # # # ...))) 173
+ (2B02F8018808) : 8 (VL-MODULE-OCCFORM (:VL-MODULE (# # # NIL) (# NIL NIL) (# # . "alu16") (# # # # # ...) ...)) 317
+ (2B02F8018858) : 9 (VL-MODULELIST-OCCFORM-AUX ((:VL-MODULE # # # # ...))) 93
+ (2B02F8018878) : 10 (VL-MODULELIST-OCCFORM ((:VL-MODULE # # # # ...))) 53
+ (2B02F8018898) : 11 (VL-DESIGN-OCCFORM (:VL-DESIGN (# # NIL) (# NIL) (NIL) NIL)) 77
+ (2B02F80188C0) : 12 (VL-SIMPLIFY-MAIN (:VL-DESIGN (# # NIL) (# NIL) (NIL) NIL) (:VL-SIMPCONFIG (VL2014::COMPRESS-P) (VL2014::PROBLEM-MODS) (VL2014::CLEAN-PARAMS-P . T) (VL2014::UNROLL-LIMIT . 1000))) 111365
+ (2B02F8018AF0) : 13 (VL-SIMPLIFY (:VL-DESIGN (# # NIL) (# NIL) (NIL) NIL) (:VL-SIMPCONFIG (VL2014::COMPRESS-P) (VL2014::PROBLEM-MODS) (VL2014::CLEAN-PARAMS-P . T) (VL2014::UNROLL-LIMIT . 1000))) 2773
+ (2B02F8018B50) : 14 (RAW-EV-FNCALL VL2014::VL-SIMPLIFY ((:VL-DESIGN # # # NIL) (:VL-SIMPCONFIG # # # #)) ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) ((COMMAND-LANDMARK GLOBAL-VALUE 7000 # "/share/apps/fv/jared/xg/acl2/books/ccl-bug/" ...) (EVENT-LANDMARK GLOBAL-VALUE 130543 DEFCONST *LOADRESULT* ...) (*LOADRESULT* ABSOLUTE-EVENT-NUMBER . 130543) (CLTL-COMMAND GLOBAL-VALUE DEFCONST *LOADRESULT* # ...) (TOP-LEVEL-CLTL-COMMAND-STACK GLOBAL-VALUE # #) ...) ((VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) (NREV::NREV$C . #)) NIL T) 1245
+ (2B02F8018C30) : 15 (EV-REC-LST ((VL2014::VL-SIMPLIFY # #)) ((__FUNCTION__ . |(DEFCONSTS (*GOOD* ...) ...)|)) ((COMMAND-LANDMARK GLOBAL-VALUE 7000 # "/share/apps/fv/jared/xg/acl2/books/ccl-bug/" ...) (EVENT-LANDMARK GLOBAL-VALUE 130543 DEFCONST *LOADRESULT* ...) (*LOADRESULT* ABSOLUTE-EVENT-NUMBER . 130543) (CLTL-COMMAND GLOBAL-VALUE DEFCONST *LOADRESULT* # ...) (TOP-LEVEL-CLTL-COMMAND-STACK GLOBAL-VALUE # #) ...) ((VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) (NREV::NREV$C . #)) (NIL) NIL NIL ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) NIL T) 405
+ (2B02F8018CA8) : 16 (EV-REC ((LAMBDA # #) (VL2014::VL-SIMPLIFY # #)) ((__FUNCTION__ . |(DEFCONSTS (*GOOD* ...) ...)|)) ((COMMAND-LANDMARK GLOBAL-VALUE 7000 # "/share/apps/fv/jared/xg/acl2/books/ccl-bug/" ...) (EVENT-LANDMARK GLOBAL-VALUE 130543 DEFCONST *LOADRESULT* ...) (*LOADRESULT* ABSOLUTE-EVENT-NUMBER . 130543) (CLTL-COMMAND GLOBAL-VALUE DEFCONST *LOADRESULT* # ...) (TOP-LEVEL-CLTL-COMMAND-STACK GLOBAL-VALUE # #) ...) ((VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) (NREV::NREV$C . #)) (NIL) NIL NIL ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) NIL T) 3925
+ (2B02F8018D30) : 17 (FUNCALL #'#<Anonymous Function #x30202687E90F>) 1301
+ (2B02F8018D90) : 18 (CHEAP-EVAL (TIME$1-RAW *RETURN-LAST-ARG2* (EV-REC *RETURN-LAST-ARG3* *RETURN-LAST-ALIST* *RETURN-LAST-FN-W* *RETURN-LAST-FN-USER-STOBJ-ALIST* ...))) 101
+ (2B02F8018DC8) : 19 (EV-REC-RETURN-LAST TIME$1-RAW (CONS '0 (CONS # #)) ((LAMBDA # #) '|(DEFCONSTS (*GOOD* ...) ...)|) ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) ((COMMAND-LANDMARK GLOBAL-VALUE 7000 # "/share/apps/fv/jared/xg/acl2/books/ccl-bug/" ...) (EVENT-LANDMARK GLOBAL-VALUE 130543 DEFCONST *LOADRESULT* ...) (*LOADRESULT* ABSOLUTE-EVENT-NUMBER . 130543) (CLTL-COMMAND GLOBAL-VALUE DEFCONST *LOADRESULT* # ...) (TOP-LEVEL-CLTL-COMMAND-STACK GLOBAL-VALUE # #) ...) ((VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) (NREV::NREV$C . #)) (NIL) NIL NIL ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) NIL T) 1965
+ (2B02F8018FD8) : 20 (EV (RETURN-LAST 'TIME$1-RAW (CONS # #) (# #)) ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) ACL2_INVISIBLE::|The Live State Itself| ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) NIL T) 581
+ (2B02F8019068) : 21 (EV-FOR-TRANS-EVAL (RETURN-LAST 'TIME$1-RAW (CONS # #) (# #)) NIL (NIL) ("( MAKE-EVENT ~@0~@1)" (#\0 "(~x0 ...)" #) (#\1 . "")) ACL2_INVISIBLE::|The Live State Itself| T) 285
+ (2B02F80190D0) : 22 (PROTECTED-EVAL (TIME$ (LET # # #) :MSG "; ~s0: ~st seconds, ~sa bytes~%" :ARGS ...) NIL ("( MAKE-EVENT ~@0~@1)" (#\0 "(~x0 ...)" #) (#\1 . "")) ACL2_INVISIBLE::|The Live State Itself| T) 73133
+ (2B02F8019530) : 23 (MAKE-EVENT-FN (TIME$ (LET # # #) :MSG "; ~s0: ~st seconds, ~sa bytes~%" :ARGS ...) NIL NIL NIL (MAKE-EVENT (TIME$ # :MSG "; ~s0: ~st seconds, ~sa bytes~%" :ARGS ...)) ACL2_INVISIBLE::|The Live State Itself|) 13357
+ (2B02F80196A0) : 24 (RAW-EV-FNCALL MAKE-EVENT-FN ((TIME$ # :MSG "; ~s0: ~st seconds, ~sa bytes~%" :ARGS ...) NIL NIL NIL (MAKE-EVENT #) ...) ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) ((COMMAND-LANDMARK GLOBAL-VALUE 7000 # "/share/apps/fv/jared/xg/acl2/books/ccl-bug/" ...) (EVENT-LANDMARK GLOBAL-VALUE 130543 DEFCONST *LOADRESULT* ...) (*LOADRESULT* ABSOLUTE-EVENT-NUMBER . 130543) (CLTL-COMMAND GLOBAL-VALUE DEFCONST *LOADRESULT* # ...) (TOP-LEVEL-CLTL-COMMAND-STACK GLOBAL-VALUE # #) ...) ((VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) (NREV::NREV$C . #)) NIL T) 1245
+ (2B02F8019780) : 25 (EV (MAKE-EVENT-FN '# 'NIL 'NIL 'NIL ...) ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) ACL2_INVISIBLE::|The Live State Itself| ((STATE . ACL2_INVISIBLE::|The Live State Itself|) (VL2014::TOKSTREAM . #) (VL2014::PS . #) (NREV2 . #) (NREV . #) ...) NIL T) 581
+ (2B02F8019810) : 26 (EV-FOR-TRANS-EVAL (MAKE-EVENT-FN '# 'NIL 'NIL 'NIL ...) (STATE) (NIL NIL STATE) TOP-LEVEL ACL2_INVISIBLE::|The Live State Itself| T) 285
+ (2B02F8019878) : 27 (LD-READ-EVAL-PRINT ACL2_INVISIBLE::|The Live State Itself|) 4021
+ (2B02F8019940) : 28 (LD-LOOP ACL2_INVISIBLE::|The Live State Itself|) 141
+ (2B02F8019978) : 29 (LD-FN-BODY ((SET-GC-STRATEGY :DELAY) . ACL2-INPUT-CHANNEL::STANDARD-OBJECT-INPUT-0) ((LD-VERBOSE . "~sv.  Level ~Fl.  Cbd ~xc.~|System books ~
+                   directory ~xb.~|Type :help for help.~%Type (good-bye) to ~
+                   quit completely out of ACL2.~|~%") (LD-QUERY-CONTROL-ALIST) (LD-ERROR-ACTION . :CONTINUE) (LD-ERROR-TRIPLES . T) (LD-EVISC-TUPLE) ...) ACL2_INVISIBLE::|The Live State Itself|) 4717
+ (2B02F80199D8) : 30 (LD-FN0 ((STANDARD-OI # . ACL2-INPUT-CHANNEL::STANDARD-OBJECT-INPUT-0) (STANDARD-CO . ACL2-OUTPUT-CHANNEL::STANDARD-CHARACTER-OUTPUT-0) (PROOFS-CO . ACL2-OUTPUT-CHANNEL::STANDARD-CHARACTER-OUTPUT-0) (CURRENT-PACKAGE . "ACL2") (LD-SKIP-PROOFSP) ...) ACL2_INVISIBLE::|The Live State Itself| NIL) 5973
+ (2B02F8019B18) : 31 (LD-FN ((STANDARD-OI # . ACL2-INPUT-CHANNEL::STANDARD-OBJECT-INPUT-0) (STANDARD-CO . ACL2-OUTPUT-CHANNEL::STANDARD-CHARACTER-OUTPUT-0) (PROOFS-CO . ACL2-OUTPUT-CHANNEL::STANDARD-CHARACTER-OUTPUT-0) (CURRENT-PACKAGE . "ACL2") (LD-SKIP-PROOFSP) ...) ACL2_INVISIBLE::|The Live State Itself| NIL) 821
+ (2B02F8019B90) : 32 (LP) 6061
+ (2B02F8019BF8) : 33 (CALL-CHECK-REGS LP) 221
+ (2B02F8019C30) : 34 (CHEAP-EVAL (LP)) 101
+ (2B02F8019C68) : 35 (ACL2-DEFAULT-RESTART) 997
+ (2B02F8019C80) : 36 (CALL-CHECK-REGS ACL2-DEFAULT-RESTART) 221
+ (2B02F8019CB8) : 37 (CHEAP-EVAL (ACL2-DEFAULT-RESTART)) 101
+ (2B02F8019CF0) : 38 (FUNCALL #'#<(:INTERNAL CCL::EVAL-STRING CCL::STARTUP-CCL)> "(acl2::acl2-default-restart)") 525
+ (2B02F8019D38) : 39 (STARTUP-CCL ("home:ccl-init" "home:\\.ccl-init")) 1653
+ (2B02F8019DA8) : 40 (FUNCALL #'#<(:INTERNAL (CCL:TOPLEVEL-FUNCTION (CCL::LISP-DEVELOPMENT-SYSTEM T)))>) 61
+ (2B02F8019DC8) : 41 (FUNCALL #'#<(:INTERNAL CCL::MAKE-MCL-LISTENER-PROCESS)>) 661
+ (2B02F8019E60) : 42 (RUN-PROCESS-INITIAL-FORM #<TTY-LISTENER listener(1) [Active] #x30200043F52D> (#<CCL:COMPILED-LEXICAL-CLOSURE # #x30202686908F>)) 709
+ (2B02F8019EF0) : 43 (FUNCALL #'#<(:INTERNAL (CCL::%PROCESS-PRESET-INTERNAL (CCL:PROCESS)))> #<TTY-LISTENER listener(1) [Active] #x30200043F52D> (#<CCL:COMPILED-LEXICAL-CLOSURE # #x30202686908F>)) 573
+ (2B02F8019F98) : 44 (FUNCALL #'#<(:INTERNAL CCL::THREAD-MAKE-STARTUP-FUNCTION)>) 277
+
