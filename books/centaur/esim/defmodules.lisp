@@ -30,26 +30,22 @@
 
 (in-package "VL2014")
 (include-book "translation")
-(include-book "vltoe/top")
 (include-book "occform/top")
 (include-book "centaur/vl2014/loader/top" :dir :system)
+(include-book "centaur/vl2014/mlib/remove-bad" :dir :system)
 (include-book "centaur/vl2014/lint/portcheck" :dir :system)
 (include-book "centaur/vl2014/mlib/comment-writer" :dir :system)
 (include-book "centaur/vl2014/transforms/annotate/top" :dir :system)
 (include-book "centaur/vl2014/transforms/always/top" :dir :system)
 (include-book "centaur/vl2014/transforms/unparam/top" :dir :system)
 (include-book "centaur/vl2014/transforms/cn-hooks" :dir :system)
-(include-book "centaur/vl2014/transforms/addinstnames" :dir :system)
 (include-book "centaur/vl2014/transforms/assign-trunc" :dir :system)
 (include-book "centaur/vl2014/transforms/blankargs" :dir :system)
 (include-book "centaur/vl2014/transforms/clean-params" :dir :system)
 (include-book "centaur/vl2014/transforms/delayredux" :dir :system)
 (include-book "centaur/vl2014/transforms/drop-blankports" :dir :system)
-(include-book "centaur/vl2014/transforms/elim-supply" :dir :system)
 (include-book "centaur/vl2014/transforms/expand-functions" :dir :system)
 (include-book "centaur/vl2014/transforms/expr-split" :dir :system)
-(include-book "centaur/vl2014/transforms/gatesplit" :dir :system)
-(include-book "centaur/vl2014/transforms/gate-elim" :dir :system)
 (include-book "centaur/vl2014/transforms/oprewrite" :dir :system)
 (include-book "centaur/vl2014/transforms/optimize-rw" :dir :system)
 (include-book "centaur/vl2014/transforms/problem-mods" :dir :system)
@@ -58,18 +54,29 @@
 (include-book "centaur/vl2014/transforms/selresolve" :dir :system)
 (include-book "centaur/vl2014/transforms/sizing" :dir :system)
 (include-book "centaur/vl2014/transforms/unused-vars" :dir :system)
-(include-book "centaur/vl2014/transforms/weirdint-elim" :dir :system)
 (include-book "centaur/vl2014/transforms/wildeq" :dir :system)
 (include-book "centaur/vl2014/util/clean-alist" :dir :system)
 (include-book "centaur/vl2014/simpconfig" :dir :system)
 (include-book "centaur/vl2014/wf-reasonable-p" :dir :system)
+
+;; Probably unnecessary?
+(include-book "vltoe/top")
+;; (include-book "centaur/vl2014/transforms/addinstnames" :dir :system)
+;; (include-book "centaur/vl2014/transforms/elim-supply" :dir :system)
+;; (include-book "centaur/vl2014/transforms/gatesplit" :dir :system)
+;; (include-book "centaur/vl2014/transforms/gate-elim" :dir :system)
+;; (include-book "centaur/vl2014/transforms/weirdint-elim" :dir :system)
 (include-book "centaur/misc/sneaky-load" :dir :system)
+;; End probably unnecessary??
+
 (local (include-book "centaur/vl2014/mlib/modname-sets" :dir :system))
 (local (include-book "centaur/vl2014/mlib/design-meta" :dir :system))
 (local (include-book "centaur/vl2014/util/arithmetic" :dir :system))
 (local (include-book "centaur/vl2014/util/osets" :dir :system))
 (local (include-book "system/f-put-global" :dir :system))
 (local (in-theory (disable put-global)))
+
+
 
 (define vl-simplify-maybe-clean-params
   :parents (vl-simplify-main)
@@ -168,37 +175,40 @@
        ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
 
        (good          (xf-cwtime (vl-design-occform good)))
-       ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
-       (- (vl-gc))
 
-       ;; Weirdint elim must come AFTER occform, to avoid screwing up Zmux stuff.
-       (good          (xf-cwtime (vl-design-weirdint-elim good)))
-       ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
+;; BOZO HACK FOR CCL BUG HUNTING, I don't think we need any of this.
 
-       (good          (xf-cwtime (vl-design-gatesplit good)))
-       ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
+       ;; ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
+       ;; (- (vl-gc))
 
-       (good          (xf-cwtime (vl-design-gate-elim good)))
-       (good          (xf-cwtime (vl-design-addinstnames good)))
-       ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
+       ;; ;; Weirdint elim must come AFTER occform, to avoid screwing up Zmux stuff.
+       ;; (good          (xf-cwtime (vl-design-weirdint-elim good)))
+       ;; ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
 
-       (good          (xf-cwtime (vl-design-elim-supplies good)))
-       ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
+       ;; (good          (xf-cwtime (vl-design-gatesplit good)))
+       ;; ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
 
-       ;; Note: adding this here because one-bit selects from scalars make Verilog
-       ;; simulators mad, and this gets rid of them... blah.
-       (good          (xf-cwtime (vl-design-optimize good)))
+       ;; (good          (xf-cwtime (vl-design-gate-elim good)))
+       ;; (good          (xf-cwtime (vl-design-addinstnames good)))
+       ;; ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
 
-       ;; This is just a useful place to add on any additional transforms you want
-       ;; before E generation.
-       (good          (xf-cwtime (vl-design-pre-toe-hook good)))
-       ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
+       ;; (good          (xf-cwtime (vl-design-elim-supplies good)))
+       ;; ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
 
-       ((mv good bad) (xf-cwtime (vl-design-to-e good bad)))
-       ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
+       ;; ;; Note: adding this here because one-bit selects from scalars make Verilog
+       ;; ;; simulators mad, and this gets rid of them... blah.
+       ;; (good          (xf-cwtime (vl-design-optimize good)))
 
-       (good          (xf-cwtime (vl-design-clean-warnings good)))
-       (bad           (xf-cwtime (vl-design-clean-warnings bad)))
+       ;; ;; This is just a useful place to add on any additional transforms you want
+       ;; ;; before E generation.
+       ;; (good          (xf-cwtime (vl-design-pre-toe-hook good)))
+       ;; ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
+
+       ;; ((mv good bad) (xf-cwtime (vl-design-to-e good bad)))
+       ;; ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
+
+       ;; (good          (xf-cwtime (vl-design-clean-warnings good)))
+       ;; (bad           (xf-cwtime (vl-design-clean-warnings bad)))
        )
 
     (mv good bad))
