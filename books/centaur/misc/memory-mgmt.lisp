@@ -30,6 +30,7 @@
 
 (in-package "ACL2")
 
+#||
 (include-book "memory-mgmt-logic")
 (include-book "tools/include-raw" :dir :system)
 
@@ -44,5 +45,6 @@
 ; restriction.
 #+(and hons Clozure)
 (include-raw "hons-memory-mgmt.lsp")
+||#
 
 (value-triple (set-gc-strategy :delay) :on-skip-proofs t)
