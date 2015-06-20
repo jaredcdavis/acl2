@@ -51,6 +51,6 @@
 (include-book "save-fancy")
 (include-book "save")
 (include-book "topics")
-(include-book "write-acl2-xdoc")
+
 
 
