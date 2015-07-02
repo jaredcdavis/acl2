@@ -856,3 +856,18 @@
         (t (type-set-<-alist (1- i) j
                              (type-set-<-alist1 i j lst)))))
 
+
+(defabbrev ts-acl2-numberp (ts)
+  (ts-subsetp ts *ts-acl2-number*))
+
+(defabbrev ts-rationalp (ts)
+  (ts-subsetp ts *ts-rational*))
+
+(defabbrev ts-real/rationalp (ts)
+  #+non-standard-analysis
+  (ts-subsetp ts *ts-real*)
+  #-non-standard-analysis
+  (ts-subsetp ts *ts-rational*))
+
+(defabbrev ts-integerp (ts)
+  (ts-subsetp ts *ts-integer*))

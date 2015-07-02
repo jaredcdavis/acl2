@@ -32,20 +32,6 @@
 ; We begin with some general support functions.  They should
 ; probably be organized and moved to axioms.lisp.
 
-(defabbrev ts-acl2-numberp (ts)
-  (ts-subsetp ts *ts-acl2-number*))
-
-(defabbrev ts-rationalp (ts)
-  (ts-subsetp ts *ts-rational*))
-
-(defabbrev ts-real/rationalp (ts)
-  #+non-standard-analysis
-  (ts-subsetp ts *ts-real*)
-  #-non-standard-analysis
-  (ts-subsetp ts *ts-rational*))
-
-(defabbrev ts-integerp (ts)
-  (ts-subsetp ts *ts-integer*))
 
 (defun all-quoteps (lst)
   (cond ((null lst) t)
