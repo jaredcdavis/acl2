@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -63,7 +63,18 @@
   nil)
 
 #+(or acl2-loop-only (not hons))
+(defn hons-clear! (gc)
+  ;; Has an under-the-hood implementation
+  (declare (ignore gc))
+  nil)
+
+#+(or acl2-loop-only (not hons))
 (defn hons-wash ()
+  ;; Has an under-the-hood implementation
+  nil)
+
+#+(or acl2-loop-only (not hons))
+(defn hons-wash! ()
   ;; Has an under-the-hood implementation
   nil)
 
@@ -220,11 +231,6 @@
   ;; Has an under-the-hood implementation
   (len (cons-subtrees x 'number-subtrees)))
 
-#+(or acl2-loop-only (not hons))
-(defn clear-hash-tables ()
-  ;; Has an under-the-hood implementation
-  nil)
-
 (defn flush-hons-get-hash-table-link (alist)
   (fast-alist-free alist))
 
@@ -245,7 +251,9 @@
 
             ;; These could be particularly bad to call by mistake
             (:executable-counterpart hons-clear)
+            (:executable-counterpart hons-clear!)
             (:executable-counterpart hons-wash)
+            (:executable-counterpart hons-wash!)
             (:executable-counterpart hons-resize-fn)
 
             ;; These could lead to discipline failures

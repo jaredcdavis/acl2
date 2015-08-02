@@ -30,7 +30,7 @@
 
 (in-package "ACL2")
 
-(ld "list-defpkg.lsp")
+(ld "package.lsp")
 
 (in-package "LIST")
 

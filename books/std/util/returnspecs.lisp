@@ -39,11 +39,14 @@
   :short "A concise way to name, document, and prove basic type-like theorems
 about a function's return values."
 
-  :long "<p>BOZO rewrite this to be more general.</p>
+  :long "<p>The @(see define) macro and some other @(see std/util) macros
+support a @(':returns') option.  This option provides a concise way to name,
+document, and prove basic type-like theorems about the return values of your
+functions.  Named return values also allow your function to be used with the
+special <see topic='@(url acl2::patbind-ret)'>ret</see> binder for @(see
+b*).</p>
 
-<p>A more elaborate extended option is @(':returns').  This is a concise way to
-name, document, and prove basic type-like theorems about the return values of
-your functions.  The general form is:</p>
+<p>The general form is:</p>
 
 @({
     :returns return-spec       ;; for single-value functions
@@ -374,7 +377,28 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
                          world))
 
 
-
+(defun arity-check-returns (name name-fn specs world)
+  (declare (xargs :guard (and (symbolp name)
+                              (symbolp name-fn)
+                              (returnspeclist-p specs)
+                              (plist-worldp world))))
+  (b* (((when (atom specs))
+        ;; Fine, the user just didn't name/document the return values.
+        t)
+       (stobjs-out (look-up-return-vals name-fn world))
+       ((when (equal (len stobjs-out) (len specs)))
+        ;; Fine, arity looks OK.
+        t)
+       ((when (getprop name-fn 'acl2::non-executablep nil 'acl2::current-acl2-world world))
+        ;; The function is non-executable so stobjs-out doesn't necessarily say
+        ;; anything coherent, nothing to really check.
+        t))
+    (er hard? 'arity-check-returns
+        "Error in ~x0: ACL2 thinks this function has ~x1 return ~
+         values, but :returns has ~x2 entries!"
+        name
+        (len stobjs-out)
+        (len specs))))
 
 
 (defsection untranslate-and
@@ -577,7 +601,8 @@ other @(see acl2::rule-classes), then you will want to override this default.</d
                               (symbolp name-fn)
                               (returnspeclist-p specs)
                               (plist-worldp world))))
-  (b* (((unless specs)
+  (b* ((- (arity-check-returns name name-fn specs world))
+       ((unless specs)
         nil)
        (badname-okp t)
        ((when (equal (len specs) 1))

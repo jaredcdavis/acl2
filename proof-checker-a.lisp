@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -64,9 +64,7 @@
   '(pc-value ss-alist))
 
 (defun define-global-name (var)
-  (intern-in-package-of-symbol
-   (string-append (symbol-name var) "-FN")
-   var))
+  (add-suffix var "-FN"))
 
 (defmacro define-global (var)
   (let ((var-fn (define-global-name var)))
@@ -374,31 +372,6 @@
                         pc-state
                       (change-pc-state pc-state :instruction (make-pretty-pc-instr ,instr))))
                state)))
-
-#+acl2-legacy-doc
-(defun add-pc-doc-header (command-type str)
-  (declare (xargs :guard (and (stringp command-type)
-                              (stringp str))))
-  (string-append
-   ":Doc-Section ACL2::Proof-checker-commands
-
-"
-   (string-append (string-append command-type "
-")
-                  str)))
-
-#+acl2-legacy-doc
-(defun remove-doc (command-type body)
-  ;; puts in doc if there isn't any, and puts the appropriate header on
-  (declare (xargs :guard (stringp command-type)))
-  (if (and (consp body) (consp (cdr body)) (stringp (car body)))
-      (mv (add-pc-doc-header command-type (car body)) (cdr body))
-    (mv nil body)))
-
-#-acl2-legacy-doc ; Delete this and its uses when finally excising legacy doc:
-(defun remove-doc (command-type body)
-  (declare (ignore command-type))
-  (mv nil body))
 
 (defun pc-primitive-defun-form (raw-name name formals doc body)
   `(defun ,name (args state)
@@ -811,15 +784,10 @@
       (ens state)
     pc-ens))
 
-(defun initial-rcnst-from-ens (ens wrld splitter-output)
-  (change rewrite-constant *empty-rewrite-constant*
-          :splitter-output splitter-output
-          :current-enabled-structure ens
-          :oncep-override (match-free-override wrld)
-          :force-info t
-          :nonlinearp (non-linearp wrld)
-          :backchain-limit-rw (backchain-limit wrld :rewrite)
-          :rw-cache-state (rw-cache-state wrld)))
+(defun initial-rcnst-from-ens (ens wrld state splitter-output)
+  (make-rcnst ens wrld state
+              :splitter-output splitter-output
+              :force-info t))
 
 (defun make-new-goals-fixed-hyps (termlist hyps goal-name start-index)
   ;; similar to make-new-goals
@@ -881,6 +849,7 @@
                    nil ;simplify-clause-pot-lst
                    (initial-rcnst-from-ens pc-ens
                                            wrld
+                                           state
                                            (splitter-output))
                    wrld
                    state
@@ -1535,6 +1504,7 @@
                             event-name
                             (rule-classes '(:rewrite))
                             instructions)
+  (declare (xargs :guard (symbolp event-name)))
   (if (and raw-term-supplied-p (eq raw-term nil))
       '(pprogn
         (io? proof-checker nil state
@@ -1545,6 +1515,21 @@
                (value :invisible))
     `(verify-fn ',raw-term ',raw-term-supplied-p ',event-name
                 ',rule-classes ',instructions state)))
+
+(set-guard-msg verify
+               (let ((name (cadr (assoc-keyword :event-name (cdr args)))))
+                 (msg "The :event-name argument for VERIFY must be a symbol, ~
+                       unlike ~x0.~@1"
+                      name
+                      (if (and (consp name)
+                               (eq (car name) 'quote)
+                               (cdr name)
+                               (symbolp (cadr name))
+                               (null (cddr name)))
+                          (msg "  Perhaps you intended the :EVENT-NAME to be ~
+                                ~x0 instead of ~x1."
+                               (cadr name) name)
+                        ""))))
 
 ; Finally, here is some stuff that is needed not only for the proof-checker but
 ; also for :pl.

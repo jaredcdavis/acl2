@@ -283,6 +283,7 @@
       defconsts
       defval
       more-returns
+      defret
       xdoc
 ;               defaggregate
 ;               defenum
@@ -293,12 +294,16 @@
 
       ;; Things I want to "import" from ACL2 into the STD package.
       assert!
+      must-fail
       b*
+      ret
+      def-b*-binder
       progn$
       simpler-take
       repeat
       replicate
       list-fix
+      llist-fix
       rev
       rcons
       revappend-without-guard
@@ -352,6 +357,7 @@
 (defconst *std-exports*
   '(std
     tag
+    ret
     tag-reasoning
     defprojection
     deflist
@@ -367,6 +373,8 @@
     defines
     defrule
     defruled
+    defruledl
+    defrulel
     defval
     defconsts
     raise

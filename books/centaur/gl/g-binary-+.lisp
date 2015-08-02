@@ -42,6 +42,15 @@
 
 ;; (include-book "univ-gl-eval")
 
+(local (defthm equal-complexes-rw
+         (implies (and (acl2-numberp x)
+                       (rationalp a)
+                       (rationalp b))
+                  (equal (equal (complex a b) x)
+                         (and (equal a (realpart x))
+                              (equal b (imagpart x)))))
+         :hints (("goal" :use ((:instance realpart-imagpart-elim))))))
+
 (defun g-binary-+-of-numbers (x y)
   (declare (xargs :guard (and (general-numberp x)
                               (general-numberp y))))
@@ -55,9 +64,9 @@
              (equal yid '(t)))
         (let* ((rsum (bfr-+-ss nil xrn yrn))
                (isum (bfr-+-ss nil xin yin)))
-          (mk-g-number (rlist-fix rsum)
+          (mk-g-number (list-fix rsum)
                        1
-                       (rlist-fix isum)))
+                       (list-fix isum)))
       (g-apply 'binary-+ (gl-list x y)))))
 
 (in-theory (disable (g-binary-+-of-numbers)))
@@ -183,7 +192,6 @@
 
 
 
-
 (defun g-binary---of-numbers (x y)
   (declare (xargs :guard (and (general-numberp x)
                               (general-numberp y))))
@@ -197,10 +205,10 @@
              (equal yid '(t)))
         (let* ((rsum (bfr-+-ss t xrn (bfr-lognot-s yrn)))
                (isum (bfr-+-ss t xin (bfr-lognot-s yin))))
-          (mk-g-number (rlist-fix rsum)
+          (mk-g-number (list-fix rsum)
                        1
-                       (rlist-fix isum)))
-      (g-apply 'binary-- (gl-list x y)))))
+                       (list-fix isum)))
+      (g-apply 'binary-minus-for-gl (gl-list x y)))))
 
 (in-theory (disable (g-binary---of-numbers)))
 
@@ -264,8 +272,8 @@
    (implies (and (general-numberp x)
                  (general-numberp y))
             (equal (eval-g-base (g-binary---of-numbers x y) env)
-                   (binary-- (eval-g-base x env)
-                             (eval-g-base y env))))
+                   (binary-minus-for-gl (eval-g-base x env)
+                                        (eval-g-base y env))))
    :hints (("goal" :in-theory (e/d* ((:ruleset general-object-possibilities))
                                     (general-numberp
                                      general-number-components))
@@ -283,7 +291,7 @@
 
 (in-theory (disable g-binary---of-numbers))
 
-(def-g-binary-op binary--
+(def-g-binary-op binary-minus-for-gl
   (b* ((x-num (if (general-numberp x) x 0))
        (y-num (if (general-numberp y) y 0)))
     (gret (g-binary---of-numbers x-num y-num))))
@@ -293,7 +301,7 @@
 
 
 (verify-g-guards
- binary--
+ binary-minus-for-gl
  :hints `(("goal" :in-theory (disable* ,gfn
                                        (:rules-of-class :type-prescription
                                                         :here)))))
@@ -307,7 +315,7 @@
                        (equal (+ x y)
                               (+ x 0))))))
 
-(def-gobj-dependency-thm binary--
+(def-gobj-dependency-thm binary-minus-for-gl
   :hints `(("goal" :in-theory (disable (:d ,gfn)
                                        gobj-depends-on)
             :induct ,gcall
@@ -316,14 +324,14 @@
 (local
  (defthm binary---of-non-number-1
    (implies (not (acl2-numberp x))
-            (equal (binary-- x y) (binary-- 0 y)))))
+            (equal (binary-minus-for-gl x y) (binary-minus-for-gl 0 y)))))
 
 (local
  (defthm binary---of-non-number-2
    (implies (not (acl2-numberp y))
-            (equal (binary-- x y) (binary-- x 0)))))
+            (equal (binary-minus-for-gl x y) (binary-minus-for-gl x 0)))))
 
-(def-g-correct-thm binary-- eval-g-base
+(def-g-correct-thm binary-minus-for-gl eval-g-base
   :hints
   `(("goal" :in-theory (e/d* (general-concretep-atom
                               (:ruleset general-object-possibilities))
@@ -340,7 +348,7 @@
                               general-number-components-ev
                               general-concretep-def
                               general-concretep-def
-                              binary--
+                              binary-minus-for-gl
                               rationalp-implies-acl2-numberp
                               (:rules-of-class :type-prescription :here))
                              ((:type-prescription bfr-eval)

@@ -802,7 +802,7 @@ sub get_add_dir {
     my ($base,$the_line,$events) = @_;
 
     # Check for ADD-INCLUDE-BOOK-DIR commands
-    my $regexp = "^[^;]*\\(add-include-book-dir!?[\\s]+:([^\\s]*)[\\s]*\"([^\"]*[^\"/])/?\"";
+    my $regexp = "^[^;]*\\([\\s]*add-include-book-dir!?[\\s]+:([^\\s]*)[\\s]*\"([^\"]*[^\"/])/?\"";
     my @res = $the_line =~ m/$regexp/i;
     if (@res) {
 	my $name = uc($res[0]);
@@ -845,7 +845,7 @@ sub debug_print_event {
 sub get_include_book {
     my ($base,$the_line,$events) = @_;
 
-    my $regexp = "^[^;]*\\(include-book[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
+    my $regexp = "^[^;]*\\([\\s]*include-book[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
     my @res = $the_line =~ m/$regexp/i;
     if (@res) {
 	debug_print_event($base, "include_book", \@res);
@@ -858,10 +858,19 @@ sub get_include_book {
 sub get_depends_on {
     my ($base,$the_line,$events) = @_;
 
-    my $regexp = "\\(depends-on[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
+    my $regexp = "\\([\\s]*depends-on[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
     my @res = $the_line =~ m/$regexp/i;
     if (@res) {
 	debug_print_event($base, "depends_on", \@res);
+	# Disallow depends-on of a certificate, for now.
+	if ($res[0] =~ m/\.cert$/) {
+	    print("**************************** WARNING **************************************\n");
+	    print("$base has a \'depends-on\' dependency on a certificate, $res[0].\n");
+	    print("It is better to use \'include-book\' (in a multiline comment, if necessary)\n");
+	    print("to specify dependencies on books, because \'depends-on\' doesn't trigger\n");
+	    print("a scan of the target's dependencies.\n");
+	    print("***************************************************************************\n");
+	}
 	push(@$events, [$depends_on_event, $res[0], $res[1]]);
 	return 1;
     }
@@ -871,7 +880,7 @@ sub get_depends_on {
 sub get_depends_rec {
     my ($base,$the_line,$events) = @_;
 
-    my $regexp = "\\(depends-rec[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
+    my $regexp = "\\([\\s]*depends-rec[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
     my @res = $the_line =~ m/$regexp/i;
     if (@res) {
 	debug_print_event($base, "depends_rec", \@res);
@@ -884,7 +893,7 @@ sub get_depends_rec {
 sub get_loads {
     my ($base,$the_line,$events) = @_;
 
-    my $regexp = "\\(loads[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
+    my $regexp = "\\([\\s]*loads[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
     my @res = $the_line =~ m/$regexp/i;
     if (@res) {
 	debug_print_event($base, "loads", \@res);
@@ -922,7 +931,7 @@ sub parse_params {
 sub get_cert_param {
     my ($base,$the_line,$events) = @_;
 
-    my $regexp = "cert[-_]param:?[\\s]*\\(?([^)]*)\\)?";
+    my $regexp = "cert[-_]param[\\s]*:?[\\s]*\\(?([^)]*)\\)?";
     my @match = $the_line =~ m/$regexp/;
     if (@match) {
 	debug_print_event($base, "cert_param", \@match);
@@ -947,7 +956,7 @@ sub get_cert_param {
 	push (@$events, [$cert_param_event, "acl2x", 1]);
 	return 1;
     }
-    $regexp = "\\(check-hons-enabled[\\s]+\\(:book";
+    $regexp = "\\([\\s]*check-hons-enabled[\\s]+\\(:book";
     if ($the_line =~ m/$regexp/) {
 	push (@$events, [$cert_param_event, "hons-only", 1]);
 	return 1;
@@ -973,7 +982,7 @@ sub get_ld {
     my ($base,$the_line,$events) = @_;
 
     # Check for LD commands
-    my $regexp = "^[^;]*\\(ld[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
+    my $regexp = "^[^;]*\\([\\s]*ld[\\s]*\"([^\"]*)\"(?:.*:dir[\\s]*:([^\\s)]*))?";
     my @res = $the_line =~ m/$regexp/i;
     if (@res) {
 	debug_print_event($base, "ld", \@res);
@@ -1061,6 +1070,9 @@ sub src_events {
 	print "Warning: missing file $fname";
 	if ($parent) {
 	    print " (required by $parent)";
+	}
+	else {
+	    print " (no parent; top level target? cached target?)";
 	}
 	print "\n";
 	# Add an entry with no events and a negative timestamp.

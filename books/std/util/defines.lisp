@@ -146,7 +146,7 @@ specifiers (see below).</p>
 <p>The @('other-events') are a structuring device that allow you to associate
 any arbitrary events.  These events are submitted after the definitions, flag
 function, etc., have been processed.  All of the functions in the clique are
-enabled before we processing these events.</p>
+left enabled while processing these events.</p>
 
 <p>Note that individual @('define')s can have their own other-events.  All of
 these individual sections are processed (with their own local scopes) before
@@ -156,17 +156,23 @@ any global @('other-events').</p>
 
 <dl>
 
+<dt>:verbosep bool</dt>
+
+<dd>Normally most output is suppressed, but this can make it hard to understand
+failures.  You can enable @(':verbosep t') for better debugging.</dd>
+
+
 <dt>:mode</dt>
 <dt>:guard-hints, :guard-debug, :verify-guards</dt>
-<dt>:well-founded-relation, :hints</dt>
-<dt>:otf-flg</dt>
+<dt>:well-founded-relation, :measure-debug, :hints, :otf-flg</dt>
 <dt>:ruler-extenders</dt>
 
 <dd>In an ordinary @(see mutual-recursion), each of these @(see xargs) style
 options can be attached to any @('defun') in the clique.  But we usually think
 of these as global options to the whole clique, so we make them available as
 top-level options to the @('defines') form.  In the implementation, we just
-attach these options to the first @('defun') form generated.</dd>
+attach these options to the first @('defun') form generated, except for
+@(':ruler-extenders'), which we apply to all of the defuns.</dd>
 
 
 <dt>:prepwork</dt>
@@ -179,6 +185,14 @@ be explicitly made @(see local).</dd>
 <dd>Note that each individual @('define') may have its own @(':prepwork')
 section.  All of these sections will be appended together in order, with the
 global @(':prepwork') coming first, and submitted before the definitions.</dd>
+
+
+<dt>:returns-hints hints</dt>
+<dt>:returns-no-induct bool</dt>
+
+<dd>You can give hints for the inductive @(':returns') theorem.  Alternately,
+if you know you don't need to prove the returns theorems inductively, you can
+set @(':returns-no-induct t'), which may improve performance.</dd>
 
 
 <dt>:parents, :short, :long</dt>
@@ -205,26 +219,41 @@ we cause an error if documentation is provided in both places.</dd>
 options are @(see local) to the definitions; they do not affect the
 @('other-events') or any later events.</dd>
 
-</dl>
+
+<dt>:flag name</dt>
+
+<dd>You can also use @(':flag nil') to suppress the creation of a flag
+function.  Alternately, you can use this option to customize the name of the
+flag function.  The default is inferred from the @('clique-name'), i.e., it
+will look like @('<clique-name>-flag').</dd>
+
+<dt>:flag-var var</dt>
+<dt>:flag-defthm-macro name</dt>
+<dt>:flag-hints hints</dt>
+
+<dd>Control the flag variable name, flag macro name, and hints for @(see
+make-flag).</dd>
 
 
+<dt>:flag-local bool</dt>
 
-<p>Global Options</p>
+<dd>By default the flag function is created locally.  This generally improves
+performance when later including your book, and is appropriate when all of your
+flag-based reasoning about the function is done in @(':returns') specifiers and
+in the @('///') section.  If you need the flag function and its macros to exist
+beyond the @('defines') form, set @(':flag-local nil').</dd>
 
-@({
-     :flag nil   - don't create a flag function
-     :flag name  - override the name of the flag function
-                   (default is clique-name-flag)
-     :flag-var var - use VAR instead of FLAG as the name for the
-                     flag variable
-     :flag-defthm-macro name - override name of the flag macro
-     :flag-hints hints - hints for make-flag
-     :returns-no-induct - prove return type theorems without induction
-     :returns-hints - hints for inductive return type theorems
-})
 
-<p>Each define can also have a :flag option, which governs the name for
-its flag in the flag-function.</p>")
+<dt>:progn bool</dt>
+
+<dd>By default everything is submitted in an @('(encapsulate nil ...)').  If
+you set @(':progn t'), then we will instead submit everything in a @('progn').
+This mainly affects what @('local') means within the @('///') section.  This
+may slightly improve performance by avoiding the overhead of @(see
+encapsulate), and is mainly meant as a tool for macro developers.</dd>
+
+
+</dl>")
 
 
 
@@ -245,6 +274,7 @@ its flag in the flag-function.</p>")
     :guard-hints ;; Appended to guard-hints for all sub-functions.
     :hints       ;; Appended to hints for all sub-functions.
     :guard-debug ;; Must agree with any individual guard-debug settings.
+    :measure-debug ;; Must agree with any individual measure-debug settings.
     :well-founded-relation ;; Must agree with any explicit :well-founded-relations
     :otf-flg              ;; Must agree with any explicit otf-flg settings.
     :mode        ;; Must agree with any individual :mode settings.
@@ -376,6 +406,17 @@ its flag in the flag-function.</p>")
     (cons (defguts->name (car gutslist))
           (collect-names-from-guts (cdr gutslist)))))
 
+(defun collect-defines-to-disable (gutslist)
+  (b* (((when (atom gutslist))
+        nil)
+       ((defguts guts1) (car gutslist))
+       (enabled-p (getarg :enabled nil guts1.kwd-alist))
+       ((when enabled-p)
+        ;; The function is supposed to be ENABLED, so don't collect its name
+        (collect-defines-to-disable (cdr gutslist))))
+    (cons guts1.name-fn
+          (collect-defines-to-disable (cdr gutslist)))))
+
 ;; (defun collect-all-returnspec-thms (gutslist world)
 ;;   (if (atom gutslist)
 ;;       nil
@@ -412,8 +453,10 @@ its flag in the flag-function.</p>")
                                                   world)))
                     `(with-output :stack :pop (progn . ,events))))))
         (local (set-define-current-function ,guts.name))
-        (with-output :stack :pop (progn . ,guts.rest-events))
-        (with-output :on (error) ,(add-signature-from-guts guts))))))
+        (with-output :stack :pop (progn . ,guts.rest-events)))
+      ;; Make sure the section gets processed first.  Once it's done,
+      ;; we can add the signature block.
+      (with-output :on (error) ,(add-signature-from-guts guts)))))
 
 (defun collect-fn-defsections (gutslist cliquename process-returns)
   (if (atom gutslist)
@@ -545,7 +588,7 @@ its flag in the flag-function.</p>")
   (let* ((thms (collect-returnspec-flag-thms gutslist world))
          (hints (if (eq returns-hints :none)
                     (returnspec-mrec-default-hints
-                     (defguts->name (car gutslist)) world)
+                     (defguts->name-fn (car gutslist)) world)
                   returns-hints)))
     (if thms
         `(,defthm-macro
@@ -577,6 +620,14 @@ its flag in the flag-function.</p>")
       nil
     (or (getarg :hints nil (defguts->kwd-alist (car gutslist)))
         (gutslist-find-hints (cdr gutslist)))))
+
+(defun apply-ruler-extenders-to-defs (ruler-extenders defs)
+  (if (atom defs)
+      nil
+    (cons (append (take 3 (car defs))
+                  `((declare (xargs :ruler-extenders ,ruler-extenders)))
+                  (nthcdr 3 (car defs)))
+          (apply-ruler-extenders-to-defs ruler-extenders (cdr defs)))))
 
 
 ; Documentation hack.
@@ -697,13 +748,17 @@ its flag in the flag-function.</p>")
        (set-ignores (make-ignore-events name kwd-alist gutslist))
 
        (extra-xargs (get-xargs-from-kwd-alist kwd-alist))
+       (ruler-extenders (getarg :ruler-extenders nil kwd-alist))
        (orig-defs   (collect-main-defs gutslist))
        (final-defs  (if extra-xargs
                         ;; Stick them into the first def.
                         (cons (append (take 3 (car orig-defs))
                                       `((declare (xargs . ,extra-xargs)))
                                       (nthcdr 3 (car orig-defs)))
-                              (cdr orig-defs))
+                              (if ruler-extenders
+                                  (apply-ruler-extenders-to-defs
+                                   ruler-extenders (cdr orig-defs))
+                                (cdr orig-defs)))
                       orig-defs))
        (mutual-rec  (cons 'mutual-recursion final-defs))
        (aliases     (collect-macro-aliases gutslist))
@@ -741,6 +796,8 @@ its flag in the flag-function.</p>")
                                             (and want-xdoc-p name)
                                             (not returns-induct)))
 
+       (fns-to-disable (collect-defines-to-disable gutslist))
+
        (defines-guts
          (make-defines-guts
           :name name
@@ -748,8 +805,6 @@ its flag in the flag-function.</p>")
           :kwd-alist kwd-alist
           :flag-mapping flag-mapping
           :flag-defthm-macro thm-macro))
-
-       (ruler-extenders (getarg :ruler-extenders nil kwd-alist))
 
        (prognp (getarg :progn nil kwd-alist)))
 
@@ -770,25 +825,26 @@ its flag in the flag-function.</p>")
          (with-output :on (error)
            ,(extend-defines-alist defines-guts)))
 
+       ;; Introduce a suitable flag function, but only if this is a logic mode function.
        ,@(and flag-name
               `((with-output :on (error)
-                  (flag::make-flag ,flag-name ,(defguts->name-fn (car gutslist))
-                                   :flag-mapping ,flag-mapping
-                                   ,@(and flag-defthm-macro
-                                          `(:defthm-macro-name ,flag-defthm-macro))
-                                   ,@(and flag-var `(:flag-var ,flag-var))
-                                   ,@(and flag-local `(:local t))
-                                   ,@(and ruler-extenders `(:ruler-extenders ,ruler-extenders))
-                                   :hints ,flag-hints))))
-
-       (local
-        (make-event
-         (if (logic-mode-p ',(defguts->name-fn (car gutslist)) (w state))
-             '(in-theory (enable . ,fnnames))
-           '(value-triple :invisible))))
+                  (make-event
+                   (if (logic-mode-p ',(defguts->name-fn (car gutslist)) (w state))
+                       ;; 
+                       (value '(flag::make-flag ,flag-name ,(defguts->name-fn (car gutslist))
+                                                :flag-mapping ,flag-mapping
+                                                ,@(and flag-defthm-macro
+                                                       `(:defthm-macro-name ,flag-defthm-macro))
+                                                ,@(and flag-var `(:flag-var ,flag-var))
+                                                ,@(and flag-local `(:local t))
+                                                ,@(and ruler-extenders `(:ruler-extenders ,ruler-extenders))
+                                                :hints ,flag-hints))
+                     (value '(value-triple :invisible)))))))
 
        (defsection rest-events-1
          ,@(and want-xdoc-p `(:extension ,name))
+         ;; It seems OK to do this even if we're in program mode, because in that
+         ;; case you shouldn't be trying to provide return-value theorems, right?
          ,@(and returns-induct
                 `((make-event
                    (let ((event (returnspec-flag-thm
@@ -796,7 +852,16 @@ its flag in the flag-function.</p>")
                      `(with-output :stack :pop ,event)))))
          (with-output :stack :pop (progn . ,rest-events1))
          ,@fn-sections
-         (with-output :stack :pop (progn . ,rest-events2))))))
+         (with-output :stack :pop (progn . ,rest-events2)))
+
+       ;; Disable any functions that aren't marked as :enable
+       ,@(and (consp fns-to-disable)
+              `((make-event
+                 (if (logic-mode-p ',(defguts->name-fn (car gutslist)) (w state))
+                     '(in-theory (disable . ,fns-to-disable))
+                   '(value-triple :invisible)))))
+
+       )))
 
 
 (defmacro defines (name &rest args)

@@ -29,131 +29,11 @@
 ; Original author: Sol Swords <sswords@centtech.com>
 
 (in-package "FTY")
-
 (include-book "xdoc/top" :dir :system)
 (include-book "std/util/da-base" :dir :system)
 
 (program)
 (set-state-ok t)
-
-(defxdoc fty
-  :parents (acl2::macro-libraries)
-
-  :short "A library of utilities supporting a type discipline that minimizes
-the need for type hypotheses in theorems."
-
-  :long "<p>FTY is short for <i>fixtype</i>, a systematic way of using types in
-ACL2 that is intended to be easy to use and easy on prover and execution
-performance.</p>
-
-<p>Fixtype is one of several paradigms for \"type-safe\" programming in ACL2.
-In this discipline,</p>
-<ul>
-
-<li>Every type (predicate) @('q-p') has an associated fixing function
-@('q-fix') and equivalence relation @('q-equiv'), such that (for all @('x'), @('y'))
-@({
-    (q-p (q-fix x)),
-    (implies (q-p x) (equal (q-fix x) x)),
-    (equal (q-equiv x y) (equal (q-fix x) (q-fix y))).
- })</li>
-
-
-<li>If a function @('foo') takes an argument of the @('q') type, then it has an
-equality congruence with @('q-equiv') on that argument, i.e.:
-@({
- (implies (q-equiv x y) (equal (foo x) (foo y)))
- })</li>
-
-<li>If @('foo') is supposed to return a value of type @('q'), then it does so unconditionally:
-@({
- (q-p (foo x)).
- })</li>
-</ul>
-
-<p>Given types that have associated fixing functions and equivalence relations,
-the latter two requirements are easy to engineer: you can either build on
-existing functions that already satisfy these requirements, or you can fix each
-of the inputs to a function to appropriate types for free, using MBE:</p>
-@({
- (defun nat-add-5 (n)
-   (declare (xargs :guard (natp n)))
-   (let ((n (mbe :logic (nfix n) :exec n)))
-     (+ n 5)))
- })
-
-<p>Having unconditional return types and congruences are both beneficial in
-themselves.  But the main benefit of using the fixtype discipline is that
-reasoning about such functions does not require hypotheses constraining their
-inputs to the expected types, because they are fixed to that type (in a
-consistent manner) before being used.</p>
-
-<p>The @('FTY') library contains various utilities to support this typing discipline, notably:</p>
-<ul>
-<li>@(see deffixtype), associates a fixing function and equivalence relation
-with a type predicate (optionally defining the equivalence relation for
-you);</li>
-<li>@(see deffixequiv) and @(see deffixequiv-mutual) automate the (otherwise
-tedious) congruence proofs required for each function that follows the fixtype
-discipline;</li>
-<li>@(see deftypes) provides a set of type generating utilities that can be
-used with the fixtype discipline, supporting (recursive and mutually recursive)
-sum, product, list, and alist types;</li>
-<li>@(see basetypes) includes fixing function associations for many of the
-common ACL2 base types (numbers, symbols, strings).</li>
-</ul>")
-
-(defxdoc deffixtype
-  :parents (fty)
-  :short "Define a named type, associating a unary predicate, fixing function,
-and equivalence relation."
-  :long "<p>Part of an attempt to automate the proof discipline described at
-@(see fty).</p>
-
-<p>@('DEFFIXTYPE') simply associates a type name with an existing predicate,
-fixing function, and equivalence relation.  It stores this association in a
-table for later use by @(see deffixequiv) and @(see deffixequiv-mutual).</p>
-
-<p>Example usage:</p>
-
-@({
-  (fty::deffixtype nat :fix nfix :pred natp :equiv equal)
-})
-
-<p>General form:</p>
-@({
-  (deffixtype widget
-              :pred widget-p
-              :fix  widget-fix
-              :equiv widget-equiv
-              ;; optional:
-              :executablep nil  ;; t by default
-              :define t  ;; nil by default: define the equivalence as equal of fix
-})
-
-<p>The optional arguments:</p>
-
-<ul>
-
-<li>@(':define') is NIL by default; if set to T, then the equivalence relation
-is assumed not to exist yet, and is defined as equality of fix, with
-appropriate rules to rewrite the fix away under the equivalence and to
-propagate the congruence into the fix.</li>
-
-<li>@(':executablep') should be set to NIL if either the fixing function or
-predicate are non-executable or especially expensive.  This mainly affects, in
-@('deffixequiv') and @('deffixequiv-mutual'), whether a theorem is introduced
-that normalizes constants by applying the fixing function to them.</li>
-
-</ul>
-
-<p>We assume that the fixing function returns an object that satisfies the
-predicate, and if given an object satisfying the predicate, it returns the same
-object.  We also assume that equiv is an equivalence relation (see @(see
-defequiv)).</p>
-
-<p>Consider using book @('centaur/fty/basetypes.lisp') to include definitions
-for some basic ACL2 types.</p>")
 
 (def-primitive-aggregate fixtype
   (name               ;; foo  (not necessarily a function)
@@ -165,7 +45,8 @@ for some basic ACL2 types.</p>")
    ;; pred-of-fix         ;; (foo-p (foo-fix x))
    ;; fix-idempotent       ;; (implies (foo-p x) (equal (foo-fix x) x))
    equiv-means-fixes-equal ;; (implies (foo-equiv x y) (equal (foo-fix x) (foo-fix y)))  (or iff/equal)
-
+   inline
+   equal
    ))
 
 (table fixtypes)
@@ -173,9 +54,9 @@ for some basic ACL2 types.</p>")
 (defun get-fixtypes-alist (world)
   (cdr (assoc 'fixtype-alist (table-alist 'fixtypes world))))
 
-(defun deffixtype-fn (name predicate fix equiv execp definep verbosep hints forward)
+(defun deffixtype-fn (name predicate fix equiv execp definep inline equal verbosep hints forward)
   (if definep
-      `(with-output ,@(and (not verbosep) '(:off :all)) :stack :push
+      `(with-output ,@(and (not verbosep) '(:off :all :on acl2::error)) :stack :push
          (encapsulate nil
            (logic)
            (local (make-event
@@ -185,11 +66,14 @@ for some basic ACL2 types.</p>")
                      (value-triple
                       (er hard? 'deffixtype
                           "Failed to prove that ~x0 is idempotent.~%" ',fix)))))
-           (,(if execp 'defun 'defun-nx) ,equiv (x y)
+           (,(cond ((not execp)  'defun-nx)
+                   ((not inline) 'defun)
+                   (t            'defun-inline))
+            ,equiv (x y)
              (declare (xargs :normalize nil
                              ,@(and execp `(:guard (and (,predicate x) (,predicate y))))
                              :verify-guards ,execp))
-             (equal (,fix x) (,fix y)))
+             (,equal (,fix x) (,fix y)))
            (local (in-theory '(,equiv tmp-deffixtype-idempotent
                                       booleanp-compound-recognizer)))
            (defequiv ,equiv)
@@ -225,7 +109,21 @@ for some basic ACL2 types.</p>")
                                (,equiv x y))
                       :rule-classes :forward-chaining)))
            (table fixtypes 'fixtype-alist
-                  (cons (cons ',name ',(fixtype name predicate fix equiv execp equiv))
+                  (cons (cons ',name ',(make-fixtype :name name
+                                                     :pred predicate
+                                                     :fix fix
+                                                     :equiv equiv
+                                                     :executablep execp
+                                                     :equiv-means-fixes-equal
+                                                     ;; BOZO stupid ACL2 is so awful...
+                                                     (if (and execp inline)
+                                                         (intern-in-package-of-symbol
+                                                          (concatenate 'string (symbol-name equiv) "$INLINE")
+                                                          equiv)
+                                                       equiv)
+                                                     :inline inline
+                                                     :equal equal
+                                                     ))
                         (get-fixtypes-alist world)))))
     (b* ((thmname (intern-in-package-of-symbol
                    (concatenate
@@ -249,7 +147,16 @@ for some basic ACL2 types.</p>")
                            You may provide :hints to help."
                           ',equiv ',fix)))))
                 (table fixtypes 'fixtype-alist
-                       (cons (cons ',name ',(fixtype name predicate fix equiv execp thmname))
+                       (cons (cons ',name
+                                   ',(make-fixtype :name name
+                                                   :pred predicate
+                                                   :fix fix
+                                                   :equiv equiv
+                                                   :executablep execp
+                                                   :equiv-means-fixes-equal thmname
+                                                   :inline inline
+                                                   :equal equal
+                                                   ))
                              (get-fixtypes-alist world))))))))
 
 
@@ -258,11 +165,13 @@ for some basic ACL2 types.</p>")
                            define
                            verbosep
                            hints
-                           forward)
+                           forward
+                           (inline 't)
+                           (equal 'equal))
 ; We contemplated making "equal" the default equivalence relation but decided
 ; against it.  See Github Issue 240 for relevant discussion.
   (declare (xargs :guard (and pred fix equiv)))
-  (deffixtype-fn name pred fix equiv execp define verbosep hints forward))
+  (deffixtype-fn name pred fix equiv execp define inline equal verbosep hints forward))
 
 (defun find-fixtype-for-pred (pred alist)
   (if (atom alist)
@@ -292,7 +201,8 @@ for some basic ACL2 types.</p>")
     :out-equiv
     :other-var
     :thm-suffix
-    :basename))
+    :basename
+    :pkg))
 
 
 (def-primitive-aggregate fixequiv
@@ -338,9 +248,11 @@ for some basic ACL2 types.</p>")
        ((unless (and (consp form) (symbolp (car form))))
         (raise "Form should be a function call term, but it's ~x0" form))
        (basename (getarg :basename (car form) kwd-alist))
-       (pkg (if (equal (symbol-package-name basename) "COMMON-LISP")
+       (pkg (or (getarg :pkg nil kwd-alist)
+                basename))
+       (pkg (if (equal (symbol-package-name pkg) "COMMON-LISP")
                 'acl2::foo
-              basename))
+              pkg))
        (under-out-equiv (if (eq out-equiv 'equal) ""
                           (concatenate 'string "-UNDER-" (symbol-name out-equiv))))
        (suffix (getarg :thm-suffix "" kwd-alist))
@@ -436,7 +348,7 @@ for some basic ACL2 types.</p>")
           (fixequiv-events
            (deffixequiv-basic-parse
              (cons ',fn formals)
-             ',arg ',type ',keys state)))))))
+             ',arg ',type (cons (cons :pkg ',fn) ',keys) state)))))))
 
 
 #||

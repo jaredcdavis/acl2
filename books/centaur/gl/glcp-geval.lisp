@@ -71,7 +71,7 @@
       mod
       truncate
       rem
-      acl2::boolfix
+      acl2::bool-fix$inline
 
       ;; these are from the constant *expandable-boot-strap-non-rec-fns*.
       NOT IMPLIES
@@ -85,7 +85,7 @@
 
       ;; force checks
       gl-force-check-fn
-      binary--))
+      binary-minus-for-gl))
 
 (in-theory (disable glcp-generic-geval))
 

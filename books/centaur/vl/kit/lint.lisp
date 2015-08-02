@@ -29,55 +29,48 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "../loader/loader")
+(include-book "../loader/top")
 (include-book "../lint/lucid")
 (include-book "../lint/check-case")
 (include-book "../lint/check-namespace")
 (include-book "../mlib/hierarchy")
 
-(include-book "../lint/xf-drop-missing-submodules")
-(include-book "../lint/xf-drop-user-submodules")
-(include-book "../lint/xf-lint-stmt-rewrite")
-(include-book "../lint/xf-remove-toohard")
-(include-book "../lint/xf-suppress-warnings")
-
-(include-book "../checkers/condcheck")
-(include-book "../checkers/duplicate-detect")
-(include-book "../checkers/dupeinst-check")
-(include-book "../checkers/duperhs")
-(include-book "../checkers/leftright")
-(include-book "../checkers/multidrive-detect")
-(include-book "../checkers/oddexpr")
-(include-book "../checkers/portcheck")
-(include-book "../checkers/qmarksize-check")
-(include-book "../checkers/selfassigns")
-(include-book "../checkers/skip-detect")
+;(include-book "../lint/drop-missing-submodules")
+(include-book "../lint/drop-user-submodules")
+;(include-book "../lint/lint-stmt-rewrite")
+;; Not used anymore (?)
+;; (include-book "../lint/remove-toohard")
+(include-book "../lint/suppress-warnings")
+(include-book "../lint/condcheck")
+(include-book "../lint/duplicate-detect")
+(include-book "../lint/dupeinst-check")
+(include-book "../lint/duperhs")
+(include-book "../lint/leftright")
+(include-book "../lint/oddexpr")
+(include-book "../lint/portcheck")
+(include-book "../lint/qmarksize-check")
+(include-book "../lint/selfassigns")
+(include-book "../lint/skip-detect")
 
 (include-book "../transforms/cn-hooks")
 (include-book "../transforms/unparam/top")
-(include-book "../transforms/annotate/argresolve")
-(include-book "../transforms/annotate/resolve-indexing")
-(include-book "../transforms/annotate/origexprs")
-(include-book "../transforms/annotate/make-implicit-wires")
-(include-book "../transforms/annotate/portdecl-sign")
-(include-book "../transforms/annotate/udp-elim")
+(include-book "centaur/vl/transforms/annotate/top" :dir :system)
 
-(include-book "../transforms/xf-assign-trunc")
-(include-book "../transforms/xf-blankargs")
-(include-book "../transforms/xf-clean-params")
-(include-book "../transforms/xf-clean-warnings")
-(include-book "../transforms/xf-drop-blankports")
-(include-book "../transforms/xf-expr-split")
-(include-book "../transforms/xf-expand-functions")
-(include-book "../transforms/xf-follow-hids")
-(include-book "../transforms/xf-hid-elim")
-(include-book "../transforms/xf-oprewrite")
-(include-book "../transforms/xf-resolve-ranges")
-(include-book "../transforms/xf-replicate-insts")
-(include-book "../transforms/xf-selresolve")
-(include-book "../transforms/xf-sizing")
-(include-book "../transforms/xf-unused-vars")
+;(include-book "../transforms/assign-trunc")
+;(include-book "../transforms/blankargs")
+;(include-book "../transforms/clean-params")
+(include-book "../transforms/clean-warnings")
+;(include-book "../transforms/drop-blankports")
+;(include-book "../transforms/expr-split")
+;(include-book "../transforms/expand-functions")
+;(include-book "../transforms/oprewrite")
+;(include-book "../transforms/resolve-ranges")
+;(include-book "../transforms/replicate-insts")
+;(include-book "../transforms/selresolve")
+;(include-book "../transforms/sizing")
+;(include-book "../transforms/unused-vars")
 
+(include-book "centaur/sv/vl/moddb" :dir :system)
 (include-book "../../misc/sneaky-load")
 
 (include-book "../mlib/json")
@@ -93,12 +86,19 @@
 
 (defsection lint
   :parents (vl)
-  :short "A linting tool for Verilog."
+  :short "A linting tool for Verilog and SystemVerilog."
 
   :long "<p>A <a
 href='http://en.wikipedia.org/wiki/Lint_%28software%29'>linter</a> is a tool
-that looks for possible bugs in a program.  We now implement such a linter for
-Verilog, reusing much of @(see vl).</p>")
+that looks for possible bugs in a program.  We have used @(see VL) to implement
+a linter for Verilog and SystemVerilog designs.  It can scan your Verilog
+designs for potential bugs like size mismatches, unused wires, etc.</p>
+
+<p>Note: Most of the documentation here is about the implementation of various
+linter checks.  If you just want to run the linter on your own Verilog designs,
+you should see the VL @(see kit).  After building the kit, you should be able
+to run, e.g., @('vl lint --help') to see the @(see *vl-lint-help*)
+message.</p>")
 
 (defoptions vl-lintconfig
   :parents (lint)
@@ -382,7 +382,7 @@ shown.</p>"
                    NO-DUPLICATESP-EQUAL-WHEN-SAME-LENGTH-MERGESORT
                    SUBSETP-OF-VL-MODINSTLIST->MODNAMES-WHEN-SUBSETP
                    CDR-OF-VL-MODULELIST-DUPERHS-CHECK
-                   CDR-OF-VL-MODULELIST-ORIGEXPRS
+                   ;; CDR-OF-VL-MODULELIST-ORIGEXPRS
                    vl-modulelist-p-of-append
                    NO-DUPLICATESP-EQUAL-OF-APPEND
                    acl2::no-duplicatesp-equal-append-iff
@@ -450,6 +450,16 @@ shown.</p>"
   (b* (((vl-lintconfig config) config)
        (design (cwtime (vl-design-drop-user-submodules design config.dropmods)))
 
+       (design (cwtime (vl-design-resolve-ansi-portdecls design)))
+       (design (cwtime (vl-design-resolve-nonansi-interfaceports design)))
+       (design (cwtime (vl-design-add-enumname-declarations design)))
+       (design (cwtime (vl-design-make-implicit-wires design)))
+       (design (cwtime (vl-design-portdecl-sign design)))
+       (design (cwtime (vl-design-udp-elim design)))
+
+       ;; BOZO I have no idea why we're doing this.
+       ;; Old comments:
+
        ;; You might expect that we'd immediately throw out modules that we
        ;; don't need for topmods.  Historically we did that.  But then we found
        ;; that we'd get a bunch of complaints in other modules about
@@ -459,30 +469,32 @@ shown.</p>"
        ;; mods0, so do that now:
        (design0 (vl-design-remove-unnecessary-modules config.topmods design))
 
-       (- (cw "~%vl-lint: initial processing...~%"))
-       (design (cwtime (vl-design-make-implicit-wires design)))
-       (design (cwtime (vl-design-portdecl-sign design)))
-       (design (cwtime (vl-design-udp-elim design)))
+
+       (design (cwtime (vl-design-duplicate-detect design)))
        (design (cwtime (vl-design-portcheck design)))
        (design (cwtime (vl-design-argresolve design)))
-       (design (cwtime (vl-design-resolve-indexing design)))
+       (design (cwtime (vl-design-type-disambiguate design)))
+       (design (cwtime (vl-design-origexprs design)))
+       (design (cwtime (vl-design-oddexpr-check design)))
 
-       ;; Pre-unparameterization Lucidity Check -- this is a bad time for
-       ;; bit-level analysis, but it's a good time for checking parameter
-       ;; usages.
-       (design (cwtime (vl-design-lucid design :paramsp t)))
+       ;; this goes away (design (cwtime (vl-design-resolve-indexing design)))
 
-       (- (cw "~%vl-lint: starting general checks...~%"))
+       ;; Pre-unparameterization Lucidity Check.
+       (design (cwtime (vl-design-lucid design
+                                        ;; This is a good time to check parameter uses
+                                        :paramsp t
+                                        ;; This is a bad time to check generates
+                                        :generatesp nil)))
+
        (design (cwtime (vl-design-check-namespace design)))
        (design (cwtime (vl-design-check-case design)))
        (design (cwtime (vl-design-duperhs-check design)))
-       (design (cwtime (vl-design-duplicate-detect design)))
        (design (cwtime (vl-design-condcheck design)))
        (design (cwtime (vl-design-leftright-check design)))
-       (design (cwtime (vl-design-origexprs design)))
        (design (cwtime (vl-design-dupeinst-check design)))
+       (design (cwtime (vl-centaur-seqcheck-hook design)))
 
-       (- (cw "~%vl-lint: elaborating the design...~%"))
+     
 
        ;; BOZO we need to do something to throw away instances with unresolved
        ;; arguments to avoid programming-errors in drop-blankports... and actually
@@ -491,9 +503,11 @@ shown.</p>"
        ;;(design (cwtime (vl-design-follow-hids design)))
        ;; (design (cwtime (vl-design-clean-params design)))
        ;; (design (cwtime (vl-design-check-good-paramdecls design)))
-       (design (cwtime (vl-design-unparameterize design)))
-       (design (cwtime (vl-design-rangeresolve design)))
-       (design (cwtime (vl-design-selresolve design)))
+       (design (cwtime (vl-design-elaborate design)))
+
+       ;; these are part of elaboration now
+       ;;(design (cwtime (vl-design-rangeresolve design)))
+       ;;(design (cwtime (vl-design-selresolve design)))
 
        (design
         ;; Running another dupeinst check here, after unparameterization, may
@@ -504,12 +518,16 @@ shown.</p>"
        ;; Post-unparameterization Lucidity Check -- this is a bad time for
        ;; checking parameters (because they've been eliminated) but it's a
        ;; much better time to do bit-level analysis, because things like
-       ;; foo[width-1:0] should hopefully be resolved now.
-       (design (cwtime (vl-design-lucid design :paramsp nil)))
+       ;; foo[width-1:0] should hopefully be resolved now.  Also we can
+       ;; sensibly check generates now.
+       (design (cwtime (vl-design-lucid design
+                                        :paramsp nil
+                                        :generatesp t)))
 
-       (design
-        ;; Best not to do this until after lucid checking.
-        (cwtime (vl-design-drop-missing-submodules design)))
+;;*** do we want to do thsi???  I can't think of why
+       ;; (design
+       ;;  ;; Best not to do this until after lucid checking.
+       ;;  (cwtime (vl-design-drop-missing-submodules design)))
 
        ;; BOZO do we even need to do this?
        ;; BOZO not exactly sure where this should go, maybe this will work.
@@ -524,25 +542,31 @@ shown.</p>"
        ;;  (cwtime (vl-design-elim-unused-vars design)))
 
        (design (cwtime (vl-design-check-selfassigns design)))
-       (design (cwtime (vl-design-lint-stmt-rewrite design)))
-       (design (cwtime (vl-design-stmtrewrite design 1000)))
+       (design (cwtime (vl-design-qmarksize-check design)))
+       (sd-probs (cwtime (sd-analyze-design design0)))
+
+;; Not sure we care abotu this for anything
+       ;; (design (cwtime (vl-design-lint-stmt-rewrite design)))
+       ;; (design (cwtime (vl-design-stmtrewrite design 1000)))
        ;;(design (cwtime (vl-design-hid-elim design)))
 
-       ;; Now that HIDs are gone, we can throw away any modules we don't care
-       ;; about, if we have been given any topmods.
-       (design (b* ((names1 (vl-modulelist->names (vl-design->mods design)))
-                    (design (vl-design-drop-missing-submodules design))
-                    (names2 (vl-modulelist->names (vl-design->mods design)))
-                    (lost   (difference (mergesort names1) (mergesort names2))))
-                 (or (not lost)
-                     (cw "BOZO lost ~x0 modules somewhere (probably unparameterizing): ~x1~%"
-                         (len lost) lost))
-                 design))
+;; maaaaybe we don't watn this?
+       ;; ;; Now that HIDs are gone, we can throw away any modules we don't care
+       ;; ;; about, if we have been given any topmods.
+       ;; (design (b* ((names1 (vl-modulelist->names (vl-design->mods design)))
+       ;;              (design (vl-design-drop-missing-submodules design))
+       ;;              (names2 (vl-modulelist->names (vl-design->mods design)))
+       ;;              (lost   (difference (mergesort names1) (mergesort names2))))
+       ;;           (or (not lost)
+       ;;               (cw "BOZO lost ~x0 modules somewhere (probably unparameterizing): ~x1~%"
+       ;;                   (len lost) lost))
+       ;;           design))
+
+       ((mv reportcard ?modalist) (cwtime (vl-design->svex-modalist design)))
+       (design (cwtime (vl-apply-reportcard design reportcard)))
 
        (design (cwtime (vl-design-remove-unnecessary-modules config.topmods design)))
 
-       (- (cw "~%vl-lint: processing expressions...~%"))
-       (design (cwtime (vl-design-oddexpr-check design)))
 
        ;; [Jared] -- Trying to NOT do oprewrite anymore.  Our sizing warnings
        ;; do better if we can tell the difference between == and ~^ operators,
@@ -551,23 +575,25 @@ shown.</p>"
 
 
        ;; Sizing doesn't do well unless we expand functions
-       (design (cwtime (vl-design-expand-functions design)))
-       (design (cwtime (vl-design-exprsize design)))
-       (design (cwtime (vl-design-constcheck-hook design config.cclimit)))
-       (design (cwtime (vl-design-qmarksize-check design)))
+;       (design (cwtime (vl-design-expand-functions design)))
+;       (design (cwtime (vl-design-exprsize design)))
+;       (design (cwtime (vl-design-constcheck-hook design config.cclimit)))
 
-       (- (cw "~%vl-lint: processing assignments...~%"))
-       (design (cwtime (vl-design-split design)))
-       (design (cwtime (vl-design-replicate design)))
-       (design (cwtime (vl-design-blankargs design)))
-       (design (cwtime (vl-design-trunc design)))
 
-       (- (cw "~%vl-lint: finding skipped and multiply driven wires...~%"))
+;       (- (cw "~%vl-lint: processing assignments...~%"))
+;       (design (cwtime (vl-design-split design)))
+
+; BOZO argument width checking?
+;       (design (cwtime (vl-design-replicate design)))
+
+;; BOZO are we checking for connecting blanks to interface ports
+;;        (design (cwtime (vl-design-blankargs design)))
+;;       (design (cwtime (vl-design-trunc design)))
+
+;       (- (cw "~%vl-lint: finding skipped and multiply driven wires...~%"))
        ;; NOTE: use design0, not design, if you ever want this to finish. :)
-       (sd-probs (cwtime (sd-analyze-design design0)))
-       (design   (cwtime (vl-design-multidrive-detect design)))
 
-       (- (cw "~%vl-lint: cleaning up...~%"))
+
        (design   (cwtime (vl-design-clean-warnings design)))
        (design   (cwtime (vl-design-suppress-lint-warnings design)))
        (design   (cwtime (vl-design-lint-ignoreall design config.ignore)))
@@ -753,12 +779,6 @@ shown.</p>"
         :vl-warn-instances-same-minor
         :vl-const-expr-minor))
 
-(defconst *multidrive-warnings*
-  (list :vl-warn-multidrive))
-
-(defconst *multidrive-minor-warnings*
-  (list :vl-warn-multidrive-minor))
-
 (defconst *fussy-size-warnings*
   (list :vl-fussy-size-warning-1
         :vl-fussy-size-warning-2
@@ -788,7 +808,8 @@ shown.</p>"
   (list :vl-lucid-error
         :vl-lucid-unused
         :vl-lucid-spurious
-        :vl-lucid-unset))
+        :vl-lucid-unset
+        :vl-lucid-multidrive))
 
 
 
@@ -802,8 +823,6 @@ shown.</p>"
           *trunc-minor-warnings*
           *smell-warnings*
           *smell-minor-warnings*
-          *multidrive-warnings*
-          *multidrive-minor-warnings*
           *fussy-size-warnings*
           *fussy-size-minor-warnings*
           *same-ports-warnings*
@@ -920,12 +939,6 @@ you can see \"vl-trunc-minor.txt\" to review them.")))
          (vl-lint-print-warnings "vl-lucid.txt" "Lucidity Checking" *lucid-warnings* reportcard)))
 
        (state
-        (with-ps-file
-         "vl-multi.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-lint-print-warnings "vl-multi.txt" "Multidrive" *multidrive-warnings* reportcard)))
-
-       (state
         (if (not major)
             (progn$
              (cw "; No Skip-Detect Warnings.~%")
@@ -993,12 +1006,6 @@ suppress them by writing something like this:
 
 or similar, to make explicit on the right-hand side that you want an 11-bit
 wide addition instead of a 10-bit wide addition.")))
-
-       (state
-        (with-ps-file
-         "vl-multi-minor.txt"
-         (vl-ps-update-autowrap-col 68)
-         (vl-lint-print-warnings "vl-multi-minor.txt" "Minor Multidrive" *multidrive-minor-warnings* reportcard)))
 
        (state
         (if (not minor)

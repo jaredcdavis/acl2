@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -182,11 +182,18 @@
 ; the same color (in font-lock mode) as when defun is called.  If you
 ; don't like it, first copy this form into your .emacs file after the
 ; form that loads this emacs-acl2.el, and then change
-; font-lock-add-keywords to font-lock-remove-keywords.
+; font-lock-add-keywords to font-lock-remove-keywords.  Because of the
+; use of package prefixes in forms like (fty::deflist ...), we
+; include a patch provided with permission from Keshav Kini that
+; allows such package prefixes.  (Note that fty::deflist and
+; std::deflist are different symbols, so they can't both be imported
+; from the "ACL2" package.)
 
 (font-lock-add-keywords
  'lisp-mode
- '(("(\\(def[^ \t]*\\|encapsulate\\|in-theory\\|include-book\\|local\\)\\>"
+ '(("(\\(\\([A-Za-z0-9-_]+::\\)?def[^ \t]*\\)\\>"
+    . 1)
+   ("(\\(encapsulate\\|in-theory\\|include-book\\|local\\)\\>"
     . 1)
    ("(\\(make-event\\|mutual-recursion\\|prog[^ \t]*\\)\\>"
     . 1)
@@ -346,6 +353,51 @@
 	(forward-sexp)
 	(buffer-substring beg (point))))))
 
+(defvar *acl2-insert-pats*
+
+  '(:not ".*%[ ]*$" ".*$[ ]*$" "^$")
+
+;;; Another good default might be this "positive" list -- instead of
+;;; ruling out shell prompts as done just above, here we allow only
+;;; lines with known Lisp or ACL2 prompts.
+
+; '(".*>[ ]*$"		   ; ACL2, GCL, CLISP, LispWorks, CCL debugger
+;   ".*[?] $"		   ; CCL
+;   ".*): $"		   ; Allegro CL
+;   ".*] $"		   ; SBCL debugger
+;   ".*[*] $"		   ; CMUCL, SBCL
+;  )
+
+  "A list of regular expressions for acl2-check-insert to allow on the current line
+or, if the car is :not -- e.g., (:not \".*%[ ]*$\" \".*$[ ]*$\" \"^$\") --
+patterns to disallow.")
+
+(defun acl2-check-insert ()
+  (save-excursion
+    (forward-line 0)
+    (let ((buf (get-buffer *acl2-shell*)))
+      (cond
+       ((null buf)
+	(error "Nonexistent *acl2-shell* buffer: %s" *acl2-shell*))
+       ((null (get-buffer-process buf))
+	(error "The buffer named %s (the value of *acl2-shell*) has no process!"
+	       *acl2-shell*))
+       (t (let ((patterns *acl2-insert-pats*))
+	    (cond ((null patterns))
+		  ((eq (car patterns) :not)
+		   (while (setq patterns (cdr patterns))
+		     (when (looking-at (car patterns))
+		       (error "Error: Illegal regexp match for line, \"%s\"; see *acl2-insert-pats*"
+			      (car patterns)))))
+		  (t (let ((flg nil))
+		       (while patterns
+			 (cond ((looking-at (car patterns))
+				(setq flg t)
+				(setq patterns nil))
+			       (t (setq patterns (cdr patterns)))))
+		       (or flg
+			   (error "Error: No regexp match for line; see *acl2-insert-pats*")))))))))))
+
 (defun enter-theorem ()
 
   "Normally just insert the last top-level form starting at or before
@@ -366,6 +418,7 @@ scope with control-t o."
   (let ((str (acl2-current-form-string)))
     (switch-to-buffer *acl2-shell*)
     (goto-char (point-max))
+    (acl2-check-insert)
     (insert str))
   (goto-char (point-max)) ; harmless; seemed necessary at one point
   )
@@ -377,6 +430,7 @@ scope with control-t o."
     (other-window 1)
     (switch-to-buffer *acl2-shell*)
     (goto-char (point-max))
+    (acl2-check-insert)
     (insert str)))
 
 (defun event-name ()
@@ -421,8 +475,11 @@ current top-level form.  See the documentation for enter-theorem."
 
 (define-key ctl-t-keymap "o" 'acl2-open-scope)
 
-; Avoid killing process with control-d in shell buffer:
-(define-key comint-mode-map "\C-d" 'delete-char)
+; The following avoids killing a process with control-d in the shell
+; buffer, by reverting \C-d to whatever it was before comint-mode-map
+; modified its binding.  Thanks to Keshav Kini for this suggestion (in
+; place of our earlier solution of rebinding \C-d to delete-char).
+(define-key comint-mode-map "\C-d" nil)
 
 ; The following only seems necessary in gnu.
 (define-key comint-mode-map "Œ" 'c-m-l)

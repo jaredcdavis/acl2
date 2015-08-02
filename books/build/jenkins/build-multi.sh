@@ -4,8 +4,8 @@
 # The parameters are predictable, but here are some sample
 # invocations:
 #
-# build-multi.sh LISP=sbcl ACL2_HONS=t ACL2_PAR="" ACL2_REAL=t TARGET=std
-# build-multi.sh LISP=ccl ACL2_HONS=t ACL2_PAR=t ACL2_REAL="" TARGET=manual
+# LISP=sbcl ACL2_HONS=h ACL2_PAR=no_p ACL2_REAL=r TARGET=std build-multi.sh
+# LISP=ccl ACL2_HONS=h ACL2_PAR=p ACL2_REAL=no_r TARGET=manual build-multi.sh
 
 # TODO: make it work with startjob, where startjob is a wrapper for
 # bash (really, the challenge in this is getting the definition of
@@ -22,7 +22,6 @@ echo " -- PATH is $PATH"
 source $JENKINS_HOME/env.sh
 
 ACL2DIR=`pwd`
-#alias startjob='bash'
 
 if [ -z "$TARGET" ]; then
   echo "Setting TARGET automatically";
@@ -45,24 +44,37 @@ echo "Making TARGET   = $TARGET"
 if [ "${LISP:0:3}" == "gcl" ]; then
   USE_QUICKLISP="";
 else
-  USE_QUICKLISP="t";
+  USE_QUICKLISP="1";
 fi
 
 set ACL2_SUFFIX=""
-if [ "$ACL2_HONS" != "" ]; then
-    ACL2_SUFFIX="${ACL2_SUFFIX}h"
-fi
+case "$ACL2_HONS" in
+  ""|no_h|no-h|none|NONE)
+    ACL2_SUFFIX="${ACL2_SUFFIX}c"
+    ;;
+  *)
+    ;;
+esac
 
-if [ "$ACL2_PAR" != "" ]; then
+case "$ACL2_PAR" in
+  ""|no_p|no-p|none|NONE)
+    ;;
+  *)
     ACL2_SUFFIX="${ACL2_SUFFIX}p"
-fi
+    ;;
+esac
 
-if [ "$ACL2_REAL" != "" ]; then
+case "$ACL2_REAL" in
+  ""|no_r|no-r|none|NONE)
+    ACL2_REAL=""
+    ;;
+  *)
     ACL2_SUFFIX="${ACL2_SUFFIX}r"
-fi
+    ;;
+esac
+
 
 echo "Using ACL2_SUFFIX = $ACL2_SUFFIX"
-
 
 echo "Making ACL2(${ACL2_SUFFIX})"
 # need to use single-quote to prevent interpolation of the double

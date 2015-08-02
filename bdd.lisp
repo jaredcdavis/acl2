@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -2708,7 +2708,8 @@
                                            (set-difference-eq term-vars
                                                               input-vars)))))))
               #+(and (not acl2-loop-only) akcl)
-              (cond ((and (fboundp 'si::sgc-on)
+              (cond ((and (not *gcl-large-maxpages*)
+                          (fboundp 'si::sgc-on)
                           (funcall 'si::sgc-on))
                      (fms "NOTE: Turning off SGC.  If you wish to turn SGC ~
                            back on again, execute (SI::SGC-ON T) in raw Lisp.~|"

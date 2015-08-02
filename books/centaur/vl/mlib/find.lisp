@@ -40,14 +40,13 @@
                            default-cdr
                            acl2::subsetp-member
                            acl2::str-fix-default
-                           acl2::stringp-when-maybe-stringp
                            (:t member-equal)
                            member-equal
                            default-car
                            consp-when-member-equal-of-vl-gencaselist-p
                            consp-when-member-equal-of-vl-caselist-p
                            consp-when-member-equal-of-vl-commentmap-p
-                           consp-when-member-equal-of-vl-atts-p
+                           ;; consp-when-member-equal-of-vl-atts-p
                            acl2::consp-when-member-equal-of-keyval-alist-p
                            acl2::consp-of-car-when-alistp
                            (tau-system)
@@ -60,26 +59,26 @@
 ; To keep parsetree.lisp lighter we don't include some of the vl-foolist->names
 ; style functions.  So, we fill these in to start with.
 
-(define vl-blockitem->name ((x vl-blockitem-p))
-  :parents (vl-blockitem)
-  :returns (name stringp :rule-classes :type-prescription)
-  :prepwork ((local (defthm tag-when-vl-blockitem-p
-                      (implies (vl-blockitem-p x)
-                               (or (equal (tag x) :vl-vardecl)
-                                   (equal (tag x) :vl-paramdecl)))
-                      :rule-classes :forward-chaining))
-             (local (defthm vl-blockitem-p-of-vl-blockitem-fix-forward
-                      (vl-blockitem-p (vl-blockitem-fix x))
-                      :rule-classes ((:forward-chaining :trigger-terms ((vl-blockitem-fix x)))))))
-  (b* ((x (vl-blockitem-fix x)))
-    (case (tag x)
-      (:vl-vardecl (vl-vardecl->name x))
-      (otherwise   (vl-paramdecl->name x)))))
+;; (define vl-blockitem->name ((x vl-blockitem-p))
+;;   :parents (vl-blockitem)
+;;   :returns (name stringp :rule-classes :type-prescription)
+;;   :prepwork ((local (defthm tag-when-vl-blockitem-p
+;;                       (implies (vl-blockitem-p x)
+;;                                (or (equal (tag x) :vl-vardecl)
+;;                                    (equal (tag x) :vl-paramdecl)))
+;;                       :rule-classes :forward-chaining))
+;;              (local (defthm vl-blockitem-p-of-vl-blockitem-fix-forward
+;;                       (vl-blockitem-p (vl-blockitem-fix x))
+;;                       :rule-classes ((:forward-chaining :trigger-terms ((vl-blockitem-fix x)))))))
+;;   (b* ((x (vl-blockitem-fix x)))
+;;     (case (tag x)
+;;       (:vl-vardecl (vl-vardecl->name x))
+;;       (otherwise   (vl-paramdecl->name x)))))
 
-(defprojection vl-blockitemlist->names ((x vl-blockitemlist-p))
-  :returns (names string-listp)
-  :parents (vl-blockitemlist-p)
-  (vl-blockitem->name x))
+;; (defprojection vl-blockitemlist->names ((x vl-blockitemlist-p))
+;;   :returns (names string-listp)
+;;   :parents (vl-blockitemlist-p)
+;;   (vl-blockitem->name x))
 
 (defprojection vl-paramdecllist->names ((x vl-paramdecllist-p))
   :returns (names string-listp)
@@ -166,6 +165,7 @@ instances.</p>"
            (vl-modinstlist->instnames x)))
 
   (defcong list-equiv equal (vl-modinstlist->instnames x) 1
+    :event-name vl-modinstlist->instnames-preserves-list-equiv
     :hints(("Goal"
             :in-theory (e/d (list-equiv)
                             (vl-modinstlist->instnames-of-list-fix))
@@ -233,6 +233,7 @@ the number of gate instances in the list.</p>"
            (vl-gateinstlist->names x)))
 
   (defcong list-equiv equal (vl-gateinstlist->names x) 1
+    :event-name vl-gateinstlist->names-preserves-list-equiv
     :hints(("Goal"
             :in-theory (e/d (list-equiv)
                             (vl-gateinstlist->names-of-list-fix))
@@ -306,6 +307,7 @@ may be shorter than the number of elements in the list.</p>"
            (vl-genelementlist->blocknames x)))
 
   (defcong list-equiv equal (vl-genelementlist->blocknames x) 1
+    :event-name vl-genelementlist->blocknames-preserves-list-equiv
     :hints(("Goal"
             :in-theory (e/d (list-equiv)
                             (vl-genelementlist->blocknames-of-list-fix))
@@ -572,8 +574,8 @@ fast alists binding names to items that can be used for this purpose.</p>")
   :maybe-stringp t
   :sum-type      t)
 
-(def-vl-finder blockitem
-  :sum-type t)
+;; (def-vl-finder blockitem
+;;   :sum-type t)
 
 
 

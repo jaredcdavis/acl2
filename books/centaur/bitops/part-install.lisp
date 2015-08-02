@@ -28,7 +28,7 @@
 ;
 ; Original author: Shilpi Goel <shilpi@centtech.com>
 
-(in-package "ACL2")
+(in-package "BITOPS")
 (include-book "xdoc/top" :dir :system)
 (include-book "centaur/misc/arith-equivs" :dir :system)
 (include-book "ihs/basic-definitions" :dir :system)
@@ -120,8 +120,10 @@ some value.")
   (defmacro part-install (val x &key low high width)
     (cond ((and high width)
            (er hard? 'part-install "Can't use :high and :width together."))
-          ((and low high)
+          ((and low high (integerp low) (integerp high))
            `(part-install-width-low ,val ,x ,(+ 1 high (- low)) ,low))
+          ((and low high)
+           `(part-install-width-low ,val ,x (+ 1 ,high (- ,low)) ,low))
           ((and low width)
            `(part-install-width-low ,val ,x ,width ,low))
           (t

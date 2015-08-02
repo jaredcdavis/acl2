@@ -1,5 +1,5 @@
-# VL Verilog Toolkit
-# Copyright (C) 2008-2014 Centaur Technology
+# VL 2014 -- VL Verilog Toolkit, 2014 Edition
+# Copyright (C) 2008-2015 Centaur Technology
 #
 # Contact:
 #   Centaur Technology Formal Verification Group
@@ -63,9 +63,12 @@ def normal(modname, wirename)
   outlaw_warning(modname, "VL-LUCID-UNUSED", wirename)
 end
 
+# We no longer expect to support top-level unset parameters
+#spurious(:"Design Root", "top_spurious ")
+#unset(:"Design Root", "top_unset ")
+
+
 normal(:"Design Root", "top_normal ")
-spurious(:"Design Root", "top_spurious ")
-unset(:"Design Root", "top_unset ")
 unused(:"Design Root", "top_unused ")
 
 
@@ -237,5 +240,10 @@ normal(:imsim, "port2 ")
 unset(:useprim, "w1_unset ")
 unused(:useprim, "w1_unused ")
 spurious(:useprim, "w1_spurious ")
+
+unused(:trickyscope, "counter_unused ")
+
+unset(:minuscolon, "normal2")
+unused(:minuscolon, "normal1")
 
 test_passed()

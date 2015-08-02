@@ -383,8 +383,11 @@ heavier-weight (but not necessarily recommended) alternative is to use the
     (implies (set-equiv x y)
              (set-equiv (elementlist-projection x)
                         (elementlist-projection y)))
-    :rule-classes :congruence))
+    :rule-classes :congruence)
 
+  (defthm set-equiv-of-nil
+    (equal (set-equiv nil x)
+           (atom x))))
 
 (defsection set-equiv-congruences
   :parents (set-equiv)

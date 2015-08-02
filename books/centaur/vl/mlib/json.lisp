@@ -293,6 +293,76 @@ encoding.</p>"
                 (vl-println? "}"))))
 
 
+(define vl-jp-warning ((x vl-warning-p) &key (ps 'ps))
+  :parents (json-encoders)
+  :short "Special, custom JSON encoder for warnings."
+
+  :long "<p>We probably don't want to use the ordinary aggregate-encoding stuff
+to print @(see vl-warning-p) objects, since the types in the @(':args') field
+are dynamic and, besides, who wants to reimplement @(see vl-cw) in other
+languages.  Instead, it's probably more convenient to just go ahead and convert
+the warning into a printed message here.  We'll include both HTML and plain
+TEXT versions of the message.</p>"
+
+  (b* (((vl-warning x) x)
+       (text (with-local-ps (vl-cw-obj x.msg x.args)))
+       (html (with-local-ps
+               (vl-ps-update-htmlp t)
+               ;; For the module browser, the warnings get word wrapped by the
+               ;; browser anyway, so don't try to wrap them ourselves or things
+               ;; get weird looking.
+               (vl-ps-update-autowrap-col 100000)
+               (vl-cw-obj x.msg x.args))))
+    (jp-object :tag    (vl-print "\"warning\"")
+               :fatalp (jp-bool x.fatalp)
+               :type   (jp-str (symbol-name x.type))
+               :fn     (jp-str (symbol-name x.fn))
+               :text   (jp-str text)
+               :html   (jp-str html))))
+
+(add-json-encoder vl-warning-p jp-warning)
+
+(defmacro def-vl-jp-list (type &key newlines)
+  (declare (xargs :guard (maybe-natp newlines)))
+  (b* ((mksym-package-symbol 'vl::foo)
+       (list-p         (mksym 'vl- type 'list-p))
+       (elem-print     (mksym 'vl-jp- type))
+       (list-print-aux (mksym 'vl-jp- type 'list-aux))
+       (list-print     (mksym 'vl-jp- type 'list))
+       (list-p-str     (symbol-name list-p)))
+    `(encapsulate ()
+       (define ,list-print-aux ((x ,list-p) &key (ps 'ps))
+         :parents (,list-print)
+         :short ,(cat "Prints out the elements of a @(see " list-p-str
+                      ") without the enclosing brackets.")
+         (if (atom x)
+             ps
+           (vl-ps-seq (,elem-print (car x))
+                      (if (atom (cdr x))
+                          ps
+                        ,(if newlines
+                             `(vl-ps-seq (vl-println ",")
+                                         (vl-indent ,newlines))
+                           `(vl-println? ", ")))
+                      (,list-print-aux (cdr x)))))
+       (define ,list-print ((x ,list-p) &key (ps 'ps))
+         :parents (json-encoders)
+         :short ,(cat "Prints out the elements of a @(see " list-p-str
+                      ") with the enclosing brackets.")
+         (vl-ps-seq (vl-print "[")
+                    (,list-print-aux x)
+                    (vl-println? "]")))
+       (add-json-encoder ,list-p ,list-print))))
+
+(def-vl-jp-list warning :newlines 4)
+
+
+
+
+#||| 
+
+;; BOZO once upon a time we had a working vl->json translation.
+;; If we ever want it back, maybe we'll think about resurrecting this code.
 
 ; Fancy automatic json encoding of std structures
 
@@ -364,6 +434,18 @@ encoding.</p>"
     (cons (std::make-formal :name x1.name
                             :guard (list x1.type x1.name))
           (convert-flexprod-fields-into-eformals (cdr x)))))
+
+(define def-vl-jp-prod-fn (prod omit )
+
+  (vl-ps-seq
+        (vl-print "{\"tag\": ")
+        (jp-sym ',tag)
+        ,(if newlines
+             `(vl-ps-seq (vl-println ", ")
+                         (vl-indent ,newlines))
+           `(vl-print ", "))
+        ,@main
+        (vl-println? "}"))
 
 (define def-vl-jp-aggregate-fn (type omit overrides long newlines world)
   (b* ((mksym-package-symbol 'vl::foo)
@@ -437,37 +519,7 @@ encoding.</p>"
 (logic)
 
 
-(defmacro def-vl-jp-list (type &key newlines)
-  (declare (xargs :guard (maybe-natp newlines)))
-  (b* ((mksym-package-symbol 'vl::foo)
-       (list-p         (mksym 'vl- type 'list-p))
-       (elem-print     (mksym 'vl-jp- type))
-       (list-print-aux (mksym 'vl-jp- type 'list-aux))
-       (list-print     (mksym 'vl-jp- type 'list))
-       (list-p-str     (symbol-name list-p)))
-    `(encapsulate ()
-       (define ,list-print-aux ((x ,list-p) &key (ps 'ps))
-         :parents (,list-print)
-         :short ,(cat "Prints out the elements of a @(see " list-p-str
-                      ") without the enclosing brackets.")
-         (if (atom x)
-             ps
-           (vl-ps-seq (,elem-print (car x))
-                      (if (atom (cdr x))
-                          ps
-                        ,(if newlines
-                             `(vl-ps-seq (vl-println ",")
-                                         (vl-indent ,newlines))
-                           `(vl-println? ", ")))
-                      (,list-print-aux (cdr x)))))
-       (define ,list-print ((x ,list-p) &key (ps 'ps))
-         :parents (json-encoders)
-         :short ,(cat "Prints out the elements of a @(see " list-p-str
-                      ") with the enclosing brackets.")
-         (vl-ps-seq (vl-print "[")
-                    (,list-print-aux x)
-                    (vl-println? "]")))
-       (add-json-encoder ,list-p ,list-print))))
+
 
 
 
@@ -656,11 +708,17 @@ which could not hold such large values.</p>")
 
 (add-json-encoder vl-atomguts-p vl-jp-atomguts)
 
+(define vl-jp-value ((x vl-value-p) &key (ps 'ps))
+  (vl-value-case x
+    :vl-constint (vl-jp-constint x)
+
 (defines vl-jp-expr
   :parents (json-encoders)
 
   (define vl-jp-expr ((x vl-expr-p) &key (ps 'ps))
     :measure (two-nats-measure (vl-expr-count x) 0)
+    (vl-expr-case x
+      :vl-literal (vl-jp-value x.val)
     (vl-expr-case x
       :atom
       (jp-object :tag (jp-sym :atom)
@@ -724,6 +782,9 @@ which could not hold such large values.</p>")
 (add-json-encoder vl-exprlist-p   vl-jp-exprlist)
 (add-json-encoder vl-atts-p       vl-jp-atts)
 (add-json-encoder vl-maybe-expr-p vl-jp-maybe-expr)
+
+
+
 
 (def-vl-jp-aggregate range)
 (def-vl-jp-list range)
@@ -932,18 +993,18 @@ which could not hold such large values.</p>")
 (def-vl-jp-aggregate paramdecl)
 (def-vl-jp-list paramdecl :newlines 4)
 
-(define vl-jp-blockitem ((x vl-blockitem-p) &key (ps 'ps))
-  :guard-hints (("Goal" :in-theory (enable vl-blockitem-p)))
-  (mbe :logic
-       (cond ((vl-vardecl-p x)    (vl-jp-vardecl x))
-             (t                   (vl-jp-paramdecl x)))
-       :exec
-       (case (tag x)
-         (:vl-vardecl   (vl-jp-vardecl x))
-         (otherwise     (vl-jp-paramdecl x)))))
+(define vl-jp-importpart ((x vl-importpart-p) &key (ps 'ps))
+  :guard-hints(("Goal" :in-theory (enable vl-importpart-p)))
+  (b* ((x (vl-importpart-fix x)))
+    (if (eq x :vl-import*)
+        (jp-str "*")
+      (jp-str x))))
 
-(add-json-encoder vl-blockitem-p vl-jp-blockitem)
-(def-vl-jp-list blockitem)
+(add-json-encoder vl-importpart-p vl-jp-importpart)
+
+(def-vl-jp-aggregate import)
+(def-vl-jp-list import :newlines 4)
+
 
 (define vl-jp-arguments ((x vl-arguments-p) &key (ps 'ps))
   :parents (json-encoders vl-arguments-p)
@@ -1129,7 +1190,9 @@ which could not hold such large values.</p>")
        (jp-object :tag        (jp-sym kind)
                   :sequential (jp-bool x.sequentialp)
                   :name       (jp-maybe-string x.name)
-                  :decls      (vl-jp-blockitemlist x.decls)
+                  :imports    (vl-jp-importlist x.imports)
+                  :paramdecls (vl-jp-paramdecllist x.paramdecls)
+                  :vardecls   (vl-jp-vardecllist x.vardecls)
                   :stmts      (vl-jp-stmtlist x.stmts)
                   :atts       (vl-jp-atts x.atts))
 
@@ -1202,59 +1265,14 @@ which could not hold such large values.</p>")
 (def-vl-jp-aggregate portdecl)
 (def-vl-jp-list portdecl :newlines 4)
 
-(def-vl-jp-aggregate fundecl)
+(def-vl-jp-aggregate fundecl :omit (blockitems))
 (def-vl-jp-list fundecl :newlines 4)
 
-(def-vl-jp-aggregate taskdecl)
+(def-vl-jp-aggregate taskdecl :omit (blockitems))
 (def-vl-jp-list taskdecl :newlines 4)
 
 (def-vl-jp-aggregate assign)
 (def-vl-jp-list assign :newlines 4)
-
-(define vl-jp-importpart ((x vl-importpart-p) &key (ps 'ps))
-  :guard-hints(("Goal" :in-theory (enable vl-importpart-p)))
-  (b* ((x (vl-importpart-fix x)))
-    (if (eq x :vl-import*)
-        (jp-str "*")
-      (jp-str x))))
-
-(add-json-encoder vl-importpart-p vl-jp-importpart)
-
-(def-vl-jp-aggregate import)
-(def-vl-jp-list import :newlines 4)
-
-
-(define vl-jp-warning ((x vl-warning-p) &key (ps 'ps))
-  :parents (json-encoders)
-  :short "Special, custom JSON encoder for warnings."
-
-  :long "<p>We probably don't want to use the ordinary aggregate-encoding stuff
-to print @(see vl-warning-p) objects, since the types in the @(':args') field
-are dynamic and, besides, who wants to reimplement @(see vl-cw) in other
-languages.  Instead, it's probably more convenient to just go ahead and convert
-the warning into a printed message here.  We'll include both HTML and plain
-TEXT versions of the message.</p>"
-
-  (b* (((vl-warning x) x)
-       (text (with-local-ps (vl-cw-obj x.msg x.args)))
-       (html (with-local-ps
-               (vl-ps-update-htmlp t)
-               ;; For the module browser, the warnings get word wrapped by the
-               ;; browser anyway, so don't try to wrap them ourselves or things
-               ;; get weird looking.
-               (vl-ps-update-autowrap-col 100000)
-               (vl-cw-obj x.msg x.args))))
-    (jp-object :tag    (vl-print "\"warning\"")
-               :fatalp (jp-bool x.fatalp)
-               :type   (jp-str (symbol-name x.type))
-               :fn     (jp-str (symbol-name x.fn))
-               :text   (jp-str text)
-               :html   (jp-str html))))
-
-(add-json-encoder vl-warning-p jp-warning)
-
-(def-vl-jp-list warning :newlines 4)
-
 
 
 
@@ -1369,3 +1387,4 @@ TEXT versions of the message.</p>"
 
 ")
                (vl-jp-individual-modules (cdr x)))))
+||#

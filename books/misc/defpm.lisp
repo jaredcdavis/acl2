@@ -13,6 +13,8 @@
 ; independently.  Our approach seems considerably simpler than Greve's
 ; development, but for example, his utility handles reflexive functions --
 ; recursive calls like (mc91 (mc91 (+ n 11))) -- while ours probably does not.
+; Another potentially related utility may be found in
+; books/workshops/2004/matthews-vroon/.
 
 ; Examples are towards the end of this file.
 
@@ -21,6 +23,13 @@
 ;;; their definitions would be generated, rather than requiring the user to
 ;;; define functions like fact-test (below).  We might also consider automating
 ;;; the production of additional stuff, as described in comments below.
+
+#||
+;; [Jared] this was previously a depends-on arithmetic-top-theory.cert line.
+;; However that didn't seem to work right; see Issue 383 for details.  As a
+;; workaround, replacing it with this phony include-book.
+(include-book "arithmetic-top-theory")
+||#
 
 (in-package "ACL2")
 
@@ -273,6 +282,8 @@
  definitions with recursive calls like @('(mc91 (mc91 (+ n 11)))') &mdash;
  while ours were not designed to do so.</p>")
 
+(defpointer defpm def-partial-measure)
+
 (defxdoc defthm-domain
   :parents (macro-libraries)
   :short "Prove termination on a given domain"
@@ -394,6 +405,13 @@
         (t (cons `(syntaxp (symbolp ,(car formals)))
                  (syntaxp-symbolp-lst (cdr formals))))))
 
+(make-event
+ (pprogn (f-put-global 'defpm-arithmetic-top-book
+                       (extend-pathname (cbd) "arithmetic-top-theory" state)
+                       state)
+         (value '(value-triple :defpm-arithmetic-top-book-set)))
+ :check-expansion t)
+
 (defun defpm-form (test steps measure terminates theory formals)
   (declare (xargs :guard
                   (and (symbol-listp (list measure terminates theory))
@@ -419,7 +437,7 @@
 
 ; Set the theory to be one that is independent of
 
-      (local (include-book "arithmetic-top-theory"))
+      (local (make-event (list 'include-book (@ defpm-arithmetic-top-book))))
       (local (in-theory (theory 'arithmetic-top-theory)))
       (local (in-theory (enable natp)))
 

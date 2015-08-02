@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -888,20 +888,23 @@
     (cond (pair (cdr pair))
           (t *default-rw-cache-state*))))
 
-(defmacro make-rcnst (ens wrld &rest args)
+(defmacro make-rcnst (ens wrld state &rest args)
 
-; (Make-rcnst ens w) will make a rewrite-constant that is the result of filling
-; in *empty-rewrite-constant* with a few obviously necessary values, such as
-; the global-enabled-structure as the :current-enabled-structure.  Then it
-; additionally loads user supplied values specified by alternating
+; (Make-rcnst ens w state) will make a rewrite-constant that is the result of
+; filling in *empty-rewrite-constant* with a few obviously necessary values,
+; such as the global-enabled-structure as the :current-enabled-structure.  Then
+; it additionally loads user supplied values specified by alternating
 ; keyword/value pairs to override what is otherwise created.  E.g.,
 
-; (make-rcnst ens w :expand-lst lst)
+; (make-rcnst ens w state :expand-lst lst)
 
 ; will make a rewrite-constant that is like the default one except that it will
 ; have lst as the :expand-lst.
 
 ; Note: Wrld and ens are used in the "default" setting of certain fields.
+
+; Warning: wrld could be evaluated several times.  So it should be an
+; inexpensive expression, such as a variable or (w state).
 
   `(change rewrite-constant
            (change rewrite-constant
@@ -909,6 +912,7 @@
                    :current-enabled-structure ,ens
                    :oncep-override (match-free-override ,wrld)
                    :case-split-limitations (case-split-limitations ,wrld)
+                   :forbidden-fns (forbidden-fns ,wrld ,state)
                    :nonlinearp (non-linearp ,wrld)
                    :backchain-limit-rw (backchain-limit ,wrld :rewrite)
                    :rw-cache-state (rw-cache-state ,wrld))
@@ -945,7 +949,7 @@
            (t (mv-let (new-step-limit provedp pot-lst)
                       (setup-simplify-clause-pot-lst1
                        cl nil type-alist
-                       (make-rcnst ens wrld
+                       (make-rcnst ens wrld state
                                    :force-info 'weak
                                    :cheap-linearp t)
                        wrld state *default-step-limit*)
@@ -1022,12 +1026,26 @@
 ; If the time-tracker calls below are changed, update :doc time-tracker
 ; accordingly.
 
-  (prog2$ (time-tracker :tau :start)
+  (prog2$ (time-tracker :tau :start!)
           (mv-let
            (clauses ttree calist)
            (tau-clausep-lst-rec clauses ens wrld ans ttree state calist)
            (prog2$ (time-tracker :tau :stop)
                    (mv clauses ttree calist)))))
+
+(defun prettyify-clause-simple (cl)
+
+; This variant of prettyify-clause does not call untranslate.
+
+  (cond ((null cl) nil)
+        ((null (cdr cl)) cl)
+        ((null (cddr cl))
+         (fcons-term* 'implies
+                      (dumb-negate-lit (car cl))
+                      (cadr cl)))
+        (t (fcons-term* 'implies
+                        (conjoin (dumb-negate-lit-lst (butlast cl 1)))
+                        (car (last cl))))))
 
 (defun preprocess-clause (cl hist pspv wrld state step-limit)
 
@@ -1192,21 +1210,18 @@
                                ((and (consp clauses1)
                                      (null (cdr clauses1))
                                      (no-op-histp hist)
-                                     (equal (prettyify-clause
-                                             (car clauses1)
-                                             (let*-abstractionp state)
-                                             wrld)
+                                     (equal (prettyify-clause-simple
+                                             (car clauses1))
                                             (access prove-spec-var pspv
-                                                    :displayed-goal)))
+                                                    :user-supplied-term)))
 
-; In this case preprocess-clause has produced a singleton set of
-; clauses whose only element will be displayed exactly like what the
-; user thinks is the input to prove.  For example, the user might have
-; invoked defthm on (implies p q) and preprocess has managed to to
-; produce the singleton set of clauses containing {(not p) q}.  This
-; is a valuable step in the proof of course.  However, users complain
-; when we report that (IMPLIES P Q) -- the displayed goal -- is
-; reduced to (IMPLIES P Q) -- the prettyification of the output.
+; In this case preprocess-clause has produced a singleton set of clauses whose
+; only element is the translated user input.  For example, the user might have
+; invoked defthm on (implies p q) and preprocess has managed to to produce the
+; singleton set of clauses containing {(not p) q}.  This is a valuable step in
+; the proof of course.  However, users complain when we report that (IMPLIES P
+; Q) -- the displayed goal -- is reduced to (IMPLIES P Q) -- the
+; prettyification of the output.
 
 ; We therefore take special steps to hide this transformation from the
 ; user without changing the flow of control through the waterfall.  In
@@ -1214,6 +1229,42 @@
 ; 'hidden-clause with (irrelevant) value t.  In subsequent places
 ; where we print explanations and clauses to the user we will look for
 ; this tag.
+
+; At one point we called prettify-clause below instead of
+; prettify-clause-simple, and compared the (untranslated) result to the
+; (untranslated) displayed-goal of the pspv.  But we have decided to avoid the
+; expense of untranslating, especially since often the potentially-confusing
+; printing will never take place!  Let's elaborate.  Suppose that the input
+; user-level term t1 translates to termp tt1, and suppose that the result of
+; preprocessing the clause set (list (list tt1)) is a single clause for which
+; prettify-clause-simple returns the (translated) term tt1.  Then we are in
+; this case and we set 'hidden-clause in the returned ttree.  However, suppose
+; that instead prettyify-clause-simple returns tt2 not equal to tt1, although
+; tt2 nevertheless untranslates (perhaps surprisingly) to t1.  Then we are not
+; in this case, and Goal' will print exactly as goal.  This is unfortunate, but
+; we have seen (back in 2003!) that kind of invisible transformation happen for
+; other than Goal:
+
+;   Subgoal 3
+;   (IMPLIES (AND (< I -1)
+;                 (ACL2-NUMBERP J)
+;                 ...)
+;            ...)
+; 
+;   By case analysis we reduce the conjecture to
+; 
+;   Subgoal 3'
+;   (IMPLIES (AND (< I -1)
+;                 (ACL2-NUMBERP J)
+;                 ...)
+;            ...)
+
+; As of this writing we do not handle this sort of situation, not even -- after
+; Version_7.0, when we started using prettyify-clause-simple to avoid the cost
+; of untranslation, instead of prettyify-clause -- for the case considered
+; here, transitioning from Goal to Goal' by preprocess-clause.  Perhaps we will
+; do such a check for all preprocess-clause transformations, but only when
+; actually printing output (so as to avoid the overhead of untranslation).
 
                                 (mv step-limit
                                     'hit
@@ -2081,11 +2132,10 @@
                              ttree)
              (and C
                   (null (cdr C))
-                  (equal (list (prettyify-clause
-                                (car C)
-                                (let*-abstractionp state)
-                                wrld))
-                         constraint-cl)))
+                  constraint-cl
+                  (null (cdr constraint-cl))
+                  (equal (prettyify-clause-simple (car C))
+                         (car constraint-cl))))
          (mv step-limit
              'hit
              (conjoin-clause-sets A C)
@@ -2141,13 +2191,6 @@
                                        pspv
                                        :hint-settings))))))
 
-(defun term-list-listp (l w)
-  (declare (xargs :guard t))
-  (if (atom l)
-      (equal l nil)
-    (and (term-listp (car l) w)
-         (term-list-listp (cdr l) w))))
-
 (defun non-term-listp-msg (x w)
 
 ; Perhaps ~Y01 should be ~y below.  If someone complains about a large term
@@ -2183,7 +2226,10 @@
          (non-term-listp-msg (car l) w)))
    (t (non-term-list-listp-msg (cdr l) w))))
 
-(defun eval-clause-processor (clause term stobjs-out ctx state)
+(defun eval-clause-processor (clause term stobjs-out verified-p pspv ctx state)
+
+; Verified-p is either nil, t, or a well-formedness-guarantee of the form
+; ((name fn thm-name1) . arity-alist).
 
 ; Should we do our evaluation in safe-mode?  For a relevant discussion, see the
 ; comment in protected-eval about safe-mode.
@@ -2227,24 +2273,98 @@
                              nil)
                         nil
                         state))
-                   (t (pprogn (set-w! original-wrld state)
-                              (cond ((not (term-list-listp val
-                                                           original-wrld))
-                                     (mv (msg
-                                          "The :CLAUSE-PROCESSOR hint~|~%  ~
-                                           ~Y01~%did not evaluate to a list ~
-                                           of clauses, but instead to~|~%  ~
-                                           ~Y23~%~@4"
-                                          term nil
-                                          val nil
-                                          (non-term-list-listp-msg
-                                           val original-wrld))
-                                         nil
-                                         state))
-                                    (t (value val))))))))))))))))
+                   (t
+                    (pprogn
+                     (set-w! original-wrld state)
+                     (cond
+                      ((equal val (list clause)) ; avoid checks below
+                       (value val))
+                      (t
+                       (let* ((user-says-skip-termp-checkp
+                               (skip-meta-termp-checks
+                                (ffn-symb term) original-wrld))
+                              (well-formedness-guarantee
+                               (if (consp verified-p)
+                                   verified-p
+                                   nil))
+                              (not-skipped
+                               (and (not user-says-skip-termp-checkp)
+                                    (not well-formedness-guarantee)))
+                              (bad-arities
+                               (if (and well-formedness-guarantee
+                                        (not user-says-skip-termp-checkp))
+                                   (collect-bad-fn-arity-pairs
+                                    (cdr well-formedness-guarantee)
+                                    original-wrld)
+                                 nil)))
+                         (cond
+                          (bad-arities
+                           (let ((name (nth 0 (car well-formedness-guarantee)))
+                                 (fn (nth 1 (car well-formedness-guarantee)))
+                                 (thm-name1
+                                  (nth 2 (car well-formedness-guarantee))))
+                             (mv (msg
+                                  "The clause processor correctness theorem ~
+                                   ~x0 has a now-invalid well-formedness ~
+                                   guarantee.  Its clause processor ~x1 was ~
+                                   proved in ~x2 to return a TERM-LIST-LISTP ~
+                                   under the assumption that certain function ~
+                                   symbols had certain arities.  But that ~
+                                   assumption is now invalid.  The following ~
+                                   alist pairs function symbols with their ~
+                                   assumed arities: ~X34.  These arities were ~
+                                   valid when ~x0 and ~x2 were proved but ~
+                                   have since changed (presumably by ~
+                                   redefinition).   We cannot trust the ~
+                                   well-formedness guarantee."
+                                  name
+                                  fn
+                                  thm-name1
+                                  bad-arities
+                                  nil)
+                                 nil state)))
+                          ((and not-skipped
+                                (not (term-list-listp val original-wrld)))
+                           (mv (msg
+                                "The :CLAUSE-PROCESSOR hint~|~%  ~Y01~%did ~
+                                 not evaluate to a list of clauses, but ~
+                                 instead to~|~%  ~Y23~%~@4"
+                                term nil
+                                val nil
+                                (non-term-list-listp-msg
+                                 val original-wrld))
+                               nil
+                               state))
+                          ((and not-skipped
+                                (forbidden-fns-in-term-list-list
+                                 val
+                                 (access rewrite-constant
+                                         (access prove-spec-var pspv
+                                                 :rewrite-constant)
+                                         :forbidden-fns)))
+                           (mv (msg
+                                "The :CLAUSE-PROCESSOR ~
+                                 hint~|~%~Y01~%evaluated to a list of ~
+                                 clauses~|~%~y2~%that contains a call of the ~
+                                 function symbol~#3~[, ~&3, which is~/s ~&3, ~
+                                 which are~] forbidden in that context.  See ~
+                                 :DOC clause-processor and :DOC ~
+                                 set-skip-meta-termp-checks and :DOC ~
+                                 well-formedness-guarantee."
+                                term nil val
+                                (forbidden-fns-in-term-list-list
+                                 val
+                                 (access rewrite-constant
+                                         (access prove-spec-var pspv
+                                                 :rewrite-constant)
+                                         :forbidden-fns)))
+                               nil
+                               state))
+                          (t (value val)))))))))))))))))))
 
 #+acl2-par
-(defun eval-clause-processor@par (clause term stobjs-out ctx state)
+(defun eval-clause-processor@par (clause term stobjs-out verified-p pspv ctx
+                                         state)
 
 ; Keep in sync with eval-clause-processor.
 
@@ -2308,16 +2428,84 @@
                             term
                             nil)
                        nil))
-                  (t (cond ((not (term-list-listp val
-                                                  wrld))
-                            (mv (msg "The :CLAUSE-PROCESSOR hint~|~%  ~
-                                      ~Y01~%did not evaluate to a list of ~
-                                      clauses, but instead to~|~%  ~Y23~%~@4"
-                                     term nil
-                                     val nil
-                                     (non-term-list-listp-msg val wrld))
-                                nil))
-                           (t (value@par val))))))))))))))
+                  ((equal val (list clause)) ; avoid checks below
+                   (value@par val))
+                  (t
+                   (let* ((user-says-skip-termp-checkp
+                           (skip-meta-termp-checks
+                            (ffn-symb term) wrld))
+                          (well-formedness-guarantee
+                           (if (consp verified-p)
+                               verified-p
+                               nil))
+                          (not-skipped
+                           (and (not user-says-skip-termp-checkp)
+                                (not well-formedness-guarantee)))
+                          (bad-arities (if (and well-formedness-guarantee
+                                                (not user-says-skip-termp-checkp))
+                                           (collect-bad-fn-arity-pairs
+                                            (cdr well-formedness-guarantee)
+                                            wrld)
+                                           nil)))
+                     (cond
+                      (bad-arities
+                       (let ((name (nth 0 (car well-formedness-guarantee)))
+                             (fn (nth 1 (car well-formedness-guarantee)))
+                             (thm-name1 (nth 2 (car well-formedness-guarantee))))
+                         (mv (msg
+                              "The clause processor correctness theorem ~x0 ~
+                               has a now-invalid well-formedness guarantee.  ~
+                               Its clause processor ~x1 was proved in ~x2 to ~
+                               return a TERM-LIST-LISTP under the assumption ~
+                               that certain function symbols had certain ~
+                               arities.  But that assumption is now invalid.  ~
+                               The following alist pairs function symbols ~
+                               with their assumed arities: ~X34.  These ~
+                               arities were valid when ~x0 and ~x2 were ~
+                               proved but have since changed (presumably by ~
+                               redefinition). We cannot trust the ~
+                               well-formedness guarantee."
+                              name
+                              fn
+                              thm-name1
+                              bad-arities
+                              nil)
+                             nil)))
+                      ((and not-skipped
+                            (not (term-list-listp val wrld)))
+                       (mv (msg
+                            "The :CLAUSE-PROCESSOR hint~|~%  ~Y01~%did not ~
+                             evaluate to a list of clauses, but instead ~
+                             to~|~%  ~Y23~%~@4"
+                            term nil
+                            val nil
+                            (non-term-list-listp-msg
+                             val wrld))
+                           nil))
+                      ((and not-skipped
+                            (forbidden-fns-in-term-list-list
+                             val
+                             (access rewrite-constant
+                                     (access prove-spec-var pspv
+                                             :rewrite-constant)
+                                     :forbidden-fns)))
+                       (mv (msg
+                            "The :CLAUSE-PROCESSOR hint~|~%~Y01~%evaluated to ~
+                             a list of clauses~|~%~y2~%that contains a call ~
+                             of the function symbol~#3~[, ~&3, which is~/s ~
+                             ~&3, which are~] forbidden in that context.  See ~
+                             :DOC clause-processor and :DOC ~
+                             set-skip-meta-termp-checks and :DOC ~
+                             well-formedness-guarantee."
+                            term nil val
+                            (forbidden-fns-in-term-list-list
+                             val
+                             (access rewrite-constant
+                                     (access prove-spec-var pspv
+                                             :rewrite-constant)
+                                     :forbidden-fns)))
+                           nil))
+                      (t (value@par val)))))))))))))))
 
 (defun apply-top-hints-clause1 (temp cl-id cl pspv wrld state step-limit)
 
@@ -2523,12 +2711,11 @@
                                                 ttree)
                                 (and clauses
                                      (null (cdr clauses))
-                                     (equal (list
-                                             (prettyify-clause
-                                              (car clauses)
-                                              (let*-abstractionp state)
-                                              wrld))
-                                            constraint-cl)))
+                                     constraint-cl
+                                     (null (cdr constraint-cl))
+                                     (equal (prettyify-clause-simple
+                                             (car clauses))
+                                            (car constraint-cl))))
 
 ; If preprocessing produced a single clause that prettyifies to the
 ; clause we had, then act as though it didn't do anything (but use its
@@ -2668,9 +2855,13 @@
       (mv-let@par
        (erp new-clauses state)
        (eval-clause-processor@par cl
-                                  (access clause-processor-hint (cdr temp) :term)
-                                  (access clause-processor-hint (cdr temp) :stobjs-out)
-                                  ctx state)
+                                  (access clause-processor-hint (cdr temp)
+                                          :term)
+                                  (access clause-processor-hint (cdr temp)
+                                          :stobjs-out)
+                                  (access clause-processor-hint (cdr temp)
+                                          :verified-p)
+                                  pspv ctx state)
        (cond (erp (mv@par step-limit 'error erp nil nil state))
              (t (mv@par step-limit
                         'hit
@@ -4348,9 +4539,9 @@
                   (list (fargn term 2)))
                  (ec-call1-raw
 
-; Since (return-last 'ec-call1-raw ign (fn arg1 ... argk)) macroexpands to
-; (*1*fn arg1 ... argk) in raw Common Lisp, we need only verify guards for the
-; argi.
+; Since (return-last 'ec-call1-raw ign (fn arg1 ... argk)) leads to the call
+; (*1*fn arg1 ... argk) or perhaps (*1*fn$inline arg1 ... argk) in raw Common
+; Lisp, we need only verify guards for the argi.
 
                   (fargs (fargn term 3)))
                  (otherwise
@@ -5616,8 +5807,8 @@
   (cl-id clause hist pspv ctx hints hints0 wrld stable-under-simplificationp
          override-hints state)
 
-; See translate-hints1 for "A note on the taxonomy of hints", which explains
-; hint settings.  Relevant background is also provided by :doc topic
+; See translate-hints1 for "A note on the taxonomy of translated hints", which
+; explains hint settings.  Relevant background is also provided by :doc topic
 ; hints-and-the-waterfall, which links to :doc override-hints (also providing
 ; relevant background).
 
@@ -9229,14 +9420,33 @@
    (pprogn (f-put-global 'last-step-limit step-limit state)
            (mv erp val state))))
 
-(defun print-pstack-and-gag-state (state)
+(defun print-summary-on-error (state)
 
-; When waterfall parallelism is enabled, and the user has to interrupt a proof
-; twice before it quits, the prover will attempt to print the gag state and
-; pstack.  Based on observation by Rager, the pstack tends to be long and
-; irrelevant in this case.  So, we disable the printing of the pstack when
-; waterfall parallelism is enabled and waterfall-printing is something other
-; than :full.  We considered not involving the current value for
+; This function is called only when a proof attempt causes an error rather than
+; merely returning (mv non-nil val state); see prove-loop0.  We formerly called
+; this function pstack-and-gag-state, but now we also print the runes, and
+; perhaps we will print additional information in the future.
+
+; An alternative approach, which might avoid the need for this function, is
+; represented by the handling of *acl2-time-limit* in our-abort.  The idea
+; would be to continue automatically from the interrupt, but with a flag saying
+; that the proof should terminate immediately.  Then any proof procedure that
+; checks for this flag would return with some sort of error.  If no such proof
+; procedure is invoked, then a second interrupt would immediately take effect.
+; An advantage of such an alternative approach is that it would use a normal
+; control flow, updating suitable state globals so that a normal call of
+; print-summary could be made.  We choose, however, not to pursue this
+; approach, since it might risk annoying users who find that they need to
+; provide two interrupts, and because it seems inherently a bit tricky and
+; perhaps easy to get wrong.
+
+; We conclude with remarks for the case that waterfall parallelism is enabled.
+
+; When the user has to interrupt a proof twice before it quits, the prover will
+; call this function.  Based on observation by Rager, the pstack tends to be
+; long and irrelevant in this case.  So, we disable the printing of the pstack
+; when waterfall parallelism is enabled and waterfall-printing is something
+; other than :full.  We considered not involving the current value for
 ; waterfall-printing, but using the :full setting is a strange thing to begin
 ; with.  So, we make the decision that if a user goes to the effort to use the
 ; :full waterfall-printing mode, that maybe they'd like to see the pstack after
@@ -9246,19 +9456,24 @@
 ; gag-state under these conditions.  However, this is effectively a no-op,
 ; because the parallel waterfall does not save anything to gag-state anyway.
 
-  (cond
-   #+acl2-par
-   ((and (f-get-global 'waterfall-parallelism state)
-         (not (eql (f-get-global 'waterfall-printing state) :full)))
-    state)
-   (t
-    (prog2$
-     (cw
-      "Here is the current pstack [see :DOC pstack]:")
-     (mv-let (erp val state)
-             (pstack)
-             (declare (ignore erp val))
-             (print-gag-state state))))))
+  (let ((chan (proofs-co state)))
+    (pprogn
+     (io? summary nil state (chan)
+          (newline chan state))
+     (print-rules-and-hint-events-summary state)
+     (cond
+      #+acl2-par
+      ((and (f-get-global 'waterfall-parallelism state)
+            (not (eql (f-get-global 'waterfall-printing state) :full)))
+       state)
+      (t
+       (pprogn
+        (newline chan state)
+        (princ$ "Here is the current pstack [see :DOC pstack]:" chan state)
+        (mv-let (erp val state)
+                (pstack)
+                (declare (ignore erp val))
+                (print-gag-state state))))))))
 
 (defun prove-loop0 (clauses pspv hints ens wrld ctx state)
 
@@ -9266,9 +9481,9 @@
 ; let-bound in raw Lisp by bind-acl2-time-limit.
 
 ; The perhaps unusual structure below is intended to invoke
-; print-pstack-and-gag-state only when there is a hard error such as an
-; interrupt.  In the normal failure case, the pstack is not printed and the
-; key checkpoint summary (from the gag-state) is printed after the summary.
+; print-summary-on-error only when there is a hard error such as an interrupt.
+; In the normal failure case, the pstack is not printed and the key checkpoint
+; summary (from the gag-state) is printed after the summary.
 
   (state-global-let*
    ((guard-checking-on nil) ; see the Essay on Guard Checking
@@ -9280,7 +9495,7 @@
                     (prove-loop1 0 nil clauses pspv hints ens wrld ctx
                                  state)
                     (mv nil (cons erp val) state))
-            (print-pstack-and-gag-state state)
+            (print-summary-on-error state)
             state)
            (cond (interrupted-p (mv t nil state))
                  (t (mv (car erp-val) (cdr erp-val) state))))))
@@ -9293,9 +9508,6 @@
 
   #-acl2-loop-only
   (setq *deep-gstack* nil) ; in case we never call initial-gstack
-  #+(and hons (not acl2-loop-only))
-  (when (memoizedp-raw 'worse-than-builtin)
-    (clear-memoize-table 'worse-than-builtin))
   (prog2$ (clear-pstk)
           (pprogn
            (increment-timer 'other-time state)
@@ -9307,17 +9519,13 @@
            (mv-let (erp ttree state)
                    (bind-acl2-time-limit ; make *acl2-time-limit* be let-bound
                     (prove-loop0 clauses pspv hints ens wrld ctx state))
-                   (progn$
-                    #+(and hons (not acl2-loop-only))
-                    (when (memoizedp-raw 'worse-than-builtin)
-                      (clear-memoize-table 'worse-than-builtin))
-                    (pprogn
-                     (increment-timer 'prove-time state)
-                     (cond
-                      (erp (mv erp nil state))
-                      (t (value ttree)))))))))
+                   (pprogn
+                    (increment-timer 'prove-time state)
+                    (cond
+                     (erp (mv erp nil state))
+                     (t (value ttree))))))))
 
-(defmacro make-pspv (ens wrld &rest args)
+(defmacro make-pspv (ens wrld state &rest args)
 
 ; This macro is similar to make-rcnst, which is a little easier to understand.
 ; (make-pspv ens w) will make a pspv that is just *empty-prove-spec-var* except
@@ -9336,7 +9544,7 @@
 
   `(change prove-spec-var
            (change prove-spec-var *empty-prove-spec-var*
-                   :rewrite-constant (make-rcnst ,ens ,wrld
+                   :rewrite-constant (make-rcnst ,ens ,wrld ,state
                                                  :splitter-output
                                                  (splitter-output)))
            ,@args))
@@ -9395,9 +9603,8 @@
 
 (defun prove (term pspv hints ens wrld ctx state)
 
-; Term is a translated term.  Displayed-goal is any object and is
-; irrelevant except for output purposes.  Hints is a list of pairs
-; as returned by translate-hints.
+; Term is a translated term.  Hints is a list of pairs as returned by
+; translate-hints.
 
 ; We try to prove term using the given hints and the rules in wrld.
 
@@ -9410,15 +9617,6 @@
 ; terminate without proving term.  Hence, if the first result is nil,
 ; term was proved.  The second is a ttree that describes the proof, if
 ; term is proved.  The third is the final value of state.
-
-; Displayed-goal is relevant only for output purposes.  We assume that
-; this object was prettyprinted to the user before prove was called
-; and is, in the user's mind, what is being proved.  For example,
-; displayed-goal might be the untranslated -- or pre-translated --
-; form of term.  The only use made of displayed-goal is that if the
-; very first transformation we make produces a clause that we would
-; prettyprint as displayed-goal, we hide that transformation from the
-; user.
 
 ; Commemorative Plaque:
 

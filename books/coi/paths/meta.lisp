@@ -28,7 +28,7 @@
 ;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;   DEALINGS IN THE SOFTWARE.
 
-(in-package "PATH")
+(in-package "CPATH")
 (include-book "../lists/basic")
 (include-book "../lists/map-cons")
 (include-book "../syntax/syntax")
@@ -2127,7 +2127,7 @@
   (diverges-from-all x list)
   (all-diverge-from-all x y)
   (all-diverge x)
-  (list::equiv x y)
+  (acl2::list-equiv x y)
 
   ;; We do this to expediate functional instantiation.
   ;; This should not be necessary as bag:: should use
@@ -2155,7 +2155,7 @@
   (bag::meta-memberp x list)
   (bag::any-subbagp x list) ;remove this?
   (list::finalcdr x)
-  (list::fix x)
+  (acl2::list-fix x)
   (bag::subbagp x y)
   (list::memberp a x)
 ; [Changed by Matt K. to handle changes to member, assoc, etc. after ACL2 4.2
@@ -2548,7 +2548,7 @@
           (if (show-syntax-dominates-p-fn nil t x y type-alist)
               (syn::true)
             (if (show-syntax-dominates-p-fn nil t y x type-alist)
-                `(if (list::equiv ,y ,x) ,(syn::true) ,(syn::nil))
+                `(if (acl2::list-equiv ,y ,x) ,(syn::true) ,(syn::nil))
               term))))
     term))
 
@@ -2662,9 +2662,9 @@
    (consp x)
    (cons x y)
    (equal x y)
-   (path::diverge a b)
-   (path::all-diverge x)
-   (path::all-diverge-from-all x y)
+   (cpath::diverge a b)
+   (cpath::all-diverge x)
+   (cpath::all-diverge-from-all x y)
    (car x)
    ;(cadr x)
    (syn::car x)

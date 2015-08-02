@@ -38,6 +38,9 @@
 (include-book "linkcheck")
 (include-book "centaur/bridge/to-json" :dir :system)
 (include-book "oslib/copy" :dir :system)
+
+(include-book "centaur/misc/tshell" :dir :system)
+
 (set-state-ok t)
 (program)
 
@@ -472,15 +475,17 @@
        (xdoc/fancy     (oslib::catpath xdoc-dir "fancy"))
 
        (- (cw "; Preparing directory ~s0.~%" dir))
-       (state          (oslib::rmtree! dir))
+       (state          (time$ (oslib::rmtree! dir)
+                              :msg ";; Removing old directory: ~st sec, ~sa bytes.~%"))
 
-       (- (cw "; Copying fancy viewer files.~%"))
-       (state          (oslib::copy! xdoc/fancy dir :recursive t))
+       (state          (time$ (oslib::copy! xdoc/fancy dir :recursive t)
+                              :msg ";; Copying xdoc/fancy files: ~st sec, ~sa bytes.~%"))
 
        (- (cw "; Copying resource directories.~%"))
        (resdir              (oslib::catpath dir "res"))
        (resource-dirs-alist (cdr (assoc 'resource-dirs (table-alist 'xdoc (w state)))))
-       (state               (copy-resource-dirs resdir resource-dirs-alist state)))
+       (state               (time$ (copy-resource-dirs resdir resource-dirs-alist state)
+                                   :msg ";; Copying resource directories: ~st sec, ~sa bytes.~%")))
 
     state))
 
@@ -495,13 +500,16 @@
        ;; gets rid of the ~ characters.
        (dir-fix (acl2::extend-pathname dir "." state))
        (zip.sh  (acl2::extend-pathname dir-fix "zip.sh" state))
-       ((mv erp val state)
-        (time$ (sys-call+ "sh" (list zip.sh dir-fix) state)
+       (cmd (string-append "sh "
+             (string-append zip.sh
+              (string-append " " dir-fix))))
+       ((mv exit-status lines)
+        (time$ (acl2::tshell-call cmd :print t)
                :msg "; XDOC zip.sh: ~st sec, ~sa bytes.~%"))
-       ((when erp)
+       ((unless (equal exit-status 0))
         (er hard? 'run-fancy-zip
             "zip.sh failed (exit code ~x0).  ~x1."
-            erp val)
+            exit-status lines)
         state))
     state))
 

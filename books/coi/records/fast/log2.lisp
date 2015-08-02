@@ -1,21 +1,43 @@
+; Memories: Array-like Records for ACL2
+; Copyright (C) 2005-2006 Kookamara LLC
 ;
-; Linear Memories as Binary Trees
-; Copyright (C) 2005 by Jared Davis <jared@cs.utexas.edu>
+; Contact:
 ;
-; This program is free software; you can redistribute it and/or modify it under
-; the terms of the GNU General Public License as published by the Free Software
-; Foundation; either version 2 of the License, or (at your option) any later
-; version.
+;   Kookamara LLC
+;   11410 Windermere Meadows
+;   Austin, TX 78759, USA
+;   http://www.kookamara.com/
 ;
-; This program is distributed in the hope that it will be useful, but WITHOUT
-; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-; FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-; details.
+; License: (An MIT/X11-style license)
 ;
-; You should have received a copy of the GNU General Public License along with
-; this program; if not, write to the Free Software Foundation, Inc., 675 Mass
-; Ave, Cambridge, MA 02139, USA.
+;   Permission is hereby granted, free of charge, to any person obtaining a
+;   copy of this software and associated documentation files (the "Software"),
+;   to deal in the Software without restriction, including without limitation
+;   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;   and/or sell copies of the Software, and to permit persons to whom the
+;   Software is furnished to do so, subject to the following conditions:
 ;
+;   The above copyright notice and this permission notice shall be included in
+;   all copies or substantial portions of the Software.
+;
+;   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+;   DEALINGS IN THE SOFTWARE.
+;
+; Original author: Jared Davis <jared@kookamara.com>
+;
+; COI Version.  See books/data-structures/memories/ for the original version.
+
+(in-package "MEM")
+
+;; [Jared] this is now identical to the regular version, so just include it.
+; cert_param: (reloc_stub)
+(include-book "data-structures/memories/log2" :dir :system)
+
 
 
 
@@ -31,83 +53,82 @@
 ; be called (only when new memories are being created), so the inefficiency
 ; here is unlikely to pose a problem.
 
-(in-package "MEM")
-(set-verify-guards-eagerness 2)
-
-(local (include-book "arithmetic-3/bind-free/top" :dir :system))
-(local (include-book "arithmetic-3/floor-mod/floor-mod" :dir :system))
-
-(set-default-hints '((ACL2::nonlinearp-default-hint 
-                      ACL2::stable-under-simplificationp
-                      ACL2::hist 
-                      ACL2::pspv)))
-
-(defun _log2-tr (n acc)
-  (declare (xargs :guard (and (natp n)
-                              (natp acc))))
-  (if (zp n)
-      acc
-    (_log2-tr (mbe :logic (floor n 2)
-                   :exec (ash n -1))
-              (1+ acc))))
-
-(defun _log2 (n)
-  (declare (xargs :guard (natp n)
-                  :verify-guards nil))
-  (mbe :logic (if (zp n)
-                  0
-                (1+ (_log2 (floor n 2))))
-       :exec (_log2-tr n 0)))
-
-(defthm _log2-equiv
-  (implies (and (natp n) 
-                (natp acc))
-           (equal (_log2-tr n acc)
-                  (+ (_log2 n) acc))))
-
-(verify-guards _log2)
 
 
+;; (local (include-book "arithmetic-3/bind-free/top" :dir :system))
+;; (local (include-book "arithmetic-3/floor-mod/floor-mod" :dir :system))
 
-(defthm _log2-natural
-  (and (integerp (_log2 n))
-       (<= 0 (_log2 n)))
-  :rule-classes :type-prescription)
+;; (set-default-hints '((ACL2::nonlinearp-default-hint 
+;;                       ACL2::stable-under-simplificationp
+;;                       ACL2::hist 
+;;                       ACL2::pspv)))
 
-(defthm _log2-positive
-  (implies (and (integerp n)
-                (< 0 n))
-           (and (integerp (_log2 n))
-                (< 0 (_log2 n))))
-  :rule-classes :type-prescription)
+;; (defun _log2-tr (n acc)
+;;   (declare (xargs :guard (and (natp n)
+;;                               (natp acc))))
+;;   (if (zp n)
+;;       acc
+;;     (_log2-tr (mbe :logic (floor n 2)
+;;                    :exec (ash n -1))
+;;               (1+ acc))))
 
-(defthm _log2-expt-nat
-  (implies (natp n)
-           (< n (expt 2 (_log2 n))))
-  :rule-classes :linear)
+;; (defun _log2 (n)
+;;   (declare (xargs :guard (natp n)
+;;                   :verify-guards nil))
+;;   (mbe :logic (if (zp n)
+;;                   0
+;;                 (1+ (_log2 (floor n 2))))
+;;        :exec (_log2-tr n 0)))
 
-(defthm _log2-expt-pos
-  (implies (posp n)
-           (<= n (expt 2 (_log2 (1- n)))))
-  :rule-classes :linear)
+;; (defthm _log2-equiv
+;;   (implies (and (natp n) 
+;;                 (natp acc))
+;;            (equal (_log2-tr n acc)
+;;                   (+ (_log2 n) acc))))
 
-(encapsulate
- nil
+;; (verify-guards _log2)
 
- (local (defun my-induction (i j)
-          (declare (xargs :guard (and (natp i)
-                                      (natp j))))
-          (if (or (zp i) 
-                  (zp j))
-              nil
-            (list (my-induction (floor i 2)
-                                (floor j 2))))))
 
- (defthm _log2-monotonic
-   (implies (and (natp i)
-                 (natp j)
-                 (<= i j))
-            (<= (_log2 i) (_log2 j)))
-   :rule-classes :linear
-   :hints(("Goal" :induct (my-induction i j))))
-)
+
+;; (defthm _log2-natural
+;;   (and (integerp (_log2 n))
+;;        (<= 0 (_log2 n)))
+;;   :rule-classes :type-prescription)
+
+;; (defthm _log2-positive
+;;   (implies (and (integerp n)
+;;                 (< 0 n))
+;;            (and (integerp (_log2 n))
+;;                 (< 0 (_log2 n))))
+;;   :rule-classes :type-prescription)
+
+;; (defthm _log2-expt-nat
+;;   (implies (natp n)
+;;            (< n (expt 2 (_log2 n))))
+;;   :rule-classes :linear)
+
+;; (defthm _log2-expt-pos
+;;   (implies (posp n)
+;;            (<= n (expt 2 (_log2 (1- n)))))
+;;   :rule-classes :linear)
+
+;; (encapsulate
+;;  nil
+
+;;  (local (defun my-induction (i j)
+;;           (declare (xargs :guard (and (natp i)
+;;                                       (natp j))))
+;;           (if (or (zp i) 
+;;                   (zp j))
+;;               nil
+;;             (list (my-induction (floor i 2)
+;;                                 (floor j 2))))))
+
+;;  (defthm _log2-monotonic
+;;    (implies (and (natp i)
+;;                  (natp j)
+;;                  (<= i j))
+;;             (<= (_log2 i) (_log2 j)))
+;;    :rule-classes :linear
+;;    :hints(("Goal" :induct (my-induction i j))))
+;; )

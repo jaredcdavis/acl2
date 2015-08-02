@@ -9,7 +9,7 @@
 (in-package "DEFDATA")
 
 (set-verify-guards-eagerness 2)
-(include-book "tools/bstar" :dir :system)
+(include-book "std/util/bstar" :dir :system)
 
 ;; (defun modify-symbol (prefix sym postfix)
 ;;   (declare (xargs :guard (and (symbolp sym)
@@ -249,9 +249,19 @@
   ;; (declare (xargs :guard (and (proper-symbolp P)
   ;;                             (plist-worldp wrld))))
   (declare (xargs :verify-guards nil))
-  (or (eq P 'acl2s::allp)
-      (assoc-eq P (table-alist 'acl2s::allp-aliases wrld))))
+  (or (eq P 'ACL2S::ALLP)
+      (assoc P (table-alist 'ACL2S::ALLP-ALIASES wrld))))
                   
+
+; TODO -- use this in places where we check for Top type.
+(defun is-top (typename wrld)
+  "is typename an alias of acl2s::all?"
+  ;; (declare (xargs :guard (and (proper-symbolp P)
+  ;;                             (plist-worldp wrld))))
+  (declare (xargs :verify-guards nil))
+  (or (eq typename 'ACL2S::ALL)
+      (rassoc typename (table-alist 'ACL2S::ALLP-ALIASES wrld))))
+
 
 ; CHECK with J. TODO What if there is some information in pos-implicants of P1,
 ; that is missed below!?
@@ -600,6 +610,12 @@
       `(get1 :enumerator (get1 ,tname ,M))
     `(get1 :enumerator  (get1 ,tname (table-alist 'type-metadata-table wrld)))))
 
+(defmacro enum/acc-name (tname &optional M)
+; if Metadata table is not provided, wrld should be in scope.
+  (if M
+      `(get1 :enum/acc (get1 ,tname ,M))
+    `(get1 :enum/acc  (get1 ,tname (table-alist 'type-metadata-table wrld)))))
+
 (defloop predicate-names-fn (tnames M)
   (declare (xargs :guard (and (symbol-listp tnames)
                               (symbol-alistp M))))
@@ -853,3 +869,43 @@
       (and ;(equal (get1 key A1) (get1 key A2))
        (equal (assoc-equal key A1) (assoc-equal key A2))
        (alist-equiv (delete-assoc-all key A1) (delete-assoc-all key A2))))))
+
+
+(defloop collect-declares (xs)
+  (for ((x in xs)) (append (and (consp x) (equal 'ACL2::DECLARE (car x))
+                                (true-listp x) (cdr x)))))
+
+(defun extract-guard-from-edecls (edecls)
+  "edecls is list of forms which can occur inside a declare form i.e. the di in (declare d1 ... dn)"
+  (declare (xargs :guard (true-listp edecls)))
+  (if (endp edecls)
+      t
+    (if (and (consp (car edecls))
+             (eq (caar edecls) 'ACL2::XARGS)
+             (keyword-value-listp (cdar edecls))
+             (assoc-keyword :guard (cdar edecls)))
+        (or (cadr (assoc-keyword :guard (cdar edecls))) 't)
+      (extract-guard-from-edecls (cdr edecls)))))
+                  
+(defmacro acl2s::defun-attach (&rest args)
+  "generate a defun with suffix -builtin and attach it to name"
+  (b* ((name (car args))
+       ((unless (proper-symbolp name))
+        (er hard 'defun-attach "~| ~x0 should be a proper name symbol.~%" name))
+       (b-name (s+ name "-BUILTIN"))
+       (formals (cadr args))
+       ;(formal-stars (make-list (len formals) :initial-element 'ACL2::*))
+       (guard (extract-guard-from-edecls (collect-declares args))))
+
+    `(PROGN
+      (DEFUN ,b-name . ,(cdr args))
+      (VERIFY-GUARDS ,b-name)
+      (encapsulate 
+       ((,name ,formals t :guard ,guard))
+       (local (defun ,name ,formals
+                (declare (xargs :guard ,guard))
+                (declare (ignorable . ,formals))
+                (,b-name . ,formals))))
+      (DEFATTACH ,name ,b-name))))
+
+    

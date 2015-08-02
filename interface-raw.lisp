@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -668,6 +668,21 @@
 ; as the one for mv-list (see below), must be handled in add-trip and
 ; compile-uncompiled-*1*-defuns (see the handling there of mv-list).
 
+(defmacro gv (fn args val)
+  (sublis `((funny-fn . ,fn)
+            (funny-args . ,args))
+          `(let ((gc-on (not (gc-off *the-live-state*))))
+             (if (or gc-on
+                     (f-get-global 'safe-mode *the-live-state*))
+                 (throw-raw-ev-fncall
+                  (list 'ev-fncall-guard-er
+                        'funny-fn
+                        ,(cons 'list 'funny-args)
+                        (guard-raw 'funny-fn (w *the-live-state*))
+                        (stobjs-in 'funny-fn (w *the-live-state*))
+                        (not gc-on)))
+               ,val))))
+
 ; We must hand-code the *1* functions for mv-list and return-last, because
 ; otherwise they will simply call mv-list and return-last (resp.), which can be
 ; wrong: in the case of return-last, we need the first argument to be a quotep
@@ -1094,25 +1109,51 @@
 ;   (set-guard-checking nil)
 ;   (f -3)
 
-  (loop for dcl in dcls
-        collect
-        (assert$
-         (and (consp dcl)
-              (eq (car dcl) 'declare))
-         (cond ((assoc-eq 'type (cdr dcl)) ; optimization
-                (cons 'declare
-                      (loop for d in (cdr dcl)
-                            collect
-                            (cond ((eq (car d) 'type)
+; Our fix is to leave some of the DECLAREs in place, in particular so that the
+; compiler can see the IGNOREs, but to fold type declarations into the body as
+; a THE wrapper.
 
-; Experiments in all supported Lisps suggest that duplicating ignorable
-; declarations doesn't produce a warning, so we keep it simple here by paying
-; no heed to whether we have already declared some of these variables
-; ignorable.
+  (let* ((alist nil)
+         (new-dcls
+          (loop for dcl in dcls
+                as dcl2 =
+                (assert$
+                 (and (consp dcl)
+                      (eq (car dcl) 'declare))
+                 (cond ((assoc-eq 'type (cdr dcl)) ; optimization
+                        (let ((dcl2-body
+                               (loop for d in (cdr dcl)
+                                     when
+                                     (cond
+                                      ((eq (car d) 'type)
+                                       (let ((tp (cadr d)))
+                                         (case-match tp
+                                           (('or 't . &)
 
-                                   (cons 'ignorable (cddr d)))
-                                  (t d)))))
-               (t dcl)))))
+; See the-fn.  We excise this no-op type declaration in order to avoid an
+; infinite loop in oneify.
+
+                                            nil)
+                                           (&
+                                            (loop for v in (cddr d)
+                                                  collect
+                                                  (push `(,tp . ,v)
+                                                        alist)))))
+                                       nil)
+                                      (t t))
+                                     collect d)))
+                          (and dcl2-body (cons 'declare dcl2-body))))
+                       (t dcl)))
+                when dcl2
+                collect dcl2)))
+    (values new-dcls alist)))
+
+(defun alist-to-the-for-*1*-lst (type-to-var-alist)
+  (cond ((endp type-to-var-alist)
+         nil)
+        (t (cons `(the-for-*1* ,(caar type-to-var-alist)
+                               ,(cdar type-to-var-alist) )
+                 (alist-to-the-for-*1*-lst (cdr type-to-var-alist))))))
 
 (defun-one-output oneify (x fns w program-p)
 
@@ -1204,10 +1245,21 @@
 ; more, we bind **1*-as-raw* to nil, to signify that we intend to execute the
 ; function call in the logic.
 
-             (let ((form (car (last x))))
-               `(let* ((args (list ,@(oneify-lst (cdr form) fns w program-p)))
-                       (**1*-as-raw* nil))
-                  (apply ',(*1*-symbol (car form)) args))))))
+               (let ((form (car (last x))))
+                 `(let* ((args (list ,@(oneify-lst (cdr form) fns w program-p)))
+                         (**1*-as-raw* nil))
+                    (apply ',(if (function-symbolp (car form) w)
+                                 (*1*-symbol (car form))
+
+; Otherwise, translate11 guarantees that if (car form) is f, then it is an
+; abbreviation for f$inline.
+
+                               (assert$ (getprop (car x) 'macro-body
+                                                 nil
+                                                 'current-acl2-world w)
+                                        (*1*-symbol (add-suffix (car form)
+                                                                *inline-suffix*))))
+                           args))))))
             ((eq fn 'mbe1-raw)
 
 ; Here we process macroexpansions of mbe calls.
@@ -1281,17 +1333,20 @@
     (let ((args (oneify-lst (cdr x) fns w program-p)))
       (cons (car x) args)))
    ((eq (car x) 'mv-let)
-    (let ((value-form (oneify (caddr x) fns w program-p))
-          (body-form (oneify (car (last x)) fns w program-p)))
-      `(mv-let ,(cadr x)
-               ,value-form
-
-; We leave some of the DECLAREs in place, in particular so that the compiler
-; can see the IGNOREs.  But type declarations must be removed; see
-; remove-type-dcls.
-
-               ,@(remove-type-dcls (butlast (cdddr x) 1))
-               ,body-form)))
+    (multiple-value-bind
+     (dcls alist)
+     (remove-type-dcls (butlast (cdddr x) 1))
+     (let* ((value-form (oneify (caddr x) fns w program-p))
+            (new-body (cond (alist
+                             `(progn$
+                               ,@(alist-to-the-for-*1*-lst alist)
+                               ,(car (last x))))
+                            (t (car (last x)))))
+            (body-form (oneify new-body fns w program-p)))
+       `(mv-let ,(cadr x)
+                ,value-form
+                ,@dcls
+                ,body-form))))
 
 ;     Feb 8, 1995.  Once upon a time we had the following code here:
 ;    ((eq (car x) 'the)
@@ -1356,24 +1411,33 @@
                           contact the ACL2 implementors."
                          x temp)))))
    ((member-eq (car x) '(let #+acl2-par plet))
-    (let* (#+acl2-par (granularity-decl (and (eq (car x) 'plet)
-                                             (eq (car (cadr x)) 'declare)
-                                             (cadr x)))
+    (let* (#+acl2-par
+           (granularity-decl (and (eq (car x) 'plet)
+                                  (eq (car (cadr x)) 'declare)
+                                  (cadr x)))
            (args #+acl2-par (if granularity-decl (cddr x) (cdr x))
                  #-acl2-par (cdr x))
            (bindings (car args))
-           (post-bindings (cdr args))
-           (value-forms (oneify-lst (strip-cadrs bindings) fns w program-p))
-           (body-form (oneify (car (last post-bindings)) fns w program-p)))
-      `(,(car x)
-        #+acl2-par
-        ,@(and granularity-decl
-               `((declare (granularity
-                           ,(oneify (cadr (cadr (cadr x))) fns w program-p)))))
-        ,(listlis (strip-cars bindings)
-                  value-forms)
-        ,@(remove-type-dcls (butlast post-bindings 1))
-        ,body-form)))
+           (post-bindings (cdr args)))
+      (multiple-value-bind
+       (dcls alist)
+       (remove-type-dcls (butlast post-bindings 1))
+       (let* ((value-forms (oneify-lst (strip-cadrs bindings) fns w program-p))
+              (new-body (cond (alist
+                               `(progn$
+                                 ,@(alist-to-the-for-*1*-lst alist)
+                                 ,(car (last post-bindings))))
+                              (t (car (last post-bindings)))))
+              (body-form (oneify new-body fns w program-p)))
+         `(,(car x)
+           #+acl2-par
+           ,@(and granularity-decl
+                  `((declare (granularity
+                              ,(oneify (cadr (cadr (cadr x))) fns w program-p)))))
+           ,(listlis (strip-cars bindings)
+                     value-forms)
+           ,@dcls
+           ,body-form)))))
    #+acl2-par
    ((member-eq (car x) '(pand por pargs))
     (if (declare-granularity-p (cadr x))
@@ -1605,34 +1669,16 @@
                         non-executable definition, ~x0, that was not what we ~
                         would expect to be generated by intro-udf-lst2."
                        def)))))
+  (mv-let
+   (dcls guard)
 
-  (let* ((dcls
-          (append-lst (strip-cdrs (remove-strings (butlast (cddr def) 1)))))
-         (split-types (get-unambiguous-xargs-flg1/edcls1
-                       :split-types
-                       *unspecified-xarg-value*
-                       dcls
-                       "irrelevant-error-string"))
-         (guards (get-guards1
-                  dcls
-                  (cond ((or (equal split-types
-                                    *unspecified-xarg-value*) ; default
-                             (eq split-types nil))
-                         '(guards types))
-                        (t (assert$ (eq split-types t)
+; We call dcls-guard-raw-from-def both here and via the call of guard-raw in
+; oneify-cltl-code, so that the logical behavior for guard violations agrees
+; with what is actually executed.
 
-; By the time we get here, we have already done our checks for the defun,
-; including the check that split-types above is not an error message, and is
-; Boolean.  So if the assertion just above fails, then something has gone
-; terribly wrong!
-
-                                    '(guards))))
-                  wrld))
-         (guard (cond ((null guards) t)
-                      ((null (cdr guards)) (car guards))
-                      (t (cons 'and guards))))
-         (guard-is-t (and (or (eq guard t)
-                              (equal guard *t*))
+   (dcls-guard-raw-from-def def wrld)
+   (let* ((guard-is-t (and (or (eq guard t)
+                               (equal guard *t*))
 
 ; If stobj-flag is true, normally the guard will not be t because it will
 ; include a corresponding stobj recognizer call.  But the guard could be t in
@@ -1641,14 +1687,14 @@
 ; optimization of defining the *1* function to call the raw Lisp function in
 ; this case, so that appropriate live stobj checks can be made.
 
-                          (not (and stobj-flag
+                           (not (and stobj-flag
 ; But is it an abstract concrete stobj?
-                                    (getprop stobj-flag 'absstobj-info nil
-                                             'current-acl2-world wrld)))))
-         (fn (car def))
-         (*1*fn (*1*-symbol fn))
-         (cl-compliant-p-optimization
-          (and (eq defun-mode :logic)
+                                     (getprop stobj-flag 'absstobj-info nil
+                                              'current-acl2-world wrld)))))
+          (fn (car def))
+          (*1*fn (*1*-symbol fn))
+          (cl-compliant-p-optimization
+           (and (eq defun-mode :logic)
 
 ; One might think that the conjunct above is implied by the one below.  But
 ; consider this book:
@@ -1675,102 +1721,101 @@
 ; defun.  Our solution is to make sure that we are oneifying a function that is
 ; truly :common-lisp-compliant.
 
-               (eq (symbol-class fn wrld) :common-lisp-compliant)))
-         (formals (cadr def))
-         (boot-strap-p (global-val 'boot-strap-flg (w *the-live-state*))))
-    (cond
-     ((or (and guard-is-t cl-compliant-p-optimization)
-          (and boot-strap-p ; optimization (well, except for :redef)
-               (member-eq fn
-                          '(thm-fn
-                            make-event-fn
-                            certify-book-fn
+                (eq (symbol-class fn wrld) :common-lisp-compliant)))
+          (formals (cadr def))
+          (boot-strap-p (f-get-global 'boot-strap-flg *the-live-state*)))
+     (cond
+      ((or (and guard-is-t cl-compliant-p-optimization)
+           (and boot-strap-p ; optimization (well, except for :redef)
+                (member-eq fn
+                           '(thm-fn
+                             make-event-fn
+                             certify-book-fn
 ; Keep the following in sync with primitive-event-macros.
-                            defun-fn
-                            ;; #+:non-standard-analysis
-                            ;; defun-std ; defun-fn
-                            defuns-fn ; mutual-recursion
-                            ;; defuns ; calls defuns-fn, above
-                            defthm-fn
-                            ;; #+:non-standard-analysis
-                            ;; defthm-std ; calls defthm-fn, above
-                            defaxiom-fn
-                            defconst-fn
-                            defstobj-fn defabsstobj-fn
-                            defpkg-fn
-                            deflabel-fn
-                            #+acl2-legacy-doc defdoc-fn
-                            deftheory-fn
-                            defchoose-fn
-                            verify-guards-fn
-                            defmacro-fn
-                            in-theory-fn
-                            in-arithmetic-theory-fn
-                            regenerate-tau-database-fn
-                            push-untouchable-fn
-                            remove-untouchable-fn
-                            reset-prehistory-fn
-                            set-body-fn
-                            table-fn
-                            progn-fn
-                            encapsulate-fn
-                            include-book-fn
-                            change-include-book-dir
-                            comp-fn
-                            verify-termination-fn
-                            verify-termination-boot-strap-fn
-                            ;; add-match-free-override ; should be fast enough
+                             defun-fn
+                             ;; #+:non-standard-analysis
+                             ;; defun-std ; defun-fn
+                             defuns-fn ; mutual-recursion
+                             ;; defuns ; calls defuns-fn, above
+                             defthm-fn
+                             ;; #+:non-standard-analysis
+                             ;; defthm-std ; calls defthm-fn, above
+                             defaxiom-fn
+                             defconst-fn
+                             defstobj-fn defabsstobj-fn
+                             defpkg-fn
+                             deflabel-fn
+                             deftheory-fn
+                             defchoose-fn
+                             verify-guards-fn
+                             defmacro-fn
+                             in-theory-fn
+                             in-arithmetic-theory-fn
+                             regenerate-tau-database-fn
+                             push-untouchable-fn
+                             remove-untouchable-fn
+                             reset-prehistory-fn
+                             set-body-fn
+                             table-fn
+                             progn-fn
+                             encapsulate-fn
+                             include-book-fn
+                             change-include-book-dir
+                             comp-fn
+                             verify-termination-fn
+                             verify-termination-boot-strap-fn
+                             ;; add-match-free-override ; should be fast enough
 
 ; Theory-invariant is included in *macros-for-nonexpansion-in-raw-lisp*.  The
 ; remaining members of primitive-event-macros, after theory-invariant, are
 ; handled well enough already since we included table-fn above.
-                            ))))
+                             ))))
 
 ; Optimization in a common case: avoid labels function.  Note that if the guard
 ; is t then there are no stobjs except for the recognizer, whose raw Lisp code
 ; can handle non-live stobjs.
 
-      `(,*1*fn
-        ,formals
-        ,(cons fn formals)))
-     (t
-      (let* ((invariant-risk
-              (getprop fn 'invariant-risk nil 'current-acl2-world wrld))
-             (super-stobjs-in ; At a "leaf" of a stobj-based computation?
-              (if stobj-flag
+       `(,*1*fn
+         ,formals
+         ,(cons fn formals)))
+      (t
+       (let* ((invariant-risk
+               (getprop fn 'invariant-risk nil 'current-acl2-world wrld))
+              (super-stobjs-in ; At a "leaf" of a stobj-based computation?
+               (if stobj-flag
 
 ; Then we are looking at a function introduced by a defstobj or defabsstobj
 ; event.
 
-                  (let ((temp (super-defstobj-wart-stobjs-in formals
-                                                             stobj-flag)))
-                    (cond ((find-first-non-nil temp)
-                           temp)
-                          (t nil)))
+                   (let ((temp (super-defstobj-wart-stobjs-in formals
+                                                              stobj-flag)))
+                     (cond ((find-first-non-nil temp)
+                            temp)
+                           (t nil)))
 
 ; Else see if we are looking at a function that takes state but has logic code
 ; that does not handle a live state properly (and not just because of calls to
 ; lower-level functions with that problem).
 
-                (cdr (assoc-eq fn *super-defun-wart-stobjs-in-alist*))))
-             (ignore-vars
+                 (cdr (assoc-eq fn *super-defun-wart-stobjs-in-alist*))))
+              (ignore-vars
 
 ; If super-stobjs-in is non-nil, then we will lay down a call (oneify-fail-form
 ; ... :live-stobj) that refers to all the formals; hence ignore-vars should be
 ; nil if super-stobjs-in is non-nil.  When changing oneify-fail-form, consider
 ; changing this code as well.
 
-              (and (not super-stobjs-in) (ignore-vars dcls)))
-             (ignorable-vars (ignorable-vars dcls))
-             (program-p (eq defun-mode :program))
-             (*1*guard (oneify guard nil wrld program-p))
+               (and (not super-stobjs-in) (ignore-vars dcls)))
+              (ignorable-vars (ignorable-vars dcls))
+              (program-p (eq defun-mode :program))
+              (*1*guard (oneify guard nil wrld program-p))
 
 ; We throw away most declararations and the doc string, keeping only ignore and
 ; ignorable declarations.  Note that it is quite reasonable to ignore
 ; declarations when constructing ``slow'' functions.
 
-             (body (car (last def)))
-             (*1*body
+              (body (car (last def)))
+              (*1*body
 
 ; WARNING!  We need to be very careful that we only use *1*body in an
 ; environment where *1*fn refers to the top-level function currently being
@@ -1782,17 +1827,17 @@
 ; the body of the top-level definition of *1*fn in the case of :program mode
 ; because we promise not to introduce a top-level flet in that case.
 
-              (oneify body nil wrld program-p))
-             (guard-checking-on-form
+               (oneify body nil wrld program-p))
+              (guard-checking-on-form
 
 ; Functions in the ev-rec nest have a gc-off parameter that we generally assume
 ; to correspond with the state global guard-checking-on used here, so that the
 ; logic-only and raw lisp code agree.  See the comment in *ev-shortcut-okp*.
 
-              (cond (super-stobjs-in
-                     '(let ((temp (f-get-global 'guard-checking-on
-                                                *the-live-state*)))
-                        (cond ((or (eq temp :none) (eq temp nil))
+               (cond (super-stobjs-in
+                      '(let ((temp (f-get-global 'guard-checking-on
+                                                 *the-live-state*)))
+                         (cond ((or (eq temp :none) (eq temp nil))
 
 ; Calls of a stobj primitive that takes its stobj as an argument are always
 ; guard-checked.  If that changes, consider also changing
@@ -1801,11 +1846,11 @@
 ; reaching the stobj primitive, which is responsible for causing a guard
 ; violation rather than allowing an invariant to be violated.
 
-                               t)
-                              (t temp))))
-                    (t '(f-get-global 'guard-checking-on *the-live-state*))))
-             (skip-early-exit-code-when-none
-              (and (eq defun-mode :logic) ; :program handled elsewhere
+                                t)
+                               (t temp))))
+                     (t '(f-get-global 'guard-checking-on *the-live-state*))))
+              (skip-early-exit-code-when-none
+               (and (eq defun-mode :logic) ; :program handled elsewhere
 
 ; We generally skip some special "early exit" code when 'guard-checking-on has
 ; value :none.  But it seems scary to allow :none to avoid raw Lisp for
@@ -1814,63 +1859,63 @@
 ; even if 'guard-checking-on has value :none.  Exception: We want the-check to
 ; avoid guard errors when 'guard-checking-on has value :none.
 
-                   (or (not boot-strap-p)
-                       (eq fn 'the-check))))
-             (guard-checking-is-really-on-form
+                    (or (not boot-strap-p)
+                        (eq fn 'the-check))))
+              (guard-checking-is-really-on-form
 
 ; This variable should only be used in the scope of the binding expression for
 ; early-exit-code.
 
-              (cond (super-stobjs-in
+               (cond (super-stobjs-in
 
 ; The value of guard-checking-on has already been coerced from :none or nil to
 ; t, in guard-checking-on-form.
 
-                     t)
-                    (skip-early-exit-code-when-none
+                      t)
+                     (skip-early-exit-code-when-none
 
 ; As mentioned above, guard-checking-is-really-on-form is only used for
 ; defining early-exit-code.  But evaluation of early-exit-code is skipped when
 ; 'guard-checking-on has value :none in the present case, where
 ; skip-early-exit-code-when-none is true.
 
-                     guard-checking-on-form)
-                    (t `(let ((x ,guard-checking-on-form))
-                          (and x
-                               (not (eq x :none)))))))
-             (fail_guard ; form for reporting guard failure
-              (oneify-fail-form
-               'ev-fncall-guard-er fn formals guard super-stobjs-in wrld
-               (and super-stobjs-in
-                    '(cond ((member-eq (f-get-global 'guard-checking-on
-                                                     *the-live-state*)
-                                       '(nil :none))
-                            :live-stobj)
-                           (t
-                            :live-stobj-gc-on)))))
-             (fail_safe ; form for reporting guard or safe mode failure
-              (oneify-fail-form 'ev-fncall-guard-er fn formals guard
-                                super-stobjs-in wrld t))
-             (safe-form
+                      guard-checking-on-form)
+                     (t `(let ((x ,guard-checking-on-form))
+                           (and x
+                                (not (eq x :none)))))))
+              (fail_guard ; form for reporting guard failure
+               (oneify-fail-form
+                'ev-fncall-guard-er fn formals guard super-stobjs-in wrld
+                (and super-stobjs-in
+                     '(cond ((member-eq (f-get-global 'guard-checking-on
+                                                      *the-live-state*)
+                                        '(nil :none))
+                             :live-stobj)
+                            (t
+                             :live-stobj-gc-on)))))
+              (fail_safe ; form for reporting guard or safe mode failure
+               (oneify-fail-form 'ev-fncall-guard-er fn formals guard
+                                 super-stobjs-in wrld t))
+              (safe-form
 
 ; Functions in the ev-rec nest have a safe-mode parameter that we generally
 ; assume to agree with the state global safe-mode, so that the logic-only and
 ; raw lisp code agree.  See the comment in *ev-shortcut-okp*.
 
-              '(f-get-global 'safe-mode *the-live-state*))
-             (super-stobjs-chk
-              (if stobj-flag
-                  (let ((first-non-nil (find-first-non-nil super-stobjs-in)))
-                    `(live-stobjp ,first-non-nil))
-                `(live-state-p
-                  ,(select-stobj 'state super-stobjs-in formals))))
-             (declared-stobjs (if stobj-flag
-                                  (list stobj-flag)
-                                (get-declared-stobjs dcls)))
-             (user-stobj-is-arg (and declared-stobjs
-                                     (not (equal declared-stobjs '(state)))))
-             (live-stobjp-test (create-live-user-stobjp-test declared-stobjs))
-             (declare-stobj-special
+               '(f-get-global 'safe-mode *the-live-state*))
+              (super-stobjs-chk
+               (if stobj-flag
+                   (let ((first-non-nil (find-first-non-nil super-stobjs-in)))
+                     `(live-stobjp ,first-non-nil))
+                 `(live-state-p
+                   ,(select-stobj 'state super-stobjs-in formals))))
+              (declared-stobjs (if stobj-flag
+                                   (list stobj-flag)
+                                 (get-declared-stobjs dcls)))
+              (user-stobj-is-arg (and declared-stobjs
+                                      (not (equal declared-stobjs '(state)))))
+              (live-stobjp-test (create-live-user-stobjp-test declared-stobjs))
+              (declare-stobj-special
 
 ; Without a special declaration for the live stobj, a defstobj or defabsstobj
 ; event will introduce *1* functions in add-trip, via a defuns trip, before the
@@ -1883,9 +1928,9 @@
 ; as soon as it is referenced, in such *1* functions, even though CCL might be
 ; the only Lisp that could need this done.
 
-              (and stobj-flag
-                   `(declare (special ,(the-live-var stobj-flag)))))
-             (guarded-primitive-p
+               (and stobj-flag
+                    `(declare (special ,(the-live-var stobj-flag)))))
+              (guarded-primitive-p
 
 ; We want to check guards on the "leaves" of a computation in safe-mode, for
 ; example, on a call of EQ.  Evaluation in the ACL2 logic can only diverge from
@@ -1896,23 +1941,23 @@
 ; to Common Lisp).  So as we generate code here, we restrict the additional
 ; guard-check in safe-mode to such functions.
 
-              (and (not guard-is-t) ; we are trusting guards on the primitives!
-                   boot-strap-p
-                   (not (member-equal (symbol-package-name fn)
-                                      '("ACL2" "ACL2-PC")))))
-             (logic-recursive-p
-              (and (eq defun-mode :logic)
-                   (ffnnamep-mod-mbe fn (body fn nil wrld))))
-             (labels-can-miss-guard
-              (and logic-recursive-p ; there is no labels form for :program
+               (and (not guard-is-t) ; we are trusting guards on the primitives!
+                    boot-strap-p
+                    (not (member-equal (symbol-package-name fn)
+                                       '("ACL2" "ACL2-PC")))))
+              (logic-recursive-p
+               (and (eq defun-mode :logic)
+                    (ffnnamep-mod-mbe fn (body fn nil wrld))))
+              (labels-can-miss-guard
+               (and logic-recursive-p ; there is no labels form for :program
 
 ; If the function is common-lisp-compliant, then the only way we can fall
 ; through to the labels form is if guard-checking is nil or :none (not :all),
 ; in which case there is no reason to warn.
 
-                   (not cl-compliant-p-optimization)
-                   (not guard-is-t)))
-             (trace-rec-for-none
+                    (not cl-compliant-p-optimization)
+                    (not guard-is-t)))
+              (trace-rec-for-none
 
 ; If trace-rec-for-none is non-nil, then we guarantee that if
 ; 'guard-checking-on is set to :none, we will see all the recursive calls.
@@ -1922,21 +1967,21 @@
 ; enter that labels code, which oneifies in a special way to deal with the
 ; invariant-risk issue).
 
-              (and trace-rec-for-none
-                   logic-recursive-p
-                   (eq defun-mode :logic)))
-             (program-only (and program-p ; optimization
-                                (member-eq fn
+               (and trace-rec-for-none
+                    logic-recursive-p
+                    (eq defun-mode :logic)))
+              (program-only (and program-p ; optimization
+                                 (member-eq fn
 
 ; If this test becomes an issue, we might consider reimplementing the
 ; program-only mechanism by way of :program-only xargs, which would place a
 ; property that we can look up.  Careful though -- at this point we probably
 ; have not yet installed a world with all the new properties of fn.
 
-                                           (f-get-global
-                                            'program-fns-with-raw-code
-                                            *the-live-state*))))
-             (fail_program-only-safe
+                                            (f-get-global
+                                             'program-fns-with-raw-code
+                                             *the-live-state*))))
+              (fail_program-only-safe
 
 ; At one time we put down a form here that throws to the tag 'raw-ev-fncall:
 
@@ -1956,34 +2001,34 @@
 ; books.  Instead, we have decided to cause a raw Lisp error, which is always
 ; legitimate (after all, Lisp might cause a resource error).
 
-              `(error "~%~a~%"
-                      (fms-to-string
-                       "~@0~%~@1"
-                       (list (cons #\0 (program-only-er-msg
-                                        ',fn (list ,@formals) t))
-                             (cons #\1 "~%Note: If you have a reason to ~
+               `(error "~%~a~%"
+                       (fms-to-string
+                        "~@0~%~@1"
+                        (list (cons #\0 (program-only-er-msg
+                                         ',fn (list ,@formals) t))
+                              (cons #\1 "~%Note: If you have a reason to ~
                                         prefer an ACL2 error here instead of ~
                                         a hard Lisp error, please contact the ~
                                         ACL2 implementors."))
-                       :evisc-tuple
-                       (abbrev-evisc-tuple *the-live-state*)
-                       :fmt-control-alist
-                       (list (cons 'fmt-hard-right-margin
-                                   (f-get-global 'fmt-hard-right-margin
-                                                 *the-live-state*))
-                             (cons 'fmt-soft-right-margin
-                                   (f-get-global 'fmt-soft-right-margin
-                                                 *the-live-state*))))))
-             (early-exit-code-main
-              (let ((cl-compliant-code-guard-not-t
+                        :evisc-tuple
+                        (abbrev-evisc-tuple *the-live-state*)
+                        :fmt-control-alist
+                        (list (cons 'fmt-hard-right-margin
+                                    (f-get-global 'fmt-hard-right-margin
+                                                  *the-live-state*))
+                              (cons 'fmt-soft-right-margin
+                                    (f-get-global 'fmt-soft-right-margin
+                                                  *the-live-state*))))))
+              (early-exit-code-main
+               (let ((cl-compliant-code-guard-not-t
 
 ; We lay down code for the common-lisp-compliant case that checks the guard and
 ; acts accordingly: if the guard checks, then it returns the result of calling
 ; fn, and if not, then it fails if appropriate and otherwise falls through.
 
-                     (and
-                      (not guard-is-t)       ; optimization for code below
-                      (eq defun-mode :logic) ; optimization for code below
+                      (and
+                       (not guard-is-t)       ; optimization for code below
+                       (eq defun-mode :logic) ; optimization for code below
 
 ; NOTE: we have to test for live stobjs before we evaluate the guard, since the
 ; Common Lisp guard may assume all stobjs are live.  We actually only need
@@ -1992,14 +2037,14 @@
 ; check that all stobjs are live before evaluating the raw Lisp guard.  After
 ; all, the cost of that check is only some eq tests.
 
-                      `(cond
-                        ,(cond
-                          ((eq live-stobjp-test t)
-                           `(,guard
-                             (return-from ,*1*fn (,fn ,@formals))))
-                          (t
-                           `((if ,live-stobjp-test
-                                 ,(if stobj-flag
+                       `(cond
+                         ,(cond
+                           ((eq live-stobjp-test t)
+                            `(,guard
+                              (return-from ,*1*fn (,fn ,@formals))))
+                           (t
+                            `((if ,live-stobjp-test
+                                  ,(if stobj-flag
 
 ; Essay on Stobj Guard Attachments
 
@@ -2076,44 +2121,44 @@
 ; not yet been put into wrld.  But as of this writing, the test seems to apply
 ; only to stobj updaters and resize functions.
 
-                                      (let ((stobjs-out
-                                             (getprop
-                                              fn
-                                              'stobjs-out
-                                              nil
-                                              'current-acl2-world
-                                              wrld)))
-                                        (cond
-                                         ((and stobjs-out ; property is there
-                                               (all-nils stobjs-out))
-                                          guard)
-                                         (t `(let ((*aokp* nil))
-                                               ,guard))))
-                                    guard)
-                               ,*1*guard)
-                             ,(assert$
+                                       (let ((stobjs-out
+                                              (getprop
+                                               fn
+                                               'stobjs-out
+                                               nil
+                                               'current-acl2-world
+                                               wrld)))
+                                         (cond
+                                          ((and stobjs-out ; property is there
+                                                (all-nils stobjs-out))
+                                           guard)
+                                          (t `(let ((*aokp* nil))
+                                                ,guard))))
+                                     guard)
+                                ,*1*guard)
+                              ,(assert$
 
 ; No user-stobj-based functions are primitives for which we need to give
 ; special consideration to safe-mode.
 
-                               (not guarded-primitive-p)
-                               `(cond (,live-stobjp-test
-                                       (return-from ,*1*fn
-                                                    (,fn ,@formals))))))))
-                        ,@(cond (super-stobjs-in
-                                 `((t ,fail_guard)))
-                                (guarded-primitive-p
-                                 `(((or ,guard-checking-is-really-on-form
-                                        ,safe-form)
-                                    ,fail_safe)))
-                                (t
-                                 `((,guard-checking-is-really-on-form
-                                    ,fail_guard))))))))
-                (if cl-compliant-p-optimization
-                    (assert$ (not guard-is-t) ; already handled way above
-                             (list cl-compliant-code-guard-not-t))
-                  (let ((cond-clauses
-                         `(,@(and (eq defun-mode :logic)
+                                (not guarded-primitive-p)
+                                `(cond (,live-stobjp-test
+                                        (return-from ,*1*fn
+                                                     (,fn ,@formals))))))))
+                         ,@(cond (super-stobjs-in
+                                  `((t ,fail_guard)))
+                                 (guarded-primitive-p
+                                  `(((or ,guard-checking-is-really-on-form
+                                         ,safe-form)
+                                     ,fail_safe)))
+                                 (t
+                                  `((,guard-checking-is-really-on-form
+                                     ,fail_guard))))))))
+                 (if cl-compliant-p-optimization
+                     (assert$ (not guard-is-t) ; already handled way above
+                              (list cl-compliant-code-guard-not-t))
+                   (let ((cond-clauses
+                          `(,@(and (eq defun-mode :logic)
 
 ; If the guard is t, then we want to execute the raw Lisp code in the
 ; :common-lisp-compliant case even if guard-checking is :none.  This
@@ -2121,26 +2166,26 @@
 ; we need to handle that special case (:none, guard t) elsewhere, and
 ; we do so in *1*-body-forms below.
 
-                                  (not guard-is-t)
-                                  `(((eq (symbol-class ',fn (w *the-live-state*))
-                                         :common-lisp-compliant)
-                                     ,cl-compliant-code-guard-not-t)))
-                           ,@(and (not guard-is-t)
-                                  (cond
-                                   (super-stobjs-in
-                                    `(((not ,*1*guard)
-                                       ,fail_guard)))
-                                   (guarded-primitive-p
-                                    `(((and (or ,safe-form
-                                                ,guard-checking-is-really-on-form)
-                                            (not ,*1*guard))
-                                       ,fail_safe)))
-                                   (t
-                                    `(((and ,guard-checking-is-really-on-form
-                                            (not ,*1*guard))
-                                       ,fail_guard)))))
-                           ,@(and
-                              program-p
+                                   (not guard-is-t)
+                                   `(((eq (symbol-class ',fn (w *the-live-state*))
+                                          :common-lisp-compliant)
+                                      ,cl-compliant-code-guard-not-t)))
+                            ,@(and (not guard-is-t)
+                                   (cond
+                                    (super-stobjs-in
+                                     `(((not ,*1*guard)
+                                        ,fail_guard)))
+                                    (guarded-primitive-p
+                                     `(((and (or ,safe-form
+                                                 ,guard-checking-is-really-on-form)
+                                             (not ,*1*guard))
+                                        ,fail_safe)))
+                                    (t
+                                     `(((and ,guard-checking-is-really-on-form
+                                             (not ,*1*guard))
+                                        ,fail_guard)))))
+                            ,@(and
+                               program-p
 
 ; In the boot-strap world we have :program mode functions whose definitions are
 ; different in raw Lisp from the logic, such as ev and get-global.  If we allow
@@ -2161,34 +2206,34 @@
 ; such a function is in :logic mode then either it is non-executable or
 ; :common-lisp-compliant (see check-none-ideal), hence is handled above.
 
-                              (cond
-                               (boot-strap-p
-                                `((,safe-form
-                                   ,(cond
-                                     (program-only
-                                      fail_program-only-safe)
-                                     (t
-                                      `(return-from ,*1*fn ,*1*body))))
-                                  ,@(and
-                                     invariant-risk
-                                     `((t (return-from ,*1*fn ,*1*body))))))
-                               (program-only
-                                `((,safe-form
-                                   ,fail_program-only-safe)
-                                  ((member-eq ,guard-checking-on-form
-                                              '(:none :all))
-                                   (return-from ,*1*fn ,*1*body))))
-                               (t `(((or (member-eq
-                                          ,guard-checking-on-form
-                                          '(:none :all))
-                                         ,safe-form)
-                                     (return-from ,*1*fn ,*1*body)))))))))
-                    (and cond-clauses
-                         (list (cons 'cond cond-clauses)))))))
-             (early-exit-code
-              (and early-exit-code-main
-                   (cond ((and invariant-risk
-                               (not super-stobjs-in))
+                               (cond
+                                (boot-strap-p
+                                 `((,safe-form
+                                    ,(cond
+                                      (program-only
+                                       fail_program-only-safe)
+                                      (t
+                                       `(return-from ,*1*fn ,*1*body))))
+                                   ,@(and
+                                      invariant-risk
+                                      `((t (return-from ,*1*fn ,*1*body))))))
+                                (program-only
+                                 `((,safe-form
+                                    ,fail_program-only-safe)
+                                   ((member-eq ,guard-checking-on-form
+                                               '(:none :all))
+                                    (return-from ,*1*fn ,*1*body))))
+                                (t `(((or (member-eq
+                                           ,guard-checking-on-form
+                                           '(:none :all))
+                                          ,safe-form)
+                                      (return-from ,*1*fn ,*1*body)))))))))
+                     (and cond-clauses
+                          (list (cons 'cond cond-clauses)))))))
+              (early-exit-code
+               (and early-exit-code-main
+                    (cond ((and invariant-risk
+                                (not super-stobjs-in))
 
 ; If we are under **1*-as-raw*, then our intention is that code executes just
 ; as it would in raw Lisp (i.e., without forcing execution via *1* function),
@@ -2201,53 +2246,53 @@
 ; extra guard-checking was done through Version_7.0, which resulted in
 ; slowdowns to user code that led us to remove that extra guard-checking.
 
-                          `((when (not **1*-as-raw*)
-                              ,@early-exit-code-main)))
-                         (t early-exit-code-main))))
-             (main-body-before-final-call
+                           `((when (not **1*-as-raw*)
+                               ,@early-exit-code-main)))
+                          (t early-exit-code-main))))
+              (main-body-before-final-call
 
 ; This is the code that is executed before we fall through: to the final labels
 ; function in the :logic mode case, but to the non-*1* call in the :program
 ; mode case.
 
-              (append
-               (and user-stobj-is-arg
-                    `((when *wormholep*
-                        (wormhole-er (quote ,fn) (list ,@formals)))))
-               (and (eq defun-mode :logic) ; else :program
-                    guard-is-t
-                    (assert$ ; compliant with guard t is handled early above
-                     (not cl-compliant-p-optimization)
-                     `((when (eq (symbol-class ',fn (w *the-live-state*))
-                                 :common-lisp-compliant)
-                         (return-from ,*1*fn (,fn ,@formals))))))
-               (cond ((and skip-early-exit-code-when-none
-                           early-exit-code) ; else nil; next case provides nil
-                      (cond (super-stobjs-in early-exit-code) ; optimization
-                            (t
-                             `((when (not (eq ,guard-checking-on-form :none))
-                                 ,@early-exit-code)))))
-                     (t early-exit-code))
-               (cond (trace-rec-for-none
-                      `((return-from ,*1*fn ,*1*body)))
-                     (labels-can-miss-guard
-                      `((when (eq ,guard-checking-on-form :all)
-                          (return-from ,*1*fn ,*1*body)))))
-               (and (and labels-can-miss-guard
-                         (not trace-rec-for-none)) ; else skip labels form
-                    `((when (and *raw-guard-warningp*
-                                 (eq ,guard-checking-on-form t))
-                        (warn-for-guard-body ',fn))))))
-             (*1*-body-forms
-              (cond ((eq defun-mode :program)
-                     (append
-                      main-body-before-final-call
-                      (cond
-                       ((and invariant-risk
-                             (eq defun-mode :program))
-                        `((cond
-                           (*ignore-invariant-risk* (,fn ,@formals))
-                           (t (let ((**1*-as-raw* t))
+               (append
+                (and user-stobj-is-arg
+                     `((when *wormholep*
+                         (wormhole-er (quote ,fn) (list ,@formals)))))
+                (and (eq defun-mode :logic) ; else :program
+                     guard-is-t
+                     (assert$ ; compliant with guard t is handled early above
+                      (not cl-compliant-p-optimization)
+                      `((when (eq (symbol-class ',fn (w *the-live-state*))
+                                  :common-lisp-compliant)
+                          (return-from ,*1*fn (,fn ,@formals))))))
+                (cond ((and skip-early-exit-code-when-none
+                            early-exit-code) ; else nil; next case provides nil
+                       (cond (super-stobjs-in early-exit-code) ; optimization
+                             (t
+                              `((when (not (eq ,guard-checking-on-form :none))
+                                  ,@early-exit-code)))))
+                      (t early-exit-code))
+                (cond (trace-rec-for-none
+                       `((return-from ,*1*fn ,*1*body)))
+                      (labels-can-miss-guard
+                       `((when (eq ,guard-checking-on-form :all)
+                           (return-from ,*1*fn ,*1*body)))))
+                (and (and labels-can-miss-guard
+                          (not trace-rec-for-none)) ; else skip labels form
+                     `((when (and *raw-guard-warningp*
+                                  (eq ,guard-checking-on-form t))
+                         (warn-for-guard-body ',fn))))))
+              (*1*-body-forms
+               (cond ((eq defun-mode :program)
+                      (append
+                       main-body-before-final-call
+                       (cond
+                        ((and invariant-risk
+                              (eq defun-mode :program))
+                         `((cond
+                            (*ignore-invariant-risk* (,fn ,@formals))
+                            (t (let ((**1*-as-raw* t))
 
 ; One reason that we bind **1*-as-raw* above and use labels below is to helps
 ; compilers remove tail recursions, since we believe that special variable
@@ -2255,31 +2300,31 @@
 ; of recursion, simply because that is simplest and we expect, or at least,
 ; hope, that there is only trivial impact on performance.)
 
-                                ,(labels-form-for-*1*
-                                  fn *1*fn formals
-                                  (oneify body nil wrld 'invariant-risk)
-                                  declare-stobj-special
-                                  ignore-vars ignorable-vars
-                                  super-stobjs-in super-stobjs-chk
-                                  guard wrld))))))
-                       (t `((,fn ,@formals))))))
-                    (trace-rec-for-none
-                     main-body-before-final-call)
-                    (t
-                     (append
-                      main-body-before-final-call
-                      (list
-                       (labels-form-for-*1*
-                        fn *1*fn formals *1*body
-                        declare-stobj-special
-                        ignore-vars ignorable-vars
-                        super-stobjs-in super-stobjs-chk
-                        guard wrld)))))))
-        (let ((*1*dcls (and declare-stobj-special
-                            (list declare-stobj-special))))
-          `(,*1*fn
-            ,formals
-            ,@*1*dcls
+                                 ,(labels-form-for-*1*
+                                   fn *1*fn formals
+                                   (oneify body nil wrld 'invariant-risk)
+                                   declare-stobj-special
+                                   ignore-vars ignorable-vars
+                                   super-stobjs-in super-stobjs-chk
+                                   guard wrld))))))
+                        (t `((,fn ,@formals))))))
+                     (trace-rec-for-none
+                      main-body-before-final-call)
+                     (t
+                      (append
+                       main-body-before-final-call
+                       (list
+                        (labels-form-for-*1*
+                         fn *1*fn formals *1*body
+                         declare-stobj-special
+                         ignore-vars ignorable-vars
+                         super-stobjs-in super-stobjs-chk
+                         guard wrld)))))))
+         (let ((*1*dcls (and declare-stobj-special
+                             (list declare-stobj-special))))
+           `(,*1*fn
+             ,formals
+             ,@*1*dcls
 
 ; At one time we attempted to do some code-sharing using a macro call, by using
 ; *1*body-call in place of *1*body in the code above, where *1*body-call was
@@ -2319,7 +2364,7 @@
 ;                     ,@*1*-body-forms))
 ;               *1*-body-forms)
 
-            ,@*1*-body-forms)))))))
+             ,@*1*-body-forms))))))))
 
 
 ;          PROMPTS
@@ -5330,17 +5375,54 @@
                (oneify-p (eq (car def) 'oneify-cltl-code))
                (def0 (if oneify-p (caddr def) (cdr def))))
           (cond ((and (eq *inside-include-book-fn* t)
-                      (if oneify-p
-                          (install-for-add-trip-include-book
-                           'defun
-                           (*1*-symbol (car def0))
-                           nil
-                           reclassifying-p)
+                      (cond
+                       (oneify-p
                         (install-for-add-trip-include-book
-                         (car def)
-                         (cadr def)
+                         'defun
+                         (*1*-symbol (car def0))
                          nil
-                         reclassifying-p)))
+                         reclassifying-p))
+                       #+sbcl
+                       ((and (not (eq *inside-include-book-fn*
+
+; We don't bother with the special treatment below if we are simply certifying
+; a book, both because we don't expect to do much in the resulting world and
+; because inlining (the issue here, as described in the comment below) seems to
+; be handled without this special treatment.  Note that by avoiding this
+; special case when *inside-include-book-fn* is 'hcomp-build, we avoid
+; duplicating the declaiming of inline for this function done in the
+; (hcomp-build-p) case below.
+
+                                      'hcomp-build))
+                             (not (member-eq (car def)
+                                             '(defmacro defabbrev)))
+                             (let ((name (symbol-name (car def0))))
+                               (terminal-substringp *inline-suffix*
+                                                    name
+                                                    *inline-suffix-len-minus-1*
+                                                    (1- (length name)))))
+
+; We are including a book (and not merely on behalf of certify-book, as
+; explained above).  Apparently SBCL needs the source code for a function in
+; order for it to be inlined.  (This isn't surprising, perhaps; perhaps more
+; surprising is that CCL does not seem to have this requirement.)
+; See for example community book books/system/optimize-check.lisp, where
+; the form (disassemble 'g4) fails to exhibit inlined code without the special
+; treatment we provide here.  That special treatment is to avoid obtaining the
+; definition from the hash table, instead letting SBCL fall through to the
+; (eval (car tail)) below.  If we decide to give this special treatment to
+; other host Lisps, we should consider installing the compiled definition from
+; the hash table; but SBCL always compiles its definitions, so that seems
+; unnecessary other than to save compilation time, which presumably is
+; relatively small for inlined functions, and at any rate, appears to be
+; unavoidable.
+
+                        nil)
+                       (t (install-for-add-trip-include-book
+                           (car def)
+                           (cadr def)
+                           nil
+                           reclassifying-p))))
                  (setf (car tail) nil))
                 (t (let (form)
                      (cond
@@ -5569,7 +5651,7 @@
          (eq (cadr trip) 'global-value)
          (consp (cddr trip)))
     (let* ((wrld (w *the-live-state*))
-           (boot-strap-flg (global-val 'boot-strap-flg wrld)))
+           (boot-strap-flg (f-get-global 'boot-strap-flg *the-live-state*)))
       (case (car (cddr trip))
         (defuns
 
@@ -5714,15 +5796,6 @@
                                               (cdr ignorep)
                                             nil))
                                    new-*1*-defs)))))
-            #+acl2-legacy-doc
-            (dolist (def new-defs)
-
-; Remove the documentation string potentially stored in raw Lisp, if a copy is
-; already around in our documentation database, just to save space.
-
-              (when (and (eq (car def) 'defun)
-                         (doc-stringp (documentation (cadr def) 'function)))
-                (setf (documentation (cadr def) 'function) nil)))
             (setq new-defs (nconc new-defs new-*1*-defs))
             (install-defs-for-add-trip new-defs
                                        (eq ignorep 'reclassifying)
@@ -6043,13 +6116,7 @@
                    (install-for-add-trip `(defparameter ,(cadr (cddr trip))
                                             ',(cadddr (cddr trip)))
                                          nil
-                                         t)))
-          #+acl2-legacy-doc
-          (cond ((doc-stringp (and (cadr (cddr trip))
-                                   (documentation (cadr (cddr trip))
-                                                  'variable)))
-                 (setf (documentation (cadr (cddr trip)) 'variable)
-                       nil))))
+                                         t))))
         (defmacro
           (cond (boot-strap-flg
                  (or (fboundp (cadr (cddr trip)))
@@ -6061,11 +6128,7 @@
                                 main Lisp package, such as ~x0!"
                                (cadr (cddr trip))))
                 (t (maybe-push-undo-stack 'defmacro (cadr (cddr trip)))
-                   (install-for-add-trip (cddr trip) nil t)))
-          #+acl2-legacy-doc
-          (cond ((doc-stringp (documentation (cadr (cddr trip)) 'function))
-                 (setf (documentation (cadr (cddr trip)) 'function)
-                       nil))))
+                   (install-for-add-trip (cddr trip) nil t))))
         (attachment ; (cddr trip) is produced by attachment-cltl-cmd
          (dolist (x (cdr (cddr trip)))
            (let ((name (if (symbolp x) x (car x))))
@@ -6589,7 +6652,10 @@
 
 (defun-one-output chk-virgin2 (name new-type wrld)
   (cond ((virginp name new-type) nil)
-        ((global-val 'boot-strap-flg wrld)
+        ((f-get-global 'boot-strap-flg *the-live-state*)
+
+; The test above is equivalent to (global-val 'boot-strap-flg wrld).
+
          (setf (get name '*predefined*) t))
 
 ; A name regains its true virginity the moment we decide to give it a
@@ -6887,6 +6953,7 @@
   (set-w 'extension
          (end-prehistoric-world (w *the-live-state*))
          *the-live-state*)
+  (f-put-global 'boot-strap-flg nil *the-live-state*)
   (acl2-unwind *ld-level* nil)
   (f-put-global 'inhibit-output-lst nil *the-live-state*)
   (f-put-global 'slow-array-action :warning *the-live-state*)
@@ -7042,18 +7109,18 @@
            in-theory
            initialize-state-globals
            let ; could be arbitrarily complex, but we can only do so much!
-           #+acl2-legacy-doc link-doc-to
-           #+acl2-legacy-doc link-doc-to-keyword
            logic
            make-waterfall-parallelism-constants
            make-waterfall-printing-constants
            memoize
            push
            reset-future-parallelism-variables
+           set-guard-msg
            set-invisible-fns-table
            set-tau-auto-mode
            set-waterfall-parallelism
            setq
+           system-events
            system-verify-guards
            table
            value
@@ -7912,18 +7979,25 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
   (when btp (print-call-history))
   (cond ((or (debugger-enabledp state)
              (eql *ld-level* 0)
-;            (global-val 'boot-strap-flg (w state)) ; avoid the potential error
-             (getprop 'boot-strap-flg 'global-value nil 'current-acl2-world
-                      (w state)))
+             (f-get-global 'boot-strap-flg state))
          nil)
         (t
          (let ((*debugger-hook* nil) ; extra care to avoid possible loop
                #+ccl ; as above, for CCL revision 12090 and beyond
                (ccl::*break-hook* nil)
                (*package* (find-package (current-package state)))
-               (continue-p (and (find-restart 'continue)
-                                *acl2-time-limit*
-                                (not (eql *acl2-time-limit* 0)))))
+               (continue-p
+
+; If *acl2-time-limit-boundp* is true, then we can safely use our approach of
+; continuing from the break (if possible) and letting the prover notice that
+; *acl2-time-limit* is 0.  That allows the prover to quit sufficiently normally
+; such that state global 'redo-flat-fail is bound in support of :redo-flat.
+; The reason that *acl2-time-limit-boundp* needs to be true is that ultimately,
+; we want *acl2-time-limit* to revert to its default value of nil.
+
+                (and (find-restart 'continue)
+                     *acl2-time-limit-boundp*
+                     (not (eql *acl2-time-limit* 0)))))
            #+ccl ; for CCL revisions before 12090
            (declare (ignorable ccl::*break-hook*))
            (terpri t)
@@ -8198,10 +8272,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; Acl2-default-restart isn't enough in Allegro, at least, to get the new prompt
 ; when we start up:
 
-       (let* ((system-dir (let ((str (getenv$-raw "ACL2_SYSTEM_BOOKS")))
-                            (and str
-                                 (maybe-add-separator str))))
-              (save-expansion (let ((s (getenv$-raw "ACL2_SAVE_EXPANSION")))
+       (let* ((save-expansion (let ((s (getenv$-raw "ACL2_SAVE_EXPANSION")))
                                 (and s
                                      (not (equal s ""))
                                      (not (equal (string-upcase s)
@@ -8218,20 +8289,28 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                                       (subseq user-home-dir0
                                               0
                                               (1- (length user-home-dir0)))
-                                    user-home-dir0))))
-         (when system-dir
-           (f-put-global 'system-books-dir
-                         (canonical-dirname!
-                          (unix-full-pathname system-dir)
-                          'lp
-                          *the-live-state*)
-                         *the-live-state*))
+                                    user-home-dir0)))
+              (system-dir0 (let ((str (getenv$-raw "ACL2_SYSTEM_BOOKS")))
+                             (and str
+                                  (maybe-add-separator str)))))
          (when (and save-expansion
                     (not (equal (string-upcase save-expansion)
                                 "NIL")))
            (f-put-global 'save-expansion-file t *the-live-state*))
          (when user-home-dir
-           (f-put-global 'user-home-dir user-home-dir *the-live-state*)))
+           (f-put-global 'user-home-dir user-home-dir *the-live-state*))
+         (when system-dir0 ; needs to wait for user-homedir-pathname
+           (f-put-global 'system-books-dir
+                         (canonical-dirname!
+                          (unix-full-pathname
+                           (expand-tilde-to-user-home-dir
+                            system-dir0
+                            (os (w *the-live-state*))
+                            'lp
+                            *the-live-state*))
+                          'lp
+                          *the-live-state*)
+                         *the-live-state*)))
        (set-gag-mode-fn :goals *the-live-state*)
        #-hons
 ; Hons users are presumably advanced enough to tolerate the lack of a
@@ -8261,7 +8340,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
               (initial-customization-filename)))
          (cond
           ((or (eq customization-full-file-name :none)
-               (global-val 'boot-strap-flg (w state)))
+               (f-get-global 'boot-strap-flg state))
            nil)
           (customization-full-file-name
 
@@ -8668,7 +8747,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                         :all)
                        (t fns)))
             (fn-file (format nil "~a.lisp" file))
-            (not-boot-strap-p (null (global-val 'boot-strap-flg wrld))))
+            (not-boot-strap-p (null (f-get-global 'boot-strap-flg state))))
 
 ; See the comment just above the call of with-output-object-channel-sharing in
 ; compile-uncompiled-defuns.
@@ -9107,3 +9186,315 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
       (eval `(untrace$ ,@to-untrace)))
     (when to-retrace
       (eval `(trace$ ,@to-retrace)))))
+
+;;;;;;;;;;
+;;; Start memory management code (formerly called start-sol-gc)
+;;;;;;;;;;
+
+; This section of code was suggested by Jared Davis as a way to regain
+; performance of ACL2(h) on regressions at UT CS.  Initially, these regressions
+; showed significant slowdown upon including new memoization code from Centaur
+; on 3/28/2013:
+; ; old:
+; 24338.570u 1357.200s 1:19:02.75 541.7%	0+0k 0+1918864io 0pf+0w
+; ; new:
+; 33931.460u 1017.070s 1:43:24.28 563.2%	0+0k 392+1931656io 0pf+0w
+; After restoring (start-sol-gc) in function acl2h-init, we regained the old
+; level of performance for a UT CS ACL2(h) regression, with the new memoizaion
+; code.
+
+(defun mf-looking-at (str1 str2 &key (start1 0) (start2 0))
+
+; (Mf-looking-at str1 str2 :start1 s1 :start2 s2) is non-nil if and only if
+; string str1, from location s1 to its end, is an initial segment of string
+; str2, from location s2 to its end.
+
+   (unless (typep str1 'simple-base-string)
+     (error "looking at:  ~a is not a string." str1))
+   (unless (typep str2 'simple-base-string)
+     (error "looking at:  ~a is not a string." str2))
+   (unless (typep start1 'fixnum)
+     (error "looking at:  ~a is not a fixnum." start1))
+   (unless (typep start2 'fixnum)
+     (error "looking at:  ~a is not a fixnum." start2))
+   (locally
+     (declare (simple-base-string str1 str2)
+              (fixnum start1 start2))
+     (let ((l1 (length str1)) (l2 (length str2)))
+       (declare (fixnum l1 l2))
+       (loop
+        (when (>= start1 l1) (return t))
+        (when (or (>= start2 l2)
+                  (not (eql (char str1 start1)
+                            (char str2 start2))))
+          (return nil))
+        (incf start1)
+        (incf start2)))))
+
+(defun our-uname ()
+
+; Returns nil or else a keyword, currently :darwin or :linux, to indicate the
+; result of shell command "uname".
+
+  (multiple-value-bind
+   (exit-code val)
+   (system-call+ "uname" nil)
+   (and (eql exit-code 0)
+        (stringp val)
+        (<= 6 (length val))
+        (cond ((string-equal (subseq val 0 6) "Darwin") :darwin)
+              ((string-equal (subseq val 0 5) "Linux") :linux)))))
+
+(defun meminfo (&optional arg)
+
+; With arg = nil, this function either returns 0 or else the size of the
+; physical memory.  See the code below to understand what information might be
+; returned for non-nil values of arg.
+
+  (assert (or (null arg)
+              (stringp arg)))
+  (or
+   (with-standard-io-syntax
+    (case (our-uname)
+      (:linux
+       (let ((arg (or arg  "MemTotal:")))
+         (and
+          (our-ignore-errors (probe-file "/proc/meminfo"))
+          (with-open-file
+           (stream "/proc/meminfo")
+           (let (line)
+             (loop while (setq line (read-line stream nil nil)) do
+                   (when (mf-looking-at arg line)
+                     (return
+                      (values
+                       (read-from-string line nil nil
+                                         :start (length arg)))))))))))
+      (:darwin
+       (let* ((arg (or arg "hw.memsize"))
+              (len (length arg)))
+         (multiple-value-bind
+          (exit-code val)
+          (system-call+ "sysctl" (list arg))
+          (and (eql exit-code 0)
+               (mf-looking-at arg val)
+               (mf-looking-at arg ": " :start1 len)
+               (let ((ans (read-from-string val nil nil :start (+ 2 len))))
+                 (and (integerp ans)
+                      (equal (mod ans 1024) 0)
+                      (/ ans 1024)))))))
+      (t nil)))
+   0))
+
+(defg *max-mem-usage*
+
+; This global is set in ccl-initialize-gc-strategy.  It is an upper bound, in
+; bytes of memory used, that when exceeded results in certain garbage
+; collection actions.
+
+; See also the centaur/misc/memory-mgmt books.
+
+  (expt 2 32))
+
+(defg *gc-min-threshold*
+
+; This is set in ccl-initialize-gc-strategy.
+
+; See also the centaur/misc/memory-mgmt books.
+
+  (expt 2 30))
+
+(let ((physical-memory-cached-answer nil))
+(defun physical-memory () ; in KB
+  (or physical-memory-cached-answer
+      (setq physical-memory-cached-answer
+            (meminfo))))
+)
+
+#+ccl
+(defun set-and-reset-gc-thresholds ()
+
+; See set-gc-strategy-builtin-delay (formerly start-sol-gc) for a full
+; discussion.  The comments here summarize how that works out if, for example,
+; there are 8G bytes of physical memory, just to make the concepts concrete --
+; so it might be helpful to read the comments in this function before reading
+; the more general discussion in set-gc-strategy-builtin-delay.
+
+  (let ((n
+
+; E.g., with 8G bytes of physical memory, *max-mem-usage* is 1/8 of that --
+; i.e., 1G -- and *gc-min-threshold* is 1/4 of that -- i.e., (1/4)G.  Then here
+; we arrange to allocate enough memory after a GC to reach *max-mem-usage* = 1G
+; bytes before the next GC, unless the current memory usage is more than
+; (3/4)G, in which case we allocate the minimum of (1/4)G.
+
+         (max (- *max-mem-usage* (ccl::%usedbytes))
+              *gc-min-threshold*)))
+
+; Now set the "threshold" to the number of bytes computed above (unless that
+; would be a no-op).
+
+    (unless (eql n (ccl::lisp-heap-gc-threshold))
+      (ccl::set-lisp-heap-gc-threshold n)))
+
+; The above setting won't take effect until the next GC unless we take action.
+; Here is that action, which actually allocates the bytes computed above as
+; free memory.
+
+  (ccl::use-lisp-heap-gc-threshold)
+
+; Finally, still assuming 8G bytes of phyical memory, set the "threshold" to
+; (1/4)G.  This is how much the next GC will set aside as free memory -- at
+; least initially, but then the post-gc hook will call this function.  As
+; explained above, in the case that the current memory usage is less than
+; (3/4)G, enough free memory will be allocated so that the next GC is triggered
+; after *max-mem-usage* = 1G bytes are in use.
+
+  (unless (eql *gc-min-threshold* (ccl::lisp-heap-gc-threshold))
+    (ccl::set-lisp-heap-gc-threshold *gc-min-threshold*)))
+
+#+ccl
+(defun ccl-initialize-gc-strategy (&optional threshold)
+  (let* ((phys (physical-memory))                   ; in KB
+         (memsize (cond ((> phys 0) (* phys 1024))  ; to bytes
+                        (t (expt 2 32)))))
+    (setq *max-mem-usage* ; no change if we were here already
+          (min (floor memsize 8)
+               (expt 2 31)))
+    (setq *gc-min-threshold* ; no change if we were here already
+          (cond ((null threshold) (floor *max-mem-usage* 4))
+                ((posp threshold) threshold)
+                (t (error "The GC threshold must be a positive integer, but ~
+                           ~s is not!"
+                          threshold))))
+    (ccl::set-lisp-heap-gc-threshold *gc-min-threshold*)
+    (ccl::use-lisp-heap-gc-threshold)
+    nil))
+
+#+ccl
+(defun set-gc-strategy-builtin-delay ()
+
+; This function was called start-sol-gc through ACL2 Version_7.1.  It should
+; undo the effects of set-gc-strategy-builtin-egc, by turning off EGC and
+; enabling the delay strategy.  The list ccl::*post-gc-hook-list* should
+; contain the symbol set-and-reset-gc-thresholds after this call succeeds.
+
+; The function ccl-initialize-gc-strategy should be called before this function
+; is called.
+
+; This function should probably not be invoked in recent versions of CCL,
+; instead relying on EGC for memory management, except perhaps in
+; static-hons-intensive applications.  See *acl2-egc-on*.
+
+;          Sol Swords's scheme to control GC in CCL
+;
+; The goal is to get CCL to perform a GC whenever we're using almost
+; all the physical memory, but not otherwise.
+;
+; The discussion below is self-contained, but for more discussion, relevant CCL
+; documentation is at http://ccl.clozure.com/ccl-documentation.html, Chapter
+; 16: "Understanding and Configuring the Garbage Collector".  Note that it
+; might be easier to read the comment in source function
+; set-and-reset-gc-thresholds before reading below.
+
+; The usual way of controlling GC on CCL is via LISP-HEAP-GC-THRESHOLD.  This
+; value is approximately the amount of free memory that will be allocated
+; immediately after GC.  This means that the next GC will occur after
+; LISP-HEAP-GC-THRESHOLD more bytes are used (by consing or array allocation or
+; whatever).  But this means the total memory used by the time the next GC
+; comes around is the threshold plus the amount that remained in use at the end
+; of the previous GC.  This is a problem because of the following scenario:
+;
+;  - We set the LISP-HEAP-GC-THRESHOLD to 3GB since we'd like to be able
+;    to use most of the 4GB physical memory available.
+;
+;  - A GC runs or we say USE-LISP-HEAP-GC-THRESHOLD to ensure that 3GB
+;    is available to us.
+;
+;  - We run a computation until we've exhausted this 3GB, at which point
+;    a GC occurs.
+;
+;  - The GC reclaims 1.2 GB out of the 3GB used, so there is 1.8 GB
+;    still in use.
+;
+;  - After GC, 3GB more is automatically allocated -- but this means we
+;    won't GC again until we have 4.8 GB in use, meaning we've gone to
+;    swap.
+;
+; What we really want is, instead of allocating a constant additional
+; amount after each GC, to allocate up to a fixed total amount including
+; what's already in use.  To emulate that behavior, we use the hack
+; below.  This operates as follows, assuming the same 4GB total physical
+; memory as in the above example (or, unknown physical memory that defaults to
+; 4GB as shown below, i.e., when function meminfo returns 0).
+;
+; 1. We set the LISP-HEAP-GC-THRESHOLD to (0.5G minus used bytes) and call
+; USE-LISP-HEAP-GC-THRESHOLD so that our next GC will occur when we've used a
+; total of 0.5G.
+;
+; 2. We set the threshold back to *gc-min-threshold*= 0.125GB without calling
+; USE-LISP-HEAP-GC-THRESHOLD.
+;
+; 3. Run a computation until we use up the 0.5G and the GC is called.  Say the
+; GC reclaims 0.3GB so there's 0.2GB in use.  0.125GB more (the current
+; LISP-HEAP-GC-THRESHOLD) is allocated so the ceiling is temporarily 0.325GB.
+;
+; 4. A post-GC hook runs which again sets the threshold to (0.5G minus used
+; bytes), calls USE-LISP-HEAP-GC-THRESHOLD to raise the ceiling to 0.5G, then
+; sets the threshold back to 0.125GB, and the process repeats.
+;
+; A subtlety about this scheme is that post-GC hooks runs in a separate
+; thread from the main execution.  A possible bug is that in step 4,
+; between checking the amount of memory in use and calling
+; USE-LISP-HEAP-GC-THRESHOLD, more memory might be used up by the main
+; execution, which would set the ceiling higher than we intended.  To
+; prevent this, we initially interrupted the main thread to run step 4.
+; However, discussions with Gary Byers led us to avoid calling
+; process-interrupt, which seemed to be leading to errors.
+
+; The following settings are highly heuristic.  We arrange that gc
+; occurs at 1/8 of the physical memory size in bytes, in order to
+; leave room for the gc point to grow (as per
+; set-and-reset-gc-thresholds).  If we can determine the physical
+; memory; great; otherwise we assume that it it contains at least 4GB,
+; a reasonable assumption we think for anyone using ACL2 in 2015 or beyond.
+
+  (without-interrupts ; leave us in a sane state
+   (ccl:egc nil)
+   (ccl::add-gc-hook
+
+; We use 'set-and-reset-gc-thresholds rather than #'set-and-reset-gc-thresholds
+; to ensure that ccl::remove-gc-hook will remove the hook, since an EQ test is
+; used -- though it appears that #' would also be suitable for that purpose.
+
+    'set-and-reset-gc-thresholds
+    :post-gc)
+   (set-and-reset-gc-thresholds)))
+
+#+ccl
+(defun set-gc-strategy-builtin-egc ()
+
+; This function should undo the effects of set-gc-strategy-builtin-delay, by
+; turning on EGC and disabling the delay strategy.  The list
+; ccl::*post-gc-hook-list* should not contain the symbol
+; set-and-reset-gc-thresholds after this call succeeds.
+
+  (without-interrupts ; leave us in a sane state
+   (ccl:egc t)
+   (ccl::remove-gc-hook
+
+; It appears that remove-gc-hook is simply a no-op, rather than causing an
+; error, when the argument isn't installed as a :post-gc hook.
+
+    'set-and-reset-gc-thresholds
+    :post-gc)))
+
+#+ccl
+(defvar *gc-strategy*
+  #-hons ; else initialized with set-gc-strategy in acl2h-init
+  (progn (ccl::egc nil) t))
+
+#+ccl
+(defun start-sol-gc ()
+  (error "Start-sol-gc has been replaced by set-gc-strategy (more ~%~
+          specifically, by set-gc-strategy-builtin-delay).  See :DOC ~%~
+          set-gc-strategy."))

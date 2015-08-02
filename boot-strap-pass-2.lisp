@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -535,7 +535,11 @@
 
 (verify-termination-boot-strap occur)
 
-(verify-termination-boot-strap worse-than-builtin) ; and worse-than-or-equal-builtin
+(verify-termination-boot-strap worse-than-builtin-clocked) ; and mut-rec nest
+
+(verify-termination-boot-strap worse-than-builtin)
+
+(verify-termination-boot-strap worse-than-or-equal-builtin)
 
 (verify-termination-boot-strap ancestor-listp)
 
@@ -1242,6 +1246,20 @@
 ; feature, and will simply trust that functions marked in
 ; *system-verify-guards-alist* can be guard-verified.
 
+; The following commands will check that things are as they should be, after
+; adjusting *system-verify-guards-alist* (see comments there).  Altogether they
+; took only about two minutes on a fast machine in May 2015.
+
+;   (time nice make ACL2_DEVEL=d)
+;   cd books
+;   make clean
+;   ./build/cert.pl -j 8 --acl2 `pwd`/../saved_acl2d system/top.cert
+;   cd ..
+;   (time nice make -j 8 devel-check ACL2=`pwd`/saved_acl2d)
+
+; For details, see the comment just above the call of system-verify-guards near
+; the end of this section.
+
 ; A flaw in our approach is that user-supplied guard verifications may depend
 ; on package axioms.  Thus, we view such verifications as strong hints, rather
 ; than as ironclad guarantees that the functions can be guard-verified in
@@ -1324,24 +1342,28 @@
   '(("system/top"
      (ARGLISTP)
      (ARGLISTP1 LST)
+     (ARITIES-OKP USER-TABLE)
+     (ARITY)
      (CONS-TERM1-MV2)
      (DUMB-NEGATE-LIT)
      (FETCH-DCL-FIELD)
      (FETCH-DCL-FIELDS LST)
      (FETCH-DCL-FIELDS1 LST)
      (FETCH-DCL-FIELDS2 KWD-LIST)
+     (FIND-DOT-DOT I FULL-PATHNAME)
      (FIND-FIRST-BAD-ARG ARGS)
      (LAMBDA-KEYWORDP)
      (LEGAL-CONSTANTP1)
      (LEGAL-VARIABLE-OR-CONSTANT-NAMEP)
      (LEGAL-VARIABLEP)
+     (MERGE-SORT-TERM-ORDER L)
+     (MERGE-TERM-ORDER L2 L1)
      (META-EXTRACT-CONTEXTUAL-FACT)
      (META-EXTRACT-GLOBAL-FACT+)
      (META-EXTRACT-RW+-TERM)
-     #+acl2-legacy-doc (MISSING-FMT-ALIST-CHARS)
-     #+acl2-legacy-doc (MISSING-FMT-ALIST-CHARS1 CHAR-TO-TILDE-S-STRING-ALIST)
      (PLAUSIBLE-DCLSP LST)
      (PLAUSIBLE-DCLSP1 LST)
+     (PLIST-WORLDP-WITH-FORMALS ALIST)
      (STRIP-DCLS LST)
      (STRIP-DCLS1 LST)
      (STRIP-KEYWORD-LIST LST)
@@ -1357,7 +1379,12 @@
      (SUBST-EXPR1 TERM)
      (SUBST-EXPR1-LST ARGS)
      (SUBST-VAR FORM)
-     (SUBST-VAR-LST L))))
+     (SUBST-VAR-LST L)
+     (TERM-LIST-LISTP L)
+     (TERM-LISTP X)
+     (TERM-ORDER)
+     (TERM-ORDER1)
+     (TERMP X))))
 
 (defconst *len-system-verify-guards-alist*
   (length *system-verify-guards-alist*))
@@ -1457,13 +1484,92 @@
 ; (chk-new-verified-guards i) for each i less than the length of
 ; *system-verify-guards-alist*, in order to check that the effect of
 ; system-verify-guards is sound.  This check is performed by using `make' with
-; target devel-check, for example as follows, where <acl2d> denotes a full
-; pathname for a build of ACL2 using feature :acl2-devel (see comments above
-; for how to make such a build):
-;   (time nice make -j 8 regression-fresh devel-check ACL2=<acl2d>)
+; target devel-check, as shown near the top of this section.
+
 #+(and acl2-loop-only ; Note that make-event can't be called here in raw Lisp.
        (not acl2-devel))
 (system-verify-guards)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Support for system-events
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro system-event (event &optional (book-name '"system/top"))
+
+; (System-event E) expands to (skip-proofs E) during normal builds.  However,
+; for acl2-devel builds (see discussion under the section "Support for
+; system-verify-guards" in boot-strap-pass-2.lisp), we merely add the event to
+; a table, to be checked by Make target devel-check, which invokes function
+; system-verify-skip-proofs for that purpose.
+
+  #+acl2-devel `(table system-event-table ',event ',book-name)
+
+; It is tempting to generate a progn, where the skip-proofs is preceded by:
+
+; (value-triple ,(concatenate 'string "Verified in community book " book-name))
+
+; However, that value-triple event doesn't show up with any of :pe, :pcb, or
+; :pcb!, so we won't bother.
+
+  #-acl2-devel (declare (ignore book-name))
+  #-acl2-devel `(skip-proofs ,event))
+
+(defun system-events-fn (events book-name)
+  (declare (xargs :guard (true-listp events)))
+  (cond ((endp events) nil)
+        (t (cons `(system-event ,(car events) ,book-name)
+                 (system-events-fn (cdr events) book-name)))))
+
+(defmacro system-events (book-name &rest events)
+  (declare (xargs :guard (stringp book-name)))
+  (cons 'progn (system-events-fn events book-name)))
+
+(defun system-include-book-forms (book-names)
+  (declare (xargs :guard (true-listp book-names)))
+  (cond ((endp book-names) nil)
+        (t (cons `(include-book ,(car book-names) :dir :system)
+                 (system-include-book-forms (cdr book-names))))))
+
+(defmacro check-system-events ()
+
+; Executed by "make devel-check".
+
+  `(make-event
+    (let ((event-book-alist (table-alist 'system-event-table (w state))))
+      (cons 'progn
+            (append (system-include-book-forms
+                     (remove-duplicates (strip-cdrs event-book-alist)
+                                        :test 'equal))
+                    '((set-enforce-redundancy t))
+                    (strip-cars event-book-alist)
+                    '((value-triple :CHECK-SYSTEM-EVENTS-SUCCESS)))))))
+
+(system-events "system/termp"
+
+(defthm legal-variable-or-constant-namep-implies-symbolp
+  (implies (not (symbolp x))
+           (not (legal-variable-or-constant-namep x))))
+
+(in-theory (disable legal-variable-or-constant-namep))
+
+(defthm termp-implies-pseudo-termp
+  (implies (termp x w)
+           (pseudo-termp x))
+  :rule-classes (:rewrite :forward-chaining))
+
+(defthm term-listp-implies-pseudo-term-listp
+  (implies (term-listp x w)
+           (pseudo-term-listp x))
+  :rule-classes (:rewrite :forward-chaining))
+
+(defthm arities-okp-implies-arity
+  (implies (and (arities-okp user-table w)
+                (assoc fn user-table))
+           (equal (arity fn w) (cdr (assoc fn user-table)))))
+
+(in-theory (disable arity arities-okp))
+
+)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Memoization
@@ -1476,13 +1582,165 @@
 
   (memoize 'fchecksum-obj :stats nil :forget t)
   (memoize 'expansion-alist-pkg-names-memoize :stats nil :forget t)
-  (memoize 'worse-than-builtin
-           :stats nil
-           :condition ; Sol Swords suggestion
-           '(and (nvariablep term1)
-                 (not (fquotep term1))
-                 (nvariablep term2)
-                 (not (fquotep term2))))
+
+; Comment on memoizing a worse-than function:
+
+; In Version_7.0 and several preceding versions, we memoized a "worse-than"
+; function as follows.
+
+; (memoize 'worse-than-builtin-memoized :stats nil)
+
+; We now use a clocked version of worse-than and avoid such memoization.  See
+; worse-than-builtin-clocked for comments about potential memoization.
+; To restore such memoization, search for every occurrence of
+; "Comment on memoizing a worse-than function".
+
+; Below, we discuss some earlier experiments on memoizing worse-than-builtin or
+; the like, on two particular community books:
+
+; - books/coi/dtrees/base.lisp does not benefit from memoization of worse-than
+;   functions, and can be slowed down by it.
+
+; - books/centaur/esim/stv/stv2c/stv2c.lisp requires memoization of
+;   worse-than-builtin (or the like) to avoid stalling out in a proof.
+
+; Below we look at some results for the first of these books, using Version_7.0
+; except (where indicated below) a development version that was close to
+; Version_7.0.
+
+; Except where indicated otherwise, we memoized worse-than-builtin for
+; experiments below as follows.
+
+; (memoize 'worse-than-builtin
+;          :stats nil
+;          :condition ; Sol Swords suggestion
+;          '(and (nvariablep term1)
+;                (not (fquotep term1))
+;                (nvariablep term2)
+;                (not (fquotep term2))))
+
+; Specifically, we ran the following commands in the above book's directory.
+
+;   (ld "cert.acl2")
+;   (rebuild "base.lisp" t)
+;   (in-package "DTREE")
+;   (ubt! 'aux-domain-of-dtreemapfix)
+;   (skip-proofs (defthm lemma
+;                  (implies (set::in a (aux-domain (dtreemapfix map)))
+;                           (set::in a (aux-domain map)))))
+
+; In some cases we also ran the following command or the following two commands
+; after the commands above but before evaluating the defthm shown below:
+
+;   (acl2::unmemoize 'acl2::worse-than-builtin)
+;   #!acl2(memoize 'worse-than-builtin
+;            :stats nil
+;            :forget t
+;            :condition ; Sol Swords suggestion
+;            '(and (nvariablep term1)
+;                 (not (fquotep term1))
+;                  (nvariablep term2)
+;                  (not (fquotep term2))))
+
+; Then we submitted the following event.
+
+;   (defthm lemma2-for-aux-domain-of-dtreemapfix
+;     (implies (set::in a (aux-domain map))
+;              (set::in a (aux-domain (dtreemapfix map)))))
+
+; Times and memory use (last two reports from top) from some experiments are
+; shown below.  The key is that all runs with worse-than unmemoized were
+; significantly faster than all runs with worse-than memoized, regardless of
+; various attempts to speed up that memoization.
+
+; With GCL, out of the box:
+; Time:  122.34 seconds (prove: 122.33, print: 0.01, other: 0.00)
+; 11959 kaufmann  20   0 15.3g 2.8g  53m R  100  9.0   2:05.29 gcl-saved_acl2h
+; 11959 kaufmann  20   0 15.3g 2.8g  53m S   21  9.0   2:05.92 gcl-saved_acl2h
+
+; With GCL, after the above unmemoize form:
+; Time:  78.72 seconds (prove: 78.72, print: 0.00, other: 0.00)
+; 11934 kaufmann  20   0 13.2g 854m  53m R  100  2.7   1:18.68 gcl-saved_acl2h
+; 11934 kaufmann  20   0 13.2g 854m  53m S   98  2.7   1:21.64 gcl-saved_acl2h
+
+; With GCL, after the above sequence of unmemoize and memoize:
+; Time:  94.45 seconds (prove: 94.44, print: 0.01, other: 0.00)
+; 11995 kaufmann  20   0 13.8g 727m  53m R  100  2.3   1:35.62 gcl-saved_acl2h
+; 11995 kaufmann  20   0 13.8g 727m  53m S   62  2.3   1:37.47 gcl-saved_acl2h
+
+; With CCL, out of the box:
+; Time:  131.46 seconds (prove: 131.42, print: 0.04, other: 0.00)
+; 12044 kaufmann  20   0  512g 1.8g  17m S  100  5.6   2:10.31 lx86cl64
+; 12044 kaufmann  20   0  512g 1.8g  17m S   81  5.6   2:12.73 lx86cl64
+
+; With CCL, after the above unmemoize form:
+; Time:  89.83 seconds (prove: 89.82, print: 0.00, other: 0.00)
+; 12068 kaufmann  20   0  512g 1.3g  17m S   99  4.2   1:29.91 lx86cl64
+; 12068 kaufmann  20   0  512g 1.4g  17m S   40  4.4   1:31.12 lx86cl64
+
+; With CCL, after the above sequence of unmemoize and memoize:
+; Time:  147.46 seconds (prove: 147.44, print: 0.02, other: 0.00)
+; 12093 kaufmann  20   0  512g 804m  18m S  100  2.5   2:27.86 lx86cl64
+; 12093 kaufmann  20   0  512g 1.0g  18m S   30  3.2   2:28.77 lx86cl64
+
+; All of the above were run with EGC off (the default at the time).  Now we
+; repeat some of the above tests, but after turning EGC on as follows.
+
+; (acl2::value :q) (ccl::egc t) (acl2::lp)
+
+; With CCL, out of the box:
+; Time:  1439.72 seconds (prove: 1439.71, print: 0.01, other: 0.00)
+; 12127 kaufmann  20   0  512g 3.0g  35m S  100  9.4  23:58.68 lx86cl64
+; 12127 kaufmann  20   0  512g 3.0g  35m S   78  9.4  24:01.03 lx86cl64
+
+; With CCL, after the above unmemoize form:
+; Time:  87.27 seconds (prove: 87.26, print: 0.01, other: 0.00)
+; 12362 kaufmann  20   0  512g 407m  35m S  100  1.3   1:25.72 lx86cl64
+; 12362 kaufmann  20   0  512g 417m  35m S   93  1.3   1:28.51 lx86cl64
+
+; With CCL, after the above sequence of unmemoize and memoize:
+; Time:  135.92 seconds (prove: 135.90, print: 0.02, other: 0.00)
+; 12384 kaufmann  20   0  512g 705m  36m S    0  2.2   2:17.39 lx86cl64
+; 12384 kaufmann  20   0  512g 705m  36m S    0  2.2   2:17.40 lx86cl64
+
+; As just above, but after redefining waterfall1 in raw Lisp so that its
+; body is (prog2$ (clear-memoize-table 'worse-than-builtin) <old-body>)
+; Time:  134.38 seconds (prove: 134.37, print: 0.02, other: 0.00)
+; 12631 kaufmann  20   0  512g 691m  36m S   99  2.1   2:14.64 lx86cl64
+; 12631 kaufmann  20   0  512g 698m  36m S   38  2.2   2:15.79 lx86cl64
+
+; All of the above used ACL2 Version_7.0.  The tests below were run with a
+; development copy as of 1/21/2015 (a mere 9 days after the release of 7.0).
+; We continue to turn EGC on at the start, as above.
+
+; With CCL, after the above sequence of unmemoize and memoize:
+; Time:  135.80 seconds (prove: 135.79, print: 0.01, other: 0.00)
+; 13018 kaufmann  20   0  512g 664m  36m S   99  2.1   2:15.91 lx86cl64
+; 13018 kaufmann  20   0  512g 671m  36m S   42  2.1   2:17.16 lx86cl64
+
+; With CCL executable built without start-sol-gc (now called
+; set-gc-strategy-builtin-delay) and with EGC on, after the above sequence of
+; unmemoize and memoize:
+; Time:  136.47 seconds (prove: 136.45, print: 0.02, other: 0.00)
+; 13049 kaufmann  20   0  512g  59m  36m S   99  0.2   2:14.93 lx86cl64
+; 13049 kaufmann  20   0  512g  59m  36m S   96  0.2   2:17.81 lx86cl64
+
+; With CCL executable built without start-sol-gc (now called
+; set-gc-strategy-builtin-delay) and with EGC on, after the above unmemoize
+; form:
+; Time:  86.33 seconds (prove: 86.33, print: 0.01, other: 0.00)
+; 13178 kaufmann  20   0  512g  58m  35m S  100  0.2   1:27.18 lx86cl64
+; 13178 kaufmann  20   0  512g  58m  35m S   17  0.2   1:27.70 lx86cl64
+
+; With CCL executable built without start-sol-gc (now called
+; set-gc-strategy-builtin-delay) and with EGC on, out of the box except for
+; redefining waterfall1 in raw Lisp so that its body is (prog2$
+; (clear-memoize-table 'worse-than-builtin) <old-body>); notice that :forget
+; remains nil.
+; Time:  182.61 seconds (prove: 182.58, print: 0.02, other: 0.00)
+; 13135 kaufmann  20   0  512g 137m  17m S  100  0.4   3:02.78 lx86cl64
+; 13135 kaufmann  20   0  512g 137m  17m S   37  0.4   3:03.90 lx86cl64
+
 )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

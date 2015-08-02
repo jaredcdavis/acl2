@@ -145,7 +145,7 @@ example:</p>
    ;; declarations/docstrings must come before body, as in defun
    (declare (type integer n))
    (declare (ignorable channel))
-   \"Traditional doc string.  Boo.\"
+   \"Traditional doc string that the xdoc system ignores.\"
    (declare (xargs :normalize nil))
 
    :guard (< 17 n) ;; extended option
@@ -201,6 +201,9 @@ makes things more concise and better looking, e.g., compare:</p>
    :measure (nfix ...)
    ...)
 })
+
+<p>See @(see define-guards) for discussion of the various ways guards can be
+given, additionally.</p>
 
 <p>Some additional minor options include:</p>
 
@@ -265,7 +268,7 @@ compatibility.</dd>
 
 <h4>@('Returns') Specifications</h4>
 
-<p>See @(see returns-specifiers)</p>
+<p>See @(see returns-specifiers).</p>
 
 <h3>The Other Events</h3>
 
@@ -277,6 +280,10 @@ put.  These events will follow the function's definition, but will be submitted
 theorems that are \"about\" the function that has just been defined.  The
 events in this area will be included in the @(see xdoc), if applicable, as if
 they were part of the same @(see defsection).</p>
+
+<p>Any strings that appear after the @('///') symbol are appended to the
+@(':long') section of the @('define')'s xdoc, in between the events around
+it.</p>
 
 <p>To distinguish the @('other-events') from the @('main-stuff'), we use the
 special symbol @('///') to separate the two.</p>
@@ -294,11 +301,173 @@ some kind of separator!</p>
 
 ")
 
+(defxdoc define-guards
+  :parents (define)
+  :short "Discussion of how guards are given in @(see define)."
+  :long "<p>@(csee define) allows several different ways to specify the guards
+of a function.  The ordering of these in the final guards provided to the
+generated defun is sometimes significant (when the guards themselves have
+guards) and define's behavior in trying to address this can be quirky.</p>
+
+<p>The following example shows all (?) the ways in which guards can be specified:</p>
+
+@({
+  (define foo ((a natp)                   ;; formal guard
+               (b :type unsigned-byte)    ;; formal type
+               c d$ e f$ g
+               state)                     ;; implicit stobj
+     :guard (consp c)                     ;; guard keyword
+     :stobjs (d$)                         ;; stobjs keyword
+     (declare (xargs :guard (stringp e))) ;; guard in declare form
+     (declare (xargs :stobjs (f$)))       ;; stobjs in declare form
+     (declare (type symbol g))            ;; type in declare form
+   ...)
+ })
+
+<p>This define generates the following declarations:</p>
+
+@({
+  (DECLARE (XARGS :STOBJS (D$ F$ STATE)))         ;; implicit stobjs
+  (DECLARE (TYPE UNSIGNED-BYTE B))                ;; formal types
+  (DECLARE (XARGS :GUARD (NATP A)))               ;; formal guards
+  (DECLARE (XARGS :GUARD (STRINGP E)))            ;; declare forms
+  (DECLARE (XARGS :STOBJS (F$)))
+  (DECLARE (TYPE SYMBOL G))
+  (DECLARE (XARGS :STOBJS (D$) :GUARD (CONSP C))) ;; guard and stobj keywords
+ })
+
+<p>The reasons for this ordering are somewhat heuristic: stobj declarations
+shouldn't have any dependencies and type declarations are also unlikely to.
+Formal guards usually occur first in the define form and are also usually used
+for simple unary type constraints, so we put them next.  Declare forms may also
+include stobj and type declarations, which the guard keywords might depend on.
+Finally, the guards specified by the guard keyword come last.</p>
+
+<p>One further quirk is that we reorder the formal guards, putting those that
+only refer to one variable first.  This is because we have encountered
+situations where we want to put main formals first and auxiliary parameters
+later, but the main formals' guards depend on the auxiliary parameters.  For
+example,</p>
+
+@({
+ (define fp-add ((x1 (fp-vec-p x1 size))
+                 (x2 (fp-vec-p x2 size))
+                 (size fp-size-p))
+   ...)
+ )}
+
+<p>Since size has a unary guard @('(fp-size-p size)'), we put that first, which
+is good if @('fp-vec-p') has that as a guard on its size argument.</p>
+
+<p>It is possible to construct define forms that look like they should succeed
+but actually fail due to the heuristic reordering of guards.  If you encounter
+one of these in the wild and have a suggestion to improve the heuristic, please
+mention it.  In any case, explicitly stating your guards in order in a declare
+form is usually an adequate work-around.</p>")
+
+
+; -------------- Xargs Extraction ---------------------------------------------
+
+(defun extract-xargs-from-xguts
+  (ctx         ; Context for error messages
+   xargs-guts  ; Guts from an (xargs ...) form, i.e., (:verify-guards ... :hints ... :guard ...)
+   )
+  (b* (((when (atom xargs-guts))
+        nil)
+       ((unless (member (car xargs-guts) acl2::*xargs-keywords*))
+        (er hard? ctx "Malformed xargs: expected a valid xargs keyword but found ~x0.~%" (car xargs-guts)))
+       ((when (atom (cdr xargs-guts)))
+        (er hard? ctx "Malformed xargs: no value for ~x0?~%" (car xargs-guts))))
+    (cons (cons (first xargs-guts)
+                (second xargs-guts))
+          (extract-xargs-from-xguts ctx (cddr xargs-guts)))))
+
+#||
+ (extract-xargs-from-xguts 'foo '(:verify-guards t :guard-debug t))
+||#
+
+(defun extract-xargs-from-declguts
+  (ctx        ; Context for error messages
+   declguts   ; Guts from a single (declare ...) form, i.e., ((xargs :verify-guards ...) (ignore ...) ...)
+   )
+  (b* (((when (atom declguts))
+        nil)
+       (decl1 (car declguts))
+       ((unless (and (consp decl1)
+                     (eq (car decl1) 'xargs)))
+        (extract-xargs-from-declguts ctx (cdr declguts)))
+       (xguts (cdr decl1)))
+    (append (extract-xargs-from-xguts ctx xguts)
+            (extract-xargs-from-declguts ctx (cdr declguts)))))
+
+#||
+ (extract-xargs-from-declguts 'foo
+                              '((xargs :verify-guards t)
+                                (ignore foo)
+                                (type integer foo)
+                                (xargs :guard-debug t :measure-debug t)
+                                (ignorable bar)))
+||#
+
+(defun extract-xargs-from-traditional-decls/docs
+  (ctx   ; Context for error messages
+   decls ; List of traditional (declare ...) forms or doc strings
+   )
+  ;; Returns extracted xargs-alist
+  (b* (((when (atom decls))
+        nil)
+       (decl1 (car decls))
+       ((unless (and (consp decl1)
+                     (eq (car decl1) 'declare)))
+        (extract-xargs-from-traditional-decls/docs ctx (cdr decls)))
+       (declguts (cdr decl1)))
+    (append (extract-xargs-from-declguts ctx declguts)
+            (extract-xargs-from-traditional-decls/docs ctx (cdr decls)))))
+
+#||
+ (extract-xargs-from-traditional-decls/docs 'foo
+                                            '("traditional doc string"
+                                              (declare (xargs :guard t :hints 5))
+                                              (declare)
+                                              (declare (ignore x))
+                                              (declare (xargs :verify-guards t)
+                                                       (type integer x)
+                                                       (xargs :measure-debug t))))
+||#
+
+(defun append-hints-from-xargs-alist (xargs-alist)
+  ;; This is an unusual function that is to support using either top-level
+  ;; :hints or (declare (xargs :hints ...)) forms when using the t-proof
+  ;; option.
+  ;;
+  ;; To understand what we are doing, note that ACL2 permits you to write
+  ;; crazy looking things like this:
+  ;;
+  ;; (defun f1 (x)
+  ;;   (declare (xargs :measure (consp x))
+  ;;            (xargs :hints(("Goal" :in-theory (cw "HINT 1~%"))))
+  ;;            (xargs :hints(("Goal" :in-theory (cw "HINT 2~%")))))
+  ;;   (if (zp x)
+  ;;       0
+  ;;     (+ 1 (f (cdr x)))))
+  ;;
+  ;; Which seem to have the same effect as just appending all the different
+  ;; hints together.  The idea here is to try to support this madness as
+  ;; transparently as possible by collecting the xargs and then appending them
+  ;; together.
+  (b* (((when (atom xargs-alist))
+        nil)
+       ((cons key value) (car xargs-alist))
+       ((when (eq key :hints))
+        (append value (append-hints-from-xargs-alist (cdr xargs-alist)))))
+    (append-hints-from-xargs-alist (cdr xargs-alist))))
+
 
 ; -------------- Main Stuff Parsing -------------------------------------------
 
+
 (defun get-xargs-from-kwd-alist (kwd-alist)
-  ;; Munges the xargs stuff together into a form suitable for a declare.
+  ;; Munges the top-level xargs stuff together into a form suitable for a declare.
   (declare (xargs :guard (alistp kwd-alist)))
   (b* (((when (atom kwd-alist))
         nil)
@@ -795,6 +964,35 @@ some kind of separator!</p>
     (cons event1
           (post-hook-make-events (cdr hook-specs) hooks-alist guts))))
 
+(defun sort-formal-guards-aux (guards wrld state-vars)
+  ;; Returns two lists: simple and complex.  Simple is any guards that we can
+  ;; translate and that have at most 1 variable.  Complex is everything else.
+  ;; Both simple and complex are in the order they were encountered.
+  (b* (((when (atom guards))
+        (mv nil nil))
+       (guard1 (car guards))
+       ((mv err transguard)
+        (acl2::translate-cmp guard1
+                             '(nil) ;; returns single non-stobj
+                             nil    ;; execution, not logic-modep
+                             nil    ;; known-stobjs -- probably don't need them?
+                             'sort-formal-guards
+                             wrld state-vars))
+       ((mv rest-simple rest-complex)
+        (sort-formal-guards-aux (cdr guards) wrld state-vars))
+       ((when (or err
+                  (consp (cdr (all-vars transguard)))))
+        (mv rest-simple
+            (cons guard1 rest-complex))))
+    (mv (cons guard1 rest-simple)
+        rest-complex)))
+
+(defun sort-formal-guards (guards wrld)
+  (b* (((mv simple complex)
+        (sort-formal-guards-aux guards wrld (acl2::default-state-vars nil))))
+    (append simple complex)))
+    
+
 
 (defun parse-define
   (name            ; User-level name, e.g., FOO
@@ -818,7 +1016,6 @@ some kind of separator!</p>
 
        (non-exec   (getarg :non-executable nil      kwd-alist))
        (returns    (getarg :returns        nil      kwd-alist))
-       (enabled-p  (getarg :enabled        nil      kwd-alist))
        (inline     (getarg :inline         :default kwd-alist))
        (prepwork   (getarg :prepwork       nil      kwd-alist))
 
@@ -826,17 +1023,27 @@ some kind of separator!</p>
         (raise "Error in ~x0: expected :prepwork to be a true-listp, but found ~x1."
                name prepwork))
 
-       (t-proof    (getarg :t-proof        nil kwd-alist))
-       ; If you can think of a good extension for t-proof, you may relax the
-       ; requirement of booleanp while preserving the old behavior for t and
-       ; nil. It would be nice if you would invent a syntactically generalisable
-       ; extension (s.t. some syntax remains invalid)
+       (t-proof (getarg :t-proof nil kwd-alist))
        ((unless (booleanp t-proof))
         (raise "Error in ~x0: expected :t-proof to be a booleanp, but found ~x1."
                name prepwork))
        ((unless (member inline '(:default t nil)))
         (raise "Error in ~x0: expected :inline to be T, NIL, or :DEFAULT, but found ~x1."
                name inline))
+
+       (embedded-xargs-alist (extract-xargs-from-traditional-decls/docs (list 'define name)
+                                                                        traditional-decls/docs))
+       (t-hints (and t-proof
+                     ;; This order of this append is meant to match the order
+                     ;; of the hints given to define in the case of no t-proof,
+                     ;; but where both :hints and (xargs :hints ...) are given
+                     ;; simultaneously.  The top-level :hints get processed
+                     ;; LAST in that case, as described below.
+                     (append
+                      ;; All :hints found anywhere in (declare (xargs ...)) forms
+                      (append-hints-from-xargs-alist embedded-xargs-alist)
+                      ;; Any top-level :hints
+                      (getarg :hints nil kwd-alist))))
 
        (need-macrop (or (not (eq inline :default))
                         (has-macro-args raw-formals)))
@@ -882,21 +1089,31 @@ some kind of separator!</p>
                                    ,extended-body)
                         extended-body))
 
-       (xargs         (get-xargs-from-kwd-alist (remove-from-alist ':hints kwd-alist)))
-       (t-hints       (getarg :hints nil kwd-alist))
+       (xargs         (get-xargs-from-kwd-alist kwd-alist))
+
+       ;; BOZO packn??  Probably should use the function's package instead.
        (t-proof-name  (if t-proof (ACL2::packn (LIST name-fn '|-| t-proof)) nil))
-       (new-hint      (if t-proof `('(:by ,t-proof-name)) t-hints))
-       (xargs         (if new-hint (LIST* ':hints new-hint xargs) xargs))
 
        (returnspecs   (parse-returnspecs name returns world))
-       (defun-sym     (if enabled-p 'defun 'defund))
        (main-def
-        `(,defun-sym ,name-fn ,formal-names
+        `(;; Historically we used defund unless the function was enabled-p.
+          ;; But this ran afoul of Issue 464 for DEFINE forms that were
+          ;; embedded in DEFINES.  It seems simpler and easier to just handle
+          ;; the enabling or disabling later, since DEFUND isn't really
+          ;; anything special.  So, we now just always use DEFUN instead.
+          defun
+          ,name-fn ,formal-names
 
 ; Subtle: this order isn't what we always used, but Sol ran into some problems
 ; where, e.g., traditional type declarations weren't coming before the guards
 ; from formals, and therefore the guards wouldn't verify.  We now try to use an
 ; order that seems like it is most probably the one you want.
+
+; 0. If using t-proof, put its :by hint here to try to make sure it happens
+; first.
+
+           ,@(and t-proof
+                  `((declare (xargs :hints ('(:by ,t-proof-name))))))
 
 ; 1. Stobj names, since they give us stobj-p guards, which may be useful and
 ; probably can't depend on anything else
@@ -922,7 +1139,10 @@ some kind of separator!</p>
                    ((atom (cdr formal-guards))
                     `((declare (xargs :guard ,(car formal-guards)))))
                    (t
-                    `((declare (xargs :guard (and . ,formal-guards))))))
+                    ;; Sort the guards by putting those that we can determine
+                    ;; to be dependent on only 1 variable first.
+                    (b* ((sorted-formal-guards (sort-formal-guards formal-guards world)))
+                      `((declare (xargs :guard (and . ,sorted-formal-guards)))))))
 
 ; 4. This is kind of arbitrary.  We put the traditional decls before the top-level
 ; xargs because it seems rather unlikely that someone would write
@@ -986,7 +1206,7 @@ some kind of separator!</p>
 
 (defun events-from-guts (guts world)
   (b* (((defguts guts) guts)
-
+       (enabled-p  (getarg :enabled        nil guts.kwd-alist))
        (prepwork   (getarg :prepwork       nil guts.kwd-alist))
        (short      (getarg :short          nil guts.kwd-alist))
        (long       (getarg :long           nil guts.kwd-alist))
@@ -1035,7 +1255,27 @@ some kind of separator!</p>
          ,(extend-define-guts-alist guts)
          (set-define-current-function ,guts.name)
 
+         ,@(and guts.returnspecs
+                `((make-event
+                   (make-define-ret-patbinder ',guts (w state)))))
+
          (local
+          ;; [Jared] Previously, when we sometimes used DEFUND and DEFUN, this
+          ;; was a sensible way to ensure that the function was always enabled
+          ;; during the processing of the /// section.  You might think (and I
+          ;; originally DID think) that, now that we always use DEFUN, that
+          ;; this would be unnecessary.  However, in rare cases, for instance,
+          ;; if we are redundantly DEFINEing a function that was originally
+          ;; DEFINEd before now, the function may NOT be enabled even though we
+          ;; have introduced it with DEFUN, because you can do something like
+          ;;
+          ;;    (defun foo ...)
+          ;;    (in-theory (disable foo))
+          ;;    (defun foo ...) ;; redundantly
+          ;;
+          ;; And at this point FOO is still disabled.  So, this is a bummer
+          ;; because enabling/disabling is expensive, but at least we can keep
+          ;; this local...
           (make-event
            (if (logic-mode-p ',guts.name-fn (w state))
                '(in-theory (enable ,guts.name))
@@ -1056,15 +1296,23 @@ some kind of separator!</p>
          ,@(and hook-specs
                 `((value-triple (cw "; Running post-define hooks.~%"))
                   .
-                  ,(post-hook-make-events hook-specs hooks-alist guts))))
+                  ,(post-hook-make-events hook-specs hooks-alist guts)))
+
+         ,@(if prognp
+               `((set-define-current-function nil))
+             nil)
+
+         ,@(if enabled-p
+               nil
+             `((make-event
+                (if (logic-mode-p ',guts.name-fn (w state))
+                    '(in-theory (disable ,guts.name))
+                  '(value-triple :invisible))))))
+
 
        ;; Now that the section has been submitted, its xdoc exists, so we can
        ;; do the doc generation and prepend it to the xdoc.
        ,(add-signature-from-guts guts)
-
-       ,@(if prognp
-             `((set-define-current-function nil))
-           nil)
 
        (make-event (list 'value-triple
                          (if (eql ,start-max-absolute-event-number
@@ -1298,3 +1546,451 @@ specifiers is ignored.  You should usually put such documentation into the
 
 (defmacro more-returns (&rest args)
   `(make-event (more-returns-fn ',args (w state))))
+
+
+
+
+; ------------------------------------------------------------------------
+;
+;  Defret -- looks like a defthm, but shares some features with :returns/more-returns
+;
+; ------------------------------------------------------------------------
+
+(defxdoc defret
+  :parents (define returns-specifiers)
+  :short "Prove additional theorems about a @(see define)d
+function, implicitly binding the return variables."
+
+  :long "<p>@('defret') is basically defthm, but has a few extra features.</p>
+
+<p>The main feature is that it automatically binds the declared return values
+for a function, which defaults to the most recent function created using @(see
+define).</p>
+
+<p>It also supports the @(':hyp') keyword similar to define's @(see
+returns-specifiers).</p>
+
+<p>Syntax:</p>
+
+<p>Suppose we have a function created using define with the following
+signature:</p>
+
+@({
+ (define my-function ((a natp)
+                      (b stringp)
+                      (c true-listp))
+   :returns (mv (d pseudo-termp)
+                (e booleanp)
+                (f (tuplep 3 f)))
+   ...)
+})
+
+<p>(The guards and return types aren't important for our purposes, just the
+names.)</p>
+
+<p>A @('defret') form like this:</p>
+
+@({
+  (defret a-theorem-about-my-function
+     :hyp (something-about a b c)
+     :pre-bind ((q (foo a b c)))
+     (implies (not e)
+              (and (consp d)
+                   (symbolp (car d))
+                   (equal (second d) q)))
+     :fn my-function   ;; defaults to the most recent define
+     :hints ...
+     :rule-classes ...)
+ })
+
+<p>will then expand to this:</p>
+
+@({
+ (defthm a-theorem-about-my-function
+   (implies (something-about a b c)
+      (b* ((q (foo a b c))
+           ((mv ?d ?e ?f) (my-function a b c)))
+        (implies (not e)
+                 (and (consp d)
+                      (symbolp (car d))
+                      (equal (second d) q)))))
+   :hints ...
+   :rule-classes ...)
+})
+
+<p>The @(':hyp :guard') and @(':hyp :fguard') features of @(see
+returns-specifiers) are also supported.</p>
+
+<p>@('Defret') does <i>not</i> support the feature where a single function name
+specifies a type of a return value.  Perhaps we could support it for functions
+with a single return value.</p>
+
+<p>One limitation of @('defret') is that the conclusion term can't refer to a
+formal if there is a return value that has the same name.  To work around this,
+the @(':pre-bind') argument accepts a list of @(see b*) bindings that occur
+before the binding of the return values.  You may also just want to not share
+names between your formals and returns.</p>")
+
+(defun defret-fn (name args world)
+  (b* ((__function__ 'defret)
+       ((mv kwd-alist args)
+        (extract-keywords `(defret ,name) '(:hyp :fn :hints :rule-classes :pre-bind)
+                          args nil))
+       ((unless (consp args))
+        (raise "No body"))
+       ((when (cdr args))
+        (raise "Extra junk: ~x0" (cdr args)))
+       (concl-term (car args))
+       (fn (let ((look (assoc :fn kwd-alist)))
+             (if look (cdr look) (get-define-current-function world))))
+       (guts (cdr (assoc fn (get-define-guts-alist world))))
+       ((unless guts)
+        (raise "No define-guts for ~x0" fn))
+       ((defguts guts) guts)
+       ((unless guts.returnspecs)
+        (raise "No return names provided for ~x0" fn))
+       (names (returnspeclist->names guts.returnspecs))
+       (ign-names (make-symbols-ignorable names))
+       (formals (look-up-formals guts.name-fn world))
+       (binding `((,(if (consp (cdr ign-names))
+                        `(mv . ,ign-names)
+                      (car ign-names))
+                   (,guts.name-fn . ,formals))))
+       (hyp? (assoc :hyp kwd-alist))
+       (hyp (cond ((eq (cdr hyp?) :guard) (fancy-hyp (look-up-guard guts.name-fn world)))
+                  ((eq (cdr hyp?) :fguard) (fancy-force-hyp (look-up-guard guts.name-fn world)))
+                  (t (cdr hyp?))))
+       (rule-classes? (assoc :rule-classes kwd-alist))
+       (hints? (assoc :hints kwd-alist))
+       (pre-bind (cdr (assoc :pre-bind kwd-alist)))
+       (concl `(b* (,@pre-bind ,@binding) ,concl-term))
+       (thm (if hyp?
+                `(implies ,hyp ,concl)
+              concl)))
+    `(defthm ,name
+       ,thm
+       ,@(and hints?        `(:hints ,(cdr hints?)))
+       ,@(and rule-classes? `(:rule-classes ,(cdr rule-classes?))))))
+
+
+(defmacro defret (name &rest args)
+  `(make-event (defret-fn ',name ',args (w state))))
+
+
+
+#!acl2
+(def-b*-binder ret
+  :parents (b*-binders std::returns-specifiers)
+  :short "@(see b*) binder for named return values from functions."
+
+  :long "<box><p>BETA.  Interface may change.</p></box>
+
+<p>@('ret') is a very fancy @(see b*) that can be used to treat the return
+values from a function as a single bundle which you can then access by their
+names.</p>
+
+
+<h3>Introductory Example</h3>
+
+<p>Here is a function, written with @(see define), that returns two values.</p>
+
+@({
+    (define mathstuff ((a natp)
+                       (b natp))
+      :returns (mv (sum natp)
+                   (prod natp))
+      (b* ((a (nfix a))
+           (b (nfix b)))
+        (mv (+ a b)
+            (* a b))))
+})
+
+<p>Normally, to call this function from @(see b*), you might use an @(see mv)
+form like this:</p>
+
+@({
+     (b* (((mv mysum myprod) (mathstuff 3 4)))      ;; (:sum 7 :prod 12)
+       (list :sum  mysum
+             :prod myprod))
+})
+
+<p>Using the @('ret') binder, you might instead write:</p>
+
+@({
+     (b* (((ret mystuff) (mathstuff 3 4)))          ;; (:sum 7 :prod 12)
+       (list :sum  mystuff.sum
+             :prod mystuff.prod))
+})
+
+<p>In other words, the @('ret') binder lets you to treat all of the return
+values for a function as if they were a single aggregate and then refer to the
+individually returned values using a @(see defaggregate)- or C-like
+@('foo.bar') style syntax.</p>
+
+
+<h3>Mechanics</h3>
+
+<p>To a first approximation, the @('ret') binder just expands into an
+equivalent @(see mv) binder that sets up names like @('mystuff.sum') and
+@('mystuff.prod').  However, there are (unfortunately) many subtleties that you
+should be aware of.</p>
+
+
+<h4>Finding the function</h4>
+
+<p>To be able to know the names of the function's return values, the @('ret')
+binder obviously needs to \"know\" what function is being invoked.</p>
+
+<p>It does this, completely barbarically, by just looking at the form on the
+right hand side of the binder, even before any macro expansion.  For instance,
+if we write a binding form like this:</p>
+
+@({
+      ((ret myreturn) (myfn ...))
+})
+
+<p>Then the @('ret') binder will look at the right-hand side and sees that it
+is a call of @('myfn').</p>
+
+<p>Note that it is easy to write right-hand sides that @('ret') <b>does not
+understand</b>.  For instance, if you just put a simple identity functions or
+macro like @(see time$) around your function call, e.g.,</p>
+
+@({
+      ((ret myreturn) (time$ (myfn ...)))
+})
+
+<p>then the @('ret') binder will not understand that you are calling @('myfn')
+and macroexpansion will fail.  Similarly, you can't use @(see let)-bindings or
+similar on the right-hand side.</p>
+
+
+<h4>Introducing the bindings</h4>
+
+<p>Once we know that the function being invoked is @('myfn'), the @('ret')
+binder itself expands into a call of @('patbind-myfn-ret').  Normally, this
+should be a function that is introduced for you automatically at @(see define)
+time.</p>
+
+<p>Because the @('patbind') function is constructed at @('define') time, it
+implicitly \"knows\" the names of the return values for your functions.  It
+also \"knows\" which of your function's return values are @(see acl2::stobj)s
+and how any such stobjs correspond to the arguments of your function.</p>
+
+<p>Given all of this information, it is possible to construct a suitable @(see
+mv) binding that will bind:</p>
+
+<ul>
+
+<li>Each non-stobj return value to a new symbol with a dotted name like
+@('myreturn.foo'), @('myreturn.bar'), or similar; and</li>
+
+<li>Each output stobj to the correct stobj name.</li>
+
+</ul>
+
+<p>Aside from some technical details regarding congruent stobjs (see @(see
+acl2::stobj)) this is almost straightforward.  However, there are a few more
+details that you should understand...</p>
+
+
+<h5>Ignorability</h5>
+
+<p>Consider our @('mathstuff') example.  We might imagine that a binding such
+as:</p>
+
+@({
+     ((ret mystuff) (mathstuff 3 4))
+})
+
+<p>would be expanded into:</p>
+
+@({
+     ((mv mystuff.sum mystuff.prod) (mathstuff 3 4))
+})
+
+<p>This works fine if we use all of the return values, but if we (say) don't
+need @('mystuff.prod'), then we'd get errors unless we went out of our way to
+use something like @(see set-ignore-ok).  To avoid this, the @('ret') binders
+will currently declare <b>all return values as ignorable.</b> We may eventually
+revisit this decision and require some kind of more strict checking here.</p>
+
+
+<h5>Package Naming</h5>
+
+<p>What @(see package) does @('mystuff.sum') belong in?  The most obvious
+candidate is to @(see intern) it into the package of the new variable, i.e.,
+@('mystuff').  Unfortunately this can sometimes be very confusing.  For
+instance, consider a code fragment like this:</p>
+
+@({
+     (b* ((fn         (get-function ...))
+          ((ret args) (extend-args initial-args ...)))
+       (make-answer :fn       fn
+                    :args     args.extensions
+                    :size     args.size
+                    :warnings args.warnings))
+})
+
+<p>The problem here is that @('args') is a symbol in the @(see *acl2-exports*)
+list.  So, if you submit the above code in a typical package, @('foo'), where
+you have imported the symbols from @('*acl2-exports*'), then @('args') is in
+the @('acl2') package, but symbols like @('args.extensions'), which are
+presumably not imported, will instead be in the @('foo') package.</p>
+
+<p>To avoid this confusion, we scan the form for a symbol with the right name,
+regardless of its package.  This scan is done before macros are expanded, so it
+may not work with macros that generate names like @('args.extensions').</p>"
+  :decls
+  ((declare (xargs :guard (and (eql (len forms) 1)
+                               (consp (car forms))
+                               (symbolp (caar forms))))))
+  :body
+  (b* ((fncall (car forms))
+       (fnname (car fncall)))
+    `(,(intern-in-package-of-symbol
+        (concatenate 'string "PATBIND-" (symbol-name fnname) "-RET")
+        fnname)
+      ,args ,forms ,rest-expr)))
+
+(defun find-symbols-with-name (name x acc)
+  (if (atom x)
+      (if (and (symbolp x)
+               (equal (symbol-name x) name))
+          (cons x acc)
+        acc)
+    (find-symbols-with-name
+     name (car x) (find-symbols-with-name name (cdr x) acc))))
+
+(defun find-symbol-of-name-in-expr (name rest-expr)
+  (let* ((matches (find-symbols-with-name name rest-expr nil))
+         (matches (remove-duplicates matches)))
+    (cond ((atom matches)
+           ;; Found no symbols with this name.  Warn?
+           (intern$ name "ACL2"))
+          ((consp (cdr matches))
+           (er hard? 'patbind-ret
+               "Found multiple different symbols with the same name: ~x0" matches))
+          (t
+           ;; OK good, found just one symbol with this name, use it.
+           (car matches)))))
+
+
+
+(defun match-define-keyword-formals-with-actuals
+  (formals ;; macro formals without any leading &key stuff, ex: (foo (bar 't) baz)
+   actuals ;; corresponding actuals, ex: '(:foo 1 :baz 3)
+   )
+  (b* (((when (atom formals)) nil)
+       (formal1 (car formals))
+       ((mv name default name-p)
+        (cond ((atom formal1) (mv formal1 nil nil))
+              ((atom (cdr formal1)) (mv (car formal1) nil nil))
+              (t (mv (first formal1)
+                     (acl2::unquote (second formal1))
+                     (third formal1)))))
+       (key (intern$ (symbol-name name) "KEYWORD"))
+       (lookup (assoc-keyword key actuals))
+       (val (if lookup (cadr lookup) default))
+       (rest (match-define-keyword-formals-with-actuals (cdr formals) actuals)))
+    (cons (cons name val)
+          (if name-p
+              (cons (cons name-p (consp lookup)) rest)
+            rest))))
+
+(defun match-define-optional-formals-with-actuals
+  (formals ;; macro formals without any leading &optional stuff, ex: (foo (bar 't) baz)
+   actuals ;; corresponding actuals, ex: '(:foo 1 :baz 3)
+   )
+  (b* (((when (atom formals)) nil)
+       (formal1 (car formals))
+       ((when (eq formal1 '&key))
+        (match-define-keyword-formals-with-actuals (cdr formals) actuals))
+       ((mv name default name-p)
+        (cond ((atom formal1) (mv formal1 nil nil))
+              ((atom (cdr formal1)) (mv (car formal1) nil nil))
+              (t (mv (first formal1)
+                     (acl2::unquote (second formal1))
+                     (third formal1)))))
+       (val (if (consp actuals) (car actuals) default))
+       (rest (match-define-optional-formals-with-actuals (cdr formals) (cdr actuals))))
+    (cons (cons name val)
+          (if name-p
+              (cons (cons name-p (consp actuals)) rest)
+            rest))))
+
+(defun match-define-formals-with-actuals
+  (formals ;; macro formals
+   actuals ;; corresponding actuals
+   ctx)
+  (b* (((when (atom formals)) nil)
+       (name (car formals))
+       ((when (eq name '&key))
+        (match-define-keyword-formals-with-actuals (cdr formals) actuals))
+       ((when (eq name '&optional))
+        (match-define-optional-formals-with-actuals (cdr formals) actuals))
+       ((when (atom actuals))
+        (er hard? 'match-define-optional-formals-with-actuals
+            "~x0: Not enough arguments" ctx))
+       (val (car actuals))
+       (rest (match-define-formals-with-actuals (cdr formals) (cdr actuals) ctx)))
+    (cons (cons name val) rest)))
+
+
+(defun patbind-ret-mv-names
+  (rets            ;; (return-name . corresponding stobjs-out entry) list
+   varname         ;; NIL for ((ret) ...), or varname for ((ret varname) ...)
+   formals/actuals ;; see below
+   rest-expr       ;; rest-expr from the b*
+   )
+  (b* (((when (atom rets)) nil)
+       ((cons retname stobj) (car rets))
+       ((when stobj)
+        ;; The return name might not be the stobj name, and the stobj name
+        ;; might not be the one in use due to congruent stobjs.  So we parse
+        ;; the function call (elsewhere) and pair up the formals with actual
+        ;; actuals so that we can look up what stobj was passed in and bind
+        ;; that.
+        (cons (cdr (assoc stobj formals/actuals))
+              (patbind-ret-mv-names (cdr rets) varname formals/actuals rest-expr)))
+       (name (if varname
+                 (concatenate 'string (symbol-name varname) "." (symbol-name retname))
+               (symbol-name retname)))
+       (symbol (find-symbol-of-name-in-expr name rest-expr)))
+    (cons symbol
+          (patbind-ret-mv-names (cdr rets) varname formals/actuals rest-expr))))
+
+
+(defun patbind-ret-fn (rets macro-formals args forms rest-expr)
+  (b* ((varname (car args))
+       (call (car forms))
+       (formals/actuals
+        (match-define-formals-with-actuals macro-formals (cdr call) (car forms)))
+       (mv-names (patbind-ret-mv-names rets varname formals/actuals rest-expr)))
+    (if (< 1 (len mv-names))
+        `(mv-let ,mv-names ,(car forms)
+           (declare (ignorable . ,mv-names))
+           ,rest-expr)
+      `(let ((,(car mv-names) ,(car forms)))
+         (declare (ignorable . ,mv-names))
+         ,rest-expr))))
+
+(defun make-define-ret-patbinder (guts world)
+  (declare (xargs :mode :program))
+  (b* (((defguts guts))
+       (name (intern-in-package-of-symbol
+              (concatenate 'string (symbol-name guts.name) "-RET")
+              guts.name)))
+    `(def-b*-binder ,name
+       :parents nil
+       :short nil
+       :long nil
+       :body
+       (patbind-ret-fn ',(pairlis$ (returnspeclist->names guts.returnspecs)
+                                   (fgetprop guts.name-fn 'acl2::stobjs-out
+                                             nil world))
+                       ',(or (fgetprop guts.name 'acl2::macro-args
+                                       nil world)
+                             (fgetprop guts.name-fn 'acl2::formals
+                                       nil world))
+                       acl2::args acl2::forms acl2::rest-expr))))

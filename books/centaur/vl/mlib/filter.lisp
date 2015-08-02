@@ -99,7 +99,7 @@ names.</p>")
     `(encapsulate ()
 
        (define ,fast-keep-fn ((names string-listp)
-                              (fal   (equal fal (make-lookup-alist names)))
+                              (fal   (set-equiv (alist-keys fal) (list-fix names)))
                               (x     ,list-p)
                               nrev)
          :parents (,keep-fn)
@@ -189,7 +189,7 @@ names.</p>")
 
 
        (define ,fast-del-fn ((names string-listp)
-                             (fal   (equal fal (make-lookup-alist names)))
+                             (fal   (set-equiv (alist-keys fal) (list-fix names)))
                              (x     ,list-p)
                              nrev)
          :parents (,del-fn)
@@ -229,7 +229,7 @@ names.</p>")
               :exec
               (b* (((when (atom names))
                     ;; Stupid optimization
-                    (redundant-list-fix x))
+                    (list-fix x))
                    ((when (atom x))
                     ;; Stupid optimization
                     nil)
@@ -279,7 +279,7 @@ names.</p>")
 
 
        (define ,fast-fn ((names string-listp)
-                         (fal   (equal fal (make-lookup-alist names)))
+                         (fal   (set-equiv (alist-keys fal) (list-fix names)))
                          (x     ,list-p)
                          (nrev  "Matches")
                          (nrev2 "Non-Matches"))
@@ -314,7 +314,7 @@ function enabled and would think it odd to ever prove a theorem about it.</p>" f
               :exec
               (b* (((when (atom names))
                     ;; Stupid optimization
-                    (mv nil (redundant-list-fix x)))
+                    (mv nil (list-fix x)))
                    ((when (atom x))
                     ;; Stupid optimization
                     (mv nil nil))
@@ -446,14 +446,14 @@ function enabled and would think it odd to ever prove a theorem about it.</p>" f
 
 (define vl-filter-modinsts-by-modname+ ((names string-listp)
                                         (x     vl-modinstlist-p)
-                                        (fal   (equal fal (make-lookup-alist names))))
+                                        (fal   (set-equiv (alist-keys fal) (list-fix names))))
   :parents (filtering-by-name vl-filter-modinsts-by-modname)
   :short "Same as @(see vl-filter-modinsts-by-modname), but requires that the
           fast alist of @('names') be provided instead of recomputing it."
   :enabled t
   (mbe :logic (vl-filter-modinsts-by-modname names x)
        :exec (b* (((when (atom names))
-                   (mv nil (redundant-list-fix x)))
+                   (mv nil (list-fix x)))
                   ((when (atom x)) (mv nil nil))
                   ((local-stobjs nrev nrev2)
                    (mv yes no nrev nrev2))

@@ -1,5 +1,5 @@
 # VL Verilog Toolkit
-# Copyright (C) 2008-2014 Centaur Technology
+# Copyright (C) 2008-2015 Centaur Technology
 #
 # Contact:
 #   Centaur Technology Formal Verification Group
@@ -166,6 +166,11 @@ normal("cond_normal4")
 fuss("cond_warn1")
 fuss("cond_warn2")
 fuss("cond_warn3")
+
+
+normal("supp_normal1")
+normal("supp_normal2")
+normal("supp_normal3")
 
 test_passed()
 

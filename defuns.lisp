@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -384,8 +384,7 @@
   (cond ((variablep term) nil)
         ((fquotep term) nil)
         ((flambda-applicationp term)
-         (or (member-eq (ffn-symb term) fns)
-             (ffnnamesp-eq fns (lambda-body (ffn-symb term)))
+         (or (ffnnamesp-eq fns (lambda-body (ffn-symb term)))
              (ffnnamesp-eq-lst fns (fargs term))))
         ((member-eq (ffn-symb term) fns) t)
         (t (ffnnamesp-eq-lst fns (fargs term)))))
@@ -1087,7 +1086,7 @@
              (mv-let
               (erp ttree state)
               (prove (termify-clause-set cl-set)
-                     (make-pspv ens wrld
+                     (make-pspv ens wrld state
                                 :displayed-goal displayed-goal
                                 :otf-flg otf-flg)
                      hints ens wrld ctx state)
@@ -1162,7 +1161,7 @@
 
   (cond ((null measure-alist) wrld)
         (t (putprop-justification-lst
-            (cdr measure-alist) (cdr subset-lst) mp rel ruler-extenders-lst
+            (cdr measure-alist) (cdr subset-lst) mp rel (cdr ruler-extenders-lst)
             subversive-p
             (putprop (caar measure-alist)
                      'justification
@@ -4746,7 +4745,7 @@
            (t
             (mv-let (erp ttree state)
                     (prove (termify-clause-set cl-set)
-                           (make-pspv ens wrld
+                           (make-pspv ens wrld state
                                       :displayed-goal displayed-goal
                                       :otf-flg otf-flg)
                            hints
@@ -5079,11 +5078,6 @@
                         hints
                         (default-hints wrld)
                         ctx wrld state)))
-              (doc-pair (translate-doc nil doc ctx state))
-
-; Doc-pair is guaranteed to be nil because of the nil name supplied to
-; translate-doc.
-
               (pair (verify-guards-fn1 names hints otf-flg guard-debug ctx
                                        state)))
 
@@ -5250,10 +5244,11 @@
 ; stobj manipulation) when making *1* calls of :logic mode functions.  There is
 ; actually one other case that all-fnnames1-exec ignores function symbols in
 ; the call tree: it does not collect function symbol F from (ec-call (F ...)).
-; But in this case, *1*F is called, and if there is a non-nil 'invariant-risk
-; property for F, then we trust that oneify has laid down suitable *1* code for
-; F to preserve invariants, so there is no risk to bypassing guards in the
-; evaluation of bodies.
+; But in this case, *1*F or *1*F$INLINE is called, and if there is a non-nil
+; 'invariant-risk property for F or F$INLINE (respectively), then we trust that
+; oneify has laid down suitable *1* code for F (or F$INLINE) to preserve
+; invariants, so there is no risk to bypassing guards in the evaluation of
+; bodies.
 
   (cond (non-executablep wrld)
         (t (put-invariant-risk1 names
@@ -5277,6 +5272,7 @@
 ; Like defuns-fn0, this function returns a pair consisting of the new world and
 ; a tag-tree recording the proofs that were done.
 
+  (declare (ignore docs pairs))
   (let* ((boot-strap-flg (global-val 'boot-strap-flg wrld))
          (wrld0 (cond (non-executablep (putprop-x-lst1 names 'non-executablep
                                                        non-executablep
@@ -5289,14 +5285,12 @@
                  names
                  bodies
                  non-executablep
-                 (update-doc-database-lst
-                  names docs pairs
+                 (putprop-x-lst2-unless
+                  names 'guard guards *t*
                   (putprop-x-lst2-unless
-                   names 'guard guards *t*
-                   (putprop-x-lst2-unless
-                    names 'split-types-term split-types-terms *t*
-                    (putprop-x-lst1
-                     names 'symbol-class :program wrld1)))))))
+                   names 'split-types-term split-types-terms *t*
+                   (putprop-x-lst1
+                    names 'symbol-class :program wrld1))))))
     (value (cons wrld2 nil))))
 
 ; Now we develop the output for the defun event.
@@ -7532,7 +7526,6 @@
                                          (all-programp names wrld))))
     (er-let*
      ((wrld1 (chk-just-new-names names 'function rc ctx wrld state))
-      (doc-pairs (translate-doc-lst names docs ctx state))
       (wrld2 (update-w
               big-mutrec
               (store-stobjs-ins
@@ -7795,7 +7788,7 @@
                                    names
                                    arglists
                                    docs
-                                   doc-pairs
+                                   nil ; doc-pairs
                                    guards
                                    measures
                                    ruler-extenders-lst
@@ -7961,38 +7954,6 @@
                                  non-executablep ctx wrld state
                                  #+:non-standard-analysis std-p))))))))
 
-#+acl2-legacy-doc
-(defmacro link-doc-to-keyword (name parent see)
-  `(defdoc ,name
-     ,(concatenate
-       'string
-       ":Doc-Section "
-       (symbol-name parent)
-       "
-
-  "
-       (string-downcase (symbol-name see))
-       " keyword ~c[:" (symbol-name name) "]~/
-
-  ~l["
-       (string-downcase (symbol-name see))
-       "].~/~/")))
-
-#+acl2-legacy-doc
-(defmacro link-doc-to (name parent see)
-  `(defdoc ,name
-     ,(concatenate
-       'string
-       ":Doc-Section "
-       (symbol-package-name parent)
-       "::"
-       (symbol-name parent)
-       "
-
-  ~l["
-       (string-downcase (symbol-name see))
-       "].~/~/~/")))
-
 #+:non-standard-analysis
 (defun build-valid-std-usage-clause (arglist body)
   (cond ((null arglist)
@@ -8051,8 +8012,7 @@
              (t
               (mv-let (erp ttree state)
                       (prove (termify-clause-set cl-set)
-                             (make-pspv ens
-                                        wrld
+                             (make-pspv ens wrld state
                                         :displayed-goal displayed-goal
                                         :otf-flg otf-flg)
                              hints ens wrld ctx state)
@@ -8161,6 +8121,7 @@
 
   #-:non-standard-analysis
   (declare (ignore std-hints))
+  (declare (ignore docs pairs))
   (let ((col (car tuple))
         (subversive-p (cdddr tuple)))
     (er-let*
@@ -8224,8 +8185,7 @@
                               names
                               bodies
                               non-executablep
-                              (update-doc-database-lst names docs pairs
-                                                       wrld9))))
+                              wrld9)))
            (wrld11 (update-w big-mutrec
                              (putprop-x-lst1
                               names 'pequivs nil
@@ -8828,7 +8788,6 @@
            (let* ((formals (formals name wrld))
                   (stobjs-in (stobjs-in name wrld))
                   (stobjs-out (stobjs-out name wrld))
-                  (docp (access-doc-string-database name state))
                   (guard (untranslate (guard name nil wrld) t wrld))
                   (tp (find-runed-type-prescription
                        (list :type-prescription name)
@@ -8857,7 +8816,7 @@
                Defun-Mode:      ~@6~|~
                Type:            ~#7~[built-in (or unrestricted)~/~q8~]~|~
                ~#9~[~/Constraint:  ~qa~|~]~
-               ~#d~[~/Documentation available via :DOC~]~%"
+               ~%"
                    (list (cons #\0 name)
                          (cons #\1 formals)
                          (cons #\2 (cons name
@@ -8870,25 +8829,22 @@
                          (cons #\7 (if tpthm 1 0))
                          (cons #\8 tpthm)
                          (cons #\9 (if (eq constraint t) 0 1))
-                         (cons #\a constraint)
-                         (cons #\d (if docp 1 0)))
+                         (cons #\a constraint))
                    channel state nil)
               (value name))))
           ((and (symbolp name)
                 (getprop name 'macro-body nil 'current-acl2-world wrld))
            (let ((args (macro-args name wrld))
-                 (docp (access-doc-string-database name state))
                  (guard (untranslate (guard name nil wrld) t wrld)))
              (pprogn
               (fms "Macro ~x0~|~
                Macro Args:  ~y1~|~
                Guard:       ~Q23~|~
-               ~#4~[~/Documentation available via :DOC~]~%"
+               ~%"
                    (list (cons #\0 name)
                          (cons #\1 args)
                          (cons #\2 guard)
-                         (cons #\3 (term-evisc-tuple nil state))
-                         (cons #\4 (if docp 1 0)))
+                         (cons #\3 (term-evisc-tuple nil state)))
                    channel state nil)
               (value name))))
           ((member-eq name '(let lambda declare quote))

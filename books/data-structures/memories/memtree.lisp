@@ -64,8 +64,8 @@
 
 (local (defthm signed-byte-natural
          (implies (force (natp x))
-                  (equal (signed-byte-p 30 x)
-                         (< x (expt 2 29))))))
+                  (equal (signed-byte-p 29 x)
+                         (< x (expt 2 28))))))
 
 (local (defthm mask-to-mod
          (implies (force (natp n))
@@ -81,7 +81,35 @@
 (local (in-theory (disable logand ash)))
 (local (in-theory (disable (:executable-counterpart expt))))
 
-                 
+; [Jared] dumb speed hacking
+(local (in-theory (disable acl2::floor-bounds-1
+                           acl2::floor-zero
+                           acl2::mod-zero
+                           acl2::mod-x-y-=-x
+                           acl2::floor-positive
+                           acl2::floor-negative
+                           acl2::mod-positive
+                           acl2::mod-negative
+                           acl2::not-integerp-4a
+                           acl2::not-integerp-2a
+                           acl2::not-integerp-1a
+                           acl2::mod-bounds-3
+                           acl2::mod-nonpositive
+                           acl2::floor-nonpositive-1
+                           acl2::floor-nonpositive-2
+                           acl2::floor-nonnegative-1
+                           acl2::floor-nonnegative-2
+                           default-*-2
+                           default-*-1
+                           default-<-2
+                           default-<-1
+                           acl2::mod-completion
+                           acl2::mod-cancel-*
+                           acl2::mod-neg
+                           acl2::mod-minus-2
+                           acl2::mod-bounds-2
+
+                           )))
 
 
 
@@ -274,12 +302,16 @@
 ; very fast.  However, its application is kind of limited because we will often
 ; have addresses past the fixnum range, e.g., for 64-bit memories.
 
+(encapsulate
+  ()
+(local (in-theory (enable signed-byte-p)))
+
 (defun _fix-addr/depth-memtree-load (addr mtree depth)
   (declare (xargs :guard (and (natp depth)
                               (_address-p addr depth)
                               (_memtree-p mtree depth)))
-           (type (signed-byte 30) depth)
-           (type (signed-byte 30) addr))
+           (type (signed-byte 29) depth)
+           (type (signed-byte 29) addr))
   (mbe :logic (_memtree-load addr mtree depth)
        :exec (if (= depth 0)
                  mtree
@@ -288,31 +320,35 @@
                 (if (= (the-fixnum (logand addr 1)) 0)
                     (car mtree)
                   (cdr mtree))
-                (the-fixnum (1- depth))))))
+                (the-fixnum (1- depth)))))))
 
 
 
 ; We would really like to just use the above version, but since we expect our
 ; addresses to be 64 bits and so forth, it's not really sufficiently general.
 ; To remedy this, we provide a new function whose only requirement is that
-; depth is a fixnum.  The function checks to see if the depth has reached 29
+; depth is a fixnum.  The function checks to see if the depth has reached 28
 ; instead of 0 as its bottom case, and if so it calls our addr/depth-fixnums
 ; version above.  In other words, the function is "self optimizing" in that it
 ; will switch over to the very-fast version above as soon as it can do so.
 
-(defun _fixnum-memtree-load (addr mtree depth)
-  (declare (xargs :guard (and (natp depth)
-                              (_address-p addr depth)
-                              (_memtree-p mtree depth)))
-           (type (signed-byte 30) depth))
-  (mbe :logic (_memtree-load addr mtree depth)
-       :exec (if (<= depth 29)
-                 (_fix-addr/depth-memtree-load addr mtree depth)
-               (_fixnum-memtree-load (ash addr -1)
-                                     (if (= (the-fixnum (logand addr 1)) 0)
-                                         (car mtree)
-                                       (cdr mtree))
-                                     (the-fixnum (1- depth))))))
+(encapsulate
+  ()
+  (local (in-theory (enable signed-byte-p)))
+
+  (defun _fixnum-memtree-load (addr mtree depth)
+    (declare (xargs :guard (and (natp depth)
+                                (_address-p addr depth)
+                                (_memtree-p mtree depth)))
+             (type (signed-byte 29) depth))
+    (mbe :logic (_memtree-load addr mtree depth)
+         :exec (if (<= depth 28)
+                   (_fix-addr/depth-memtree-load addr mtree depth)
+                 (_fixnum-memtree-load (ash addr -1)
+                                       (if (= (the-fixnum (logand addr 1)) 0)
+                                           (car mtree)
+                                         (cdr mtree))
+                                       (the-fixnum (1- depth)))))))
 
 
 
@@ -354,13 +390,15 @@
 ; As with loading, we create an efficient version that assumes addr and depth
 ; are fixnums.  This is our "most efficient" store implementation.
 
+(local (in-theory (enable signed-byte-p)))
+
 (defun _fix-addr/depth-memtree-store (addr elem mtree depth)
   (declare (xargs :guard (and (natp depth)
                               (not (null elem))
                               (_address-p addr depth)
                               (_memtree-p mtree depth)))
-           (type (signed-byte 30) depth)
-           (type (signed-byte 30) addr))
+           (type (signed-byte 29) depth)
+           (type (signed-byte 29) addr))
   (mbe :logic (_memtree-store addr elem mtree depth)
        :exec (if (= depth 0)
                  elem
@@ -382,9 +420,9 @@
                               (not (null elem))
                               (_address-p addr depth)
                               (_memtree-p mtree depth)))
-           (type (signed-byte 30) depth))
+           (type (signed-byte 29) depth))
   (mbe :logic (_memtree-store addr elem mtree depth)
-       :exec (if (<= depth 29)
+       :exec (if (<= depth 28)
                  (_fix-addr/depth-memtree-store addr elem mtree depth)
                (let ((quotient (ash addr -1)))
                  (if (= (the-fixnum (logand addr 1)) 0)
@@ -430,8 +468,8 @@
   (declare (xargs :guard (and (natp depth)
                               (_address-p addr depth)
                               (_memtree-p mtree depth)))
-           (type (signed-byte 30) depth)
-           (type (signed-byte 30) addr))
+           (type (signed-byte 29) depth)
+           (type (signed-byte 29) addr))
   (mbe :logic (_memtree-store-nil addr mtree depth)
        :exec (if (= depth 0)
                  nil
@@ -460,9 +498,9 @@
   (declare (xargs :guard (and (natp depth)
                               (_address-p addr depth)
                               (_memtree-p mtree depth)))
-           (type (signed-byte 30) depth))
+           (type (signed-byte 29) depth))
   (mbe :logic (_memtree-store-nil addr mtree depth)
-       :exec (if (<= depth 29)
+       :exec (if (<= depth 28)
                  (_fix-addr/depth-memtree-store-nil addr mtree depth)
                (if (null mtree)
                    nil
@@ -487,7 +525,7 @@
 
 
 
-
+(local (in-theory (disable signed-byte-p)))
 
 
 
@@ -1039,10 +1077,10 @@
 ; And now we do the analagous thing for storing nil
 
  (local (defthm odd-lemma-2
-          (implies (and (not (zp depth))
+          (implies (and (equal (mod addr 2) 1)
+                        (not (zp depth))
                         (_address-p addr depth)
-                        (_memtree-p mtree depth)
-                        (equal (mod addr 2) 1))
+                        (_memtree-p mtree depth))
                    (equal (_memtree-store-nil addr mtree depth)
                           (if (atom mtree)
                               nil
@@ -1057,10 +1095,10 @@
           :hints(("Goal" :use (:instance _memtree-store-nil)))))
 
  (local (defthm even-lemma-2
-          (implies (and (not (zp depth))
+          (implies (and (equal (mod addr 2) 0)
+                        (not (zp depth))
                         (_address-p addr depth)
-                        (_memtree-p mtree depth)
-                        (equal (mod addr 2) 0))
+                        (_memtree-p mtree depth))
                    (equal (_memtree-store-nil addr mtree depth)
                           (if (atom mtree)
                               nil
@@ -1076,11 +1114,11 @@
 
 
  (local (defthmd main-lemma-2
-          (implies (and (natp depth)
+          (implies (and (not (equal a b))
+                        (natp depth)
                         (_address-p a depth)
                         (_address-p b depth)
-                        (_memtree-p mtree depth)
-                        (not (equal a b)))
+                        (_memtree-p mtree depth))
                    (equal (_memtree-store-nil a
                                               (_memtree-store-nil b mtree depth) 
                                               depth)

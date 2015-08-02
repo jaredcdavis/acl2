@@ -52,17 +52,17 @@
 (define vl-inc-or-dec-expr ((var vl-expr-p) (op (member op '(:vl-plusplus :vl-minusminus))))
   :returns (expr vl-expr-p)
   :guard-debug t
-  (make-vl-nonatom
+  (make-vl-binary
    :op (if (eq op :vl-plusplus)
            :vl-binary-plus
          :vl-binary-minus)
-   :args (list var
-               (make-vl-atom :guts
-                             (make-vl-constint
-                              :origwidth 32
-                              :value 1
-                              :origtype :vl-unsigned
-                              :wasunsized t)))))
+   :left var
+   :right (make-vl-literal :val
+                           (make-vl-constint
+                            :origwidth 32
+                            :value 1
+                            :origtype :vl-unsigned
+                            :wasunsized t))))
 
 (defconst *vl-assignment-operators*
   '(:vl-equalsign
@@ -88,7 +88,7 @@
   :guard-debug t
   (if (eq op :vl-equalsign)
       (vl-expr-fix rhs)
-    (make-vl-nonatom
+    (make-vl-binary
      :op (case op
            (:vl-pluseq  :vl-binary-plus)
            (:vl-minuseq :vl-binary-minus)
@@ -102,7 +102,8 @@
            (:vl-shreq   :vl-binary-shr)
            (:vl-ashleq  :vl-binary-ashl)
            (:vl-ashreq  :vl-binary-ashr))
-     :args (list var rhs))))
+     :left var
+     :right rhs)))
 
 
 (defparser vl-parse-operator-assignment/inc/dec ()
@@ -209,7 +210,8 @@
           (args := (vl-parse-1+-expressions-separated-by-commas))
           (:= (vl-match-token :vl-rparen)))
         (:= (vl-match-token :vl-semi))
-        (return (vl-enablestmt hid args atts))))
+        (return (vl-enablestmt (make-vl-scopeexpr-end :hid hid)
+                               args atts))))
 
 
 ; system_task_enable ::=
@@ -229,10 +231,11 @@
           (:= (vl-match-token :vl-rparen)))
         (:= (vl-match-token :vl-semi))
         (return
-         (vl-enablestmt (make-vl-atom
-                         :guts (make-vl-sysfunname
-                                :name (vl-sysidtoken->name id)))
-                        args atts))))
+         (make-vl-enablestmt :id (make-vl-scopeexpr-end
+                                  :hid (make-vl-hidexpr-end
+                                        :name (vl-sysidtoken->name id)))
+                             :args args
+                             :atts atts))))
 
 
 ; disable_statement ::=
@@ -248,7 +251,8 @@
         (:= (vl-match-token :vl-kwd-disable))
         (id := (vl-parse-hierarchical-identifier nil))
         (:= (vl-match-token :vl-semi))
-        (return (vl-disablestmt id atts))))
+        (return (vl-disablestmt (make-vl-scopeexpr-end :hid id)
+                                atts))))
 
 
 ; event_trigger ::=
@@ -266,7 +270,11 @@
         (bexprs := (vl-parse-0+-bracketed-expressions))
         (:= (vl-match-token :vl-semi))
         (return (vl-eventtriggerstmt
-                 (vl-build-indexing-nest hid bexprs) atts))))
+                 (make-vl-index
+                  :scope (make-vl-scopeexpr-end :hid hid)
+                  :part (make-vl-partselect-none)
+                  :indices bexprs)
+                  atts))))
 
 
 
@@ -549,7 +557,7 @@
                    default-<-1
                    default-<-2
                    double-containment
-                   first-under-iff-when-vl-exprlist-p
+                   ;; first-under-iff-when-vl-exprlist-p
                    integerp-when-natp
                    member-equal-when-member-equal-of-cdr-under-iff
                    natp-when-posp
@@ -714,9 +722,20 @@
 
 
 ; par_block ::=
+;
+; In Verilog-2005:
+;
 ;   'fork' [ ':' identifier { block_item_declaration } ]
 ;      { statement }
 ;   'join'
+;
+; SystemVerilog-2012 extends this to:
+;
+;   'fork' [ ':' identifier ]
+;      { block_item_declaration } ]
+;      { statement_or_null }
+;   'join'
+
 
  (defparser vl-parse-par-block (atts)
    :guard (vl-atts-p atts)
@@ -725,21 +744,42 @@
          (:= (vl-match-token :vl-kwd-fork))
          (when (vl-is-token? :vl-colon)
            (:= (vl-match))
-           (id := (vl-match-token :vl-idtoken))
-           (items :w= (vl-parse-0+-block-item-declarations)))
+           (id := (vl-match-token :vl-idtoken)))
+
+         (when (or id (not (equal (vl-loadconfig->edition config) :verilog-2005)))
+           (items := (vl-parse-0+-block-item-declarations)))
+
          (stmts := (vl-parse-statements-until-join))
          (:= (vl-match-token :vl-kwd-join))
-         (return (make-vl-blockstmt :sequentialp nil
-                                    :name (and id (vl-idtoken->name id))
-                                    :decls items
-                                    :stmts stmts
-                                    :atts atts))))
+         (when (and id (not (equal (vl-loadconfig->edition config) :verilog-2005)))
+           (:= (vl-parse-endblock-name (vl-idtoken->name id) "fork/join")))
+
+         (return
+          (b* (((mv vardecls paramdecls imports) (vl-sort-blockitems items)))
+            (make-vl-blockstmt :sequentialp nil
+                               :name (and id (vl-idtoken->name id))
+                               :vardecls vardecls
+                               :paramdecls paramdecls
+                               :imports imports
+                               :loaditems items
+                               :stmts stmts
+                               :atts atts)))))
 
 
 ; seq_block ::=
+;
+; In Verilog-2005:
+;
 ;    'begin' [ ':' identifier { block_item_declaration } ]
 ;       { statement }
 ;    'end'
+;
+; SystemVerilog-2012 extends this to:
+;
+;  begin [ : block_identifier ]
+;      { block_item_declaration }
+;      { statement_or_null }
+;  end [ : block_identifier ]
 
  (defparser vl-parse-seq-block (atts)
    :guard (vl-atts-p atts)
@@ -748,15 +788,23 @@
          (:= (vl-match-token :vl-kwd-begin))
          (when (vl-is-token? :vl-colon)
            (:= (vl-match))
-           (id := (vl-match-token :vl-idtoken))
-           (items :w= (vl-parse-0+-block-item-declarations)))
+           (id := (vl-match-token :vl-idtoken)))
+         (when (or id (not (equal (vl-loadconfig->edition config) :verilog-2005)))
+           (items := (vl-parse-0+-block-item-declarations)))
          (stmts := (vl-parse-statements-until-end))
          (:= (vl-match-token :vl-kwd-end))
-         (return (make-vl-blockstmt :sequentialp t
-                                    :name (and id (vl-idtoken->name id))
-                                    :decls items
-                                    :stmts stmts
-                                    :atts atts))))
+         (when (and id (not (equal (vl-loadconfig->edition config) :verilog-2005)))
+           (:= (vl-parse-endblock-name (vl-idtoken->name id) "begin/end")))
+         (return
+          (b* (((mv vardecls paramdecls imports) (vl-sort-blockitems items)))
+            (make-vl-blockstmt :sequentialp t
+                               :name (and id (vl-idtoken->name id))
+                               :vardecls vardecls
+                               :paramdecls paramdecls
+                               :imports imports
+                               :loaditems items
+                               :stmts stmts
+                               :atts atts)))))
 
 
 ; procedural_timing_control_statement ::=

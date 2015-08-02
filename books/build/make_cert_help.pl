@@ -275,6 +275,29 @@ sub parse_max_mem_arg
     return $ret;
 }
 
+sub extract_pbs_from_acl2file
+{
+    # PBS directives placed in .acl2 files are extracted and used. An
+    # example of a PBS directive is:
+    #   
+    #    ;PBS -l host=<my-host-name>
+
+    my $filename = shift;
+    my @pbs = ();
+    open(my $fd, "<", $filename) or die("Can't open $filename: $!\n");
+    while(<$fd>) {
+	my $line = $_;
+	chomp($line);
+	if ($line =~ m/^;PBS (.*)$/)
+	{
+	    push(@pbs, $1);
+	}
+    }
+    close($fd);
+
+    return \@pbs;
+}
+
 sub scan_source_file
 {
     my $filename = shift;
@@ -504,6 +527,7 @@ $instrs .= "#+acl2-hons (profile-fn 'certify-book-fn)\n";
 $instrs .= "(acl2::lp)\n";
 #    $instrs .= "(set-debugger-enable :bt)\n";
 $instrs .= "(acl2::in-package \"ACL2\")\n\n";
+$instrs .= "(set-ld-error-action (quote (:exit 1)) state)\n";
 $instrs .= "(set-write-acl2x t state)\n" if ($STEP eq "acl2x");
 $instrs .= "(set-write-acl2x '(t) state)\n" if ($STEP eq "acl2xskip");
 $instrs .= "$INHIBIT\n" if ($INHIBIT);
@@ -521,9 +545,13 @@ my $acl2file = (-f "$file.acl2") ? "$file.acl2"
     : "";
 
 my $usercmds = $acl2file ? read_file_except_certify($acl2file) : "";
+my $extra_pbs = $acl2file ? extract_pbs_from_acl2file($acl2file) : [];
 
 # Don't hideously underapproximate timings in event summaries
 $instrs .= "(acl2::assign acl2::get-internal-time-as-realtime acl2::t)\n";
+
+# Don't hide GC messages -- except for CMUCL, which dumps them to the terminal.
+$instrs .= "#-cmucl (acl2::gc-verbose t)\n";
 
 $instrs .= "; instructions from .acl2 file $acl2file:\n";
 $instrs .= "$usercmds\n\n";
@@ -543,6 +571,9 @@ foreach my $pair (@$includes) {
 	$instrs .= "(acl2::ld \"$incname.port\" :ld-missing-input-ok t)\n"; 
     }
 }
+
+# LD'd files above may change the current package
+$instrs .= "#!ACL2 (set-ld-error-action (quote :continue) state)\n";
 
 my $cert_flags = parse_certify_flags($acl2file, $usercmds);
 $instrs .= "\n; certify-book command flags: $cert_flags\n";
@@ -581,47 +612,51 @@ write_whole_file($lisptmp, $instrs);
     $shinsts .= "#PBS -l pmem=${max_mem}gb\n";
     $shinsts .= "#PBS -l walltime=${max_time}:00\n\n";
 
+    foreach my $directive (@$extra_pbs) {
+	$shinsts .= "#PBS $directive\n";
+    }
+
 # $shinsts .= "echo List directories of prereqs >> $outfile\n";
 # $shinsts .= "time ( ls @$prereq_dirs > /dev/null ) 2> $outfile\n";
 # foreach my $prereq (@$PREREQS) {
 #     $shinsts .= "echo prereq: $prereq >> $outfile\n";
 #     $shinsts .= "ls -l $startdir/$prereq >> $outfile 2>&1 \n";
 # }
-    $shinsts .= "echo >> $outfile\n";
-    $shinsts .= "pwd >> $outfile\n";
-    $shinsts .= "hostname >> $outfile\n";
-    $shinsts .= "echo >> $outfile\n";
+    $shinsts .= "echo >> '$outfile'\n";
+    $shinsts .= "pwd >> '$outfile'\n";
+    $shinsts .= "hostname >> '$outfile'\n";
+    $shinsts .= "echo >> '$outfile'\n";
 
-    $shinsts .= "echo Environment variables: >> $outfile\n";
+    $shinsts .= "echo Environment variables: >> '$outfile'\n";
     my @relevant_env_vars = ("ACL2_CUSTOMIZATION", "ACL2_SYSTEM_BOOKS", "ACL2");
     foreach my $var (@relevant_env_vars) {
 	if (exists $ENV{$var}) {
-	    $shinsts .= "echo $var=$ENV{$var} >> $outfile\n";
+	    $shinsts .= "echo $var=$ENV{$var} >> '$outfile'\n";
 	}
     }
-    $shinsts .= "echo >> $outfile\n";
+    $shinsts .= "echo >> '$outfile'\n";
 
-    $shinsts .= "echo Temp lisp file: >> $outfile\n";
-    $shinsts .= "cat $lisptmp >> $outfile\n";
-    $shinsts .= "echo --- End temp lisp file --- >> $outfile\n";
-    $shinsts .= "echo >> $outfile\n";
+    $shinsts .= "echo Temp lisp file: >> '$outfile'\n";
+    $shinsts .= "cat '$lisptmp' >> '$outfile'\n";
+    $shinsts .= "echo --- End temp lisp file --- >> '$outfile'\n";
+    $shinsts .= "echo >> '$outfile'\n";
 
-    $shinsts .= "echo TARGET: $TARGET >> $outfile\n";
-    $shinsts .= "echo STEP: $STEP >> $outfile\n";
-    $shinsts .= "echo Start of output: >> $outfile\n";
-    $shinsts .= "echo >> $outfile\n";
+    $shinsts .= "echo TARGET: $TARGET >> '$outfile'\n";
+    $shinsts .= "echo STEP: $STEP >> '$outfile'\n";
+    $shinsts .= "echo Start of output: >> '$outfile'\n";
+    $shinsts .= "echo >> '$outfile'\n";
 
     $shinsts .= "export ACL2_WRITE_PORT=t\n";
     if ($TIME_CERT) {
-	$shinsts .= "(time (($acl2 < $lisptmp 2>&1) >> $outfile)) 2> $timefile\n";
+	$shinsts .= "(time (($acl2 < '$lisptmp' 2>&1) >> '$outfile')) 2> '$timefile'\n";
     }
     else {
-	$shinsts .= "($acl2 < $lisptmp 2>&1) >> $outfile\n";
+	$shinsts .= "($acl2 < '$lisptmp' 2>&1) >> '$outfile'\n";
     }
 
     $shinsts .= "EXITCODE=\$?\n";
-    $shinsts .= "echo Exit code from ACL2 is \$EXITCODE >> $outfile\n";
-    $shinsts .= "ls -l $goal >> $outfile || echo $goal seems to be missing >> $outfile\n";
+    $shinsts .= "echo Exit code from ACL2 is \$EXITCODE >> '$outfile'\n";
+    $shinsts .= "ls -l '$goal' >> '$outfile' || echo '$goal' seems to be missing >> '$outfile'\n";
     $shinsts .= "exit \$EXITCODE\n";
 
 
@@ -636,8 +671,13 @@ write_whole_file($lisptmp, $instrs);
 
 # Run it!  ------------------------------------------------
 
-    system("$STARTJOB $shtmp");
+my $START_TIME = time();
+
+    # Single quotes to try to protect against file names with dollar signs and similar.
+    system("$STARTJOB '$shtmp'");
     $status = $? >> 8;
+
+my $END_TIME = time();
 
     unlink($lisptmp) if !$DEBUG;
     unlink($shtmp) if !$DEBUG;
@@ -666,7 +706,34 @@ if ($status == 43) {
 }
 
 if ($success) {
-    print "Successfully built $printgoal\n";
+
+    my $black = chr(27) . "[0m";
+
+    my $boldred = chr(27) . "[31;1m";
+    my $red = chr(27) . "[31m";
+
+    my $boldyellow = chr(27) . "[33;1m";
+    my $yellow = chr(27) . "[33m";
+
+    my $green = chr(27) . "[32m";
+    my $boldgreen = chr(27) . "[32;1m";
+
+    my $ELAPSED = $END_TIME - $START_TIME;
+
+    my $color = ($ELAPSED > 300) ? $boldred
+	      : ($ELAPSED > 60) ? $red
+	      : ($ELAPSED > 40) ? $boldyellow
+              : ($ELAPSED > 20) ? $yellow
+	      : ($ELAPSED > 10) ? $green
+	      : $boldgreen;
+
+    if ($ENV{"CERT_PL_NO_COLOR"}) {
+	$color = "";
+	$black = "";
+    }
+
+    printf("%sBuilt %s (%ds)%s\n", $color, $printgoal, $ELAPSED, $black);
+
 } else {
     my $taskname = ($STEP eq "acl2x" || $STEP eq "acl2xskip") ? "ACL2X GENERATION" :
 	($STEP eq "certify")  ? "CERTIFICATION" :
@@ -689,6 +756,6 @@ if ($success) {
 print "-- Final result appears to be success.\n" if $DEBUG;
 
 # Else, we made it!
-system("ls -l $goal");
+system("ls -l '$goal'");
 exit(0);
 

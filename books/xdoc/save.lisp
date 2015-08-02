@@ -45,6 +45,7 @@
 (include-book "topics")  ;; Fool dependency scanner, since we may include it
 |#
 
+
 (defun collect-multiply-defined-topics (x seen-fal)
   (b* (((when (atom x))
         (fast-alist-free seen-fal)
@@ -86,14 +87,19 @@
      (remove-untouchable acl2::writes-okp nil)
      ,@(and import
             `((include-book
-               "xdoc/topics" :dir :system)
-              #+acl2-legacy-doc
-              (import-acl2doc)))
+               "xdoc/topics" :dir :system)))
      ;; b* should have been included by the above includes
      (make-event
       (b* (((mv all-xdoc-topics state) (all-xdoc-topics state))
            (- (cw "(len all-xdoc-topics): ~x0~%" (len all-xdoc-topics)))
-           (redef-report (redef-errors (mergesort all-xdoc-topics)))
+           (redef-report
+            ;; To support special cases (for instance, "locally" including a
+            ;; book to extract its documentation, then perhaps later
+            ;; re-including that book), it seems pretty reasonable not to warn
+            ;; or complain about topics that are exact duplicates of one
+            ;; another.  So, we create our redefinition report from sorted
+            ;; topics.
+            (redef-errors (mergesort all-xdoc-topics)))
            (- (or (not redef-report)
                   (cw "Redefined topics report: ~x0.~%" redef-report)))
            (- (or ,redef-okp
@@ -103,6 +109,8 @@
                        report may help you to fix these errors.  Or, you can ~
                        just call XDOC::SAVE with :REDEF-OKP T to bypass this ~
                        error (and use the most recent version of each topic.)")))
+
+           ;; Now remove all shadowed topics before doing anything more.
            ((mv & & state) (assign acl2::writes-okp t))
            (state (save-fancy all-xdoc-topics ,dir ',zip-p state)))
         (value '(value-triple :invisible))))))

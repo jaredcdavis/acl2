@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -1270,6 +1270,10 @@
 ; times in a compare-windows.
 
 (defun prettyify-clause (cl let*-abstractionp wrld)
+
+; We return an untranslated term that is equivalent to cl.  For a simpler
+; function that returns a translated term, see prettyify-clause-simple.
+
   (if let*-abstractionp
       (mv-let (vars terms)
               (maximal-multiples (cons 'list cl) let*-abstractionp)
@@ -1643,6 +1647,21 @@
        (not (quotep rhs1))
        (assoc-eq 'being-proved-by-induction
                  (access prove-spec-var pspv :pool))
+
+; David Hardin sent an example in March 2015, for which Codewalker generates a
+; goal that fails to prove under induction but is proved at the top level.  The
+; reason turned out to be that cross-fertilization is used under induction but
+; not at the top level.  Since the point of cross-fertilization is to prepare
+; for generalization, and since generalization often fails, we arrange just
+; below to avoid cross-fertilization if generalization is turned off (instead,
+; fully fertilizing with the equivalence).  This makes it easy for applications
+; (such as Codewalker) to avoid the limited substitution formed by
+; cross-fertilization.
+
+       (not (member-eq 'generalize-clause
+                       (cdr (assoc-eq :do-not
+                                      (access prove-spec-var pspv
+                                              :hint-settings)))))
        (cross-fertilizep/c equiv cl direction lhs1 rhs1)
        (cross-fertilizep/d equiv cl direction lhs1 rhs1)))
 

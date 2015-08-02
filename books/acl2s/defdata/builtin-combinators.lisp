@@ -13,7 +13,7 @@ data last modified: [2014-08-06]
 
 (in-package "DEFDATA")
 
-(include-book "tools/bstar" :dir :system)
+(include-book "std/util/bstar" :dir :system)
 
 (table defdata-defaults-table nil 
        '((:debug       .  nil)
@@ -374,6 +374,4 @@ Mainly to be used for evaluating enum lists "
         (er hard ctx "Evaluating list expression ~x0 failed!~%" eexp))
        ((unless (and (true-listp list-val) (consp list-val)))
         (er hard ctx "Enum argument ~x0 expected to be a non-empty list expression.~%" eexp)))
-    (if (consp (cdr list-val)) ;at least 2
-        (list 'acl2s::member (kwote list-val))
-      (kwote (car list-val)))))
+    (list 'acl2s::member (kwote list-val))))

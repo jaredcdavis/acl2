@@ -30,14 +30,20 @@
 
 (in-package "STD")
 (include-book "../define")
+(include-book "utils")
 (include-book "misc/assert" :dir :system)
 
 (define foo ()
   :returns (ans integerp)
   3)
 
+(assert-disabled foo)
+
 (define foo2 ()
+  :enabled t
   (mv 3 "hi"))
+
+(assert-enabled foo2)
 
 (define foo3 ()
   (mv 3 "hi"))
@@ -232,6 +238,125 @@
 (assert! (stringp (cdr (assoc :long (xdoc::find-topic 'test-longcat (xdoc::get-xdoc-table (w state)))))))
 
 
+
+; Testing of fancy RET binder.
+
+
+(define mathstuff ((a natp)
+                   (b natp))
+  :returns (mv (sum natp :rule-classes :type-prescription)
+               (prod natp :rule-classes :type-prescription))
+  (b* ((a (nfix a))
+       (b (nfix b)))
+    (mv (+ a b)
+        (* a b))))
+
+;; (def-b*-binder mathstuff-ret
+;;   :decls
+;;   ((declare (xargs :guard (and (eql (len forms) 1)
+;;                                (consp (car forms))
+;;                                (symbolp (caar forms))))))
+;;   :body
+;;   (patbind-ret-fn '((sum . nil) (prod . nil))
+;;                   '(a b)
+;;                   args forms rest-expr))
+
+(define do-math-stuff ((a natp)
+                       (b natp))
+  (b* ((a (nfix a))
+       (b (nfix b))
+       ((ret stuff) (mathstuff a b)))
+    (list :sum stuff.sum 
+          :prod stuff.prod))
+  ///
+  (assert! (equal (do-math-stuff 1 2) (list :sum 3 :prod 2))))
+  
+
+
+(defstobj foost (foo-x))
+
+(defstobj barst (bar-x) :congruent-to foost)
+
+(define modify-foo (x &key (foost 'foost))
+  :returns (foo-out)
+  (update-foo-x x foost))
+
+;; (def-b*-binder modify-foo-ret
+;;   :decls
+;;   ((declare (xargs :guard (and (eql (len forms) 1)
+;;                                (consp (car forms))
+;;                                (symbolp (caar forms))))))
+;;   :body
+;;   (patbind-ret-fn '((foo . foo))
+;;                   '(x &key (foo 'foo))
+;;                   args forms rest-expr))
+
+(define use-bar (x barst)
+  (b* (((ret) (modify-foo x :foost barst)))
+    barst))
+
+
+
+;; Test of return value arity checking (Issue 365)
+
+(must-fail
+ (define rva-1 (x)
+   :returns (mv a b)
+   x))
+
+(must-fail
+ (define rva-2 (x)
+   :returns ans
+   (mv x x)))
+
+(must-fail
+ (define rva-3 (x state)
+   :returns state
+   (mv x state)))
+
+(must-fail
+ (define rva-4 (x state)
+   :returns (mv a b c)
+   (mv x state)))
+
+(define rva-5 (x)
+  :non-executable t
+  :returns (mv a b c)
+  x)
+
+(define rva-6 (x)
+  :non-executable t
+  :returns ans
+  (mv x x x))
+
+
+(must-fail
+ (define rvap-1 (x)
+   :returns (mv a b)
+   :mode :program
+   x))
+
+(must-fail
+ (define rvap-2 (x)
+   :returns ans
+   :mode :program
+   (mv x x)))
+
+(must-fail
+ (define rvap-3 (x state)
+   :returns state
+   :mode :program
+   (mv x state)))
+
+(must-fail
+ (define rvap-4 (x state)
+   :returns (mv a b c)
+   :mode :program
+   (mv x state)))
+
+
+
+
 ;; Basic testing of hook installation/removal
 
 (defun my-hook (guts opts state)
@@ -406,3 +531,39 @@
 
 (assert! (equal (notinline-test$notinline 2) 2))
 (assert! (equal (notinline-test 2) 2))
+
+
+
+
+
+;; Alessandro Coglio reported a bug to do with giving hints when using :t-proof.
+;; The following is a modified version of his example.  Previously, ac-g2 failed
+;; basically because it ended up generating multiple hints xargs:
+;;
+;;      (DEFUND AC-G2 (X)
+;;        (DECLARE (XARGS :HINTS (("Goal" :IN-THEORY (ENABLE AC-F)))))
+;;        (DECLARE (XARGS :HINTS ('(:BY ACL2::AC-G2-T))
+;;                                 :VERIFY-GUARDS NIL))
+;;         ...
+;;
+;; Now we work harder to try to sensibly extract :hints from the xargs and the
+;; top-level keywords for use in the t-proof.
+
+(defund ac-f (x) (- x 1))
+
+(define ac-g1 (x)
+  :verify-guards nil
+  :t-proof t
+  :hints (("Goal" :in-theory (enable ac-f)))
+  (if (zp x)
+      nil
+    (ac-g1 (ac-f x))))
+
+(define ac-g2 (x)
+  :verify-guards nil
+  :t-proof t
+  :verbosep t
+  (declare (xargs :hints (("Goal" :in-theory (enable ac-f)))))
+  (if (zp x)
+      nil
+    (ac-g2 (ac-f x))))

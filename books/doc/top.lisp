@@ -30,21 +30,32 @@
 
 (in-package "ACL2")
 
-(make-event
+; Note, 7/28/2014: if we include
+; (include-book "std/system/top" :dir :system)
+; instead of the following, we get a name conflict.
+(include-book "std/system/non-parallel-book" :dir :system)
 
-; Disabling waterfall parallelism because the include-books are too slow with
-; it enabled, since waterfall parallelism unmemoizes the six or so functions
-; that ACL2(h) memoizes by default (in particular, fchecksum-obj needs to be
-; memoized to include centaur/tutorial/alu16-book).
 
- (if (and (hons-enabledp state)
-          (f-get-global 'parallel-execution-enabled state))
-     (er-progn (set-waterfall-parallelism nil)
-               (value '(value-triple nil)))
-   (value '(value-triple nil))))
+ ;; Disabling waterfall parallelism because the include-books are too slow with
+ ;; it enabled, since waterfall parallelism unmemoizes the six or so functions
+ ;; that ACL2(h) memoizes by default (in particular, fchecksum-obj needs to be
+ ;; memoized to include centaur/esim/tutorial/alu16-book).
+
+ ;; [Jared] BOZO: is the above comment about include books even true anymore?
+ ;; If so, maybe waterfall parallelism doesn't have to do this with the new
+ ;; thread-safe memo code?
+
+ ;; [Jared] BOZO: even if waterfall parallelism still disables this memoization,
+ ;; do we care?  The alu16-book demo has been removed from the manual.  (Maybe
+ ;; we should put it back in.  Do we care how long the manual takes to build?)
+(non-parallel-book)
+
+(include-book "centaur/misc/tshell" :dir :system)
+(value-triple (acl2::tshell-ensure))
 
 (include-book "centaur/misc/memory-mgmt" :dir :system)
-(value-triple (set-max-mem (* 4 (expt 2 30))))
+(value-triple (set-max-mem (* 10 (expt 2 30))))
+
 
 (include-book "relnotes")
 (include-book "practices")
@@ -55,8 +66,6 @@
 
 (include-book "centaur/4v-sexpr/top" :dir :system)
 (include-book "centaur/aig/top" :dir :system)
-
-(include-book "projects/doc" :dir :system)
 
 (include-book "centaur/aignet/aig-sim" :dir :system)
 (include-book "centaur/aignet/copying" :dir :system)
@@ -116,6 +125,7 @@
 (include-book "centaur/misc/count-up" :dir :system)
 (include-book "centaur/misc/fast-alist-pop" :dir :system)
 (include-book "centaur/misc/spacewalk" :dir :system)
+(include-book "centaur/misc/dag-measure" :dir :system)
 
 ;; BOZO conflicts with something in 4v-sexpr?
 
@@ -126,8 +136,6 @@
 
 (include-book "oslib/top" :dir :system)
 
-(include-book "regex/regex-ui" :dir :system)
-
 (include-book "std/top" :dir :system)
 (include-book "std/basic/inductions" :dir :system)
 (include-book "std/io/unsound-read" :dir :system)
@@ -137,38 +145,45 @@
 (include-book "std/strings/base64" :dir :system)
 (include-book "std/strings/pretty" :dir :system)
 
-; Note, 7/28/2014: if we include
-; (include-book "std/system/top" :dir :system)
-; instead of the following, we get a name conflict.
-(include-book "std/system/non-parallel-book" :dir :system)
 
 (include-book "centaur/ubdds/lite" :dir :system)
 (include-book "centaur/ubdds/param" :dir :system)
 
-(include-book "centaur/vcd/vcd" :dir :system)
-(include-book "centaur/vcd/esim-snapshot" :dir :system)
-(include-book "centaur/vcd/vcd-stub" :dir :system)
+(include-book "centaur/sv/top" :dir :system)
+(include-book "centaur/esim/vcd/vcd" :dir :system)
+(include-book "centaur/esim/vcd/esim-snapshot" :dir :system)
+(include-book "centaur/esim/vcd/vcd-stub" :dir :system)
 ;; BOZO causes some error with redefinition?  Are we loading the right
 ;; books above?  What does stv-debug load?
-;; (include-book "vcd/vcd-impl")
+;; (include-book "centaur/esim/vcd/vcd-impl")
 
-(include-book "centaur/vl/top" :dir :system)
 (include-book "centaur/vl/doc" :dir :system)
+
+;; This rule causes type determination to take forever in VL for some reason
+(in-theory (disable consp-append
+                    true-listp-append
+                    (:t append)))
+
 (include-book "centaur/vl/kit/top" :dir :system)
-(include-book "centaur/vl/mlib/clean-concats" :dir :system)
 (include-book "centaur/vl/mlib/atts" :dir :system)
-(include-book "centaur/vl/mlib/json" :dir :system)
-(include-book "centaur/vl/transforms/xf-clean-selects" :dir :system)
-(include-book "centaur/vl/transforms/xf-propagate" :dir :system)
-(include-book "centaur/vl/transforms/xf-expr-simp" :dir :system)
-(include-book "centaur/vl/transforms/xf-inline" :dir :system)
 
-;; BOZO these are incompatible?  which is right?
+(include-book "centaur/vl2014/doc" :dir :system)
+(include-book "centaur/vl2014/kit/top" :dir :system)
+(include-book "centaur/vl2014/mlib/clean-concats" :dir :system)
+(include-book "centaur/vl2014/lint/use-set" :dir :system)
+(include-book "centaur/vl2014/transforms/clean-selects" :dir :system)
+(include-book "centaur/vl2014/transforms/propagate" :dir :system)
+(include-book "centaur/vl2014/transforms/expr-simp" :dir :system)
+(include-book "centaur/vl2014/transforms/inline" :dir :system)
+
 (include-book "centaur/vl/util/prefix-hash" :dir :system)
-;;(include-book "vl/util/prefixp")
+(include-book "centaur/vl2014/util/prefix-hash" :dir :system)
 
-;; (include-book "vl/mlib/ram-tools")   obsolete
+;; BOZO conflict with prefix-hash stuff above.  Need to fix this.  Also, are
+;; these being used at all?
 
+;; (include-book "centaur/vl/util/prefixp" :dir :system)
+;; (include-book "centaur/vl2014/util/prefixp" :dir :system)
 
 (include-book "hacking/all" :dir :system)
 (include-book "hints/consider-hint" :dir :system)
@@ -180,16 +195,19 @@
 (include-book "tools/plev-ccl" :dir :system)
 (include-book "tools/with-supporters" :dir :system)
 (include-book "tools/remove-hyps" :dir :system)
+(include-book "tools/oracle-time" :dir :system)
+(include-book "tools/oracle-timelimit" :dir :system)
 (include-book "clause-processors/doc" :dir :system)
 
-; [Jared] removing these to speed up the manual build
-;(include-book "tutorial/intro")
-;(include-book "tutorial/alu16-book")
-;(include-book "tutorial/counter")
+;; [Jared] removing these to speed up the manual build
+;; BOZO should we put them back in?
+;(include-book "centaur/esim/tutorial/intro" :dir :system)
+;(include-book "centaur/esim/tutorial/alu16-book" :dir :system)
+;(include-book "centaur/esim/tutorial/counter" :dir :system)
 
-; [Jared] removed this to avoid depending on glucose and to speed up
-; the manual build
-; (include-book "regression/common")
+;; [Jared] removed this to avoid depending on glucose and to speed up
+;; the manual build
+; (include-book "centaur/esim/tests/common" :dir :system)
 
 
 ;; Not much doc here, but some theorems from arithmetic-5 are referenced by
@@ -197,12 +215,15 @@
 (include-book "arithmetic-5/top" :dir :system)
 (include-book "arithmetic/top" :dir :system)
 
-(include-book "rtl/rel9/lib/top" :dir :system)
-(include-book "rtl/rel9/lib/logn" :dir :system)
-(include-book "rtl/rel9/lib/add" :dir :system)
-(include-book "rtl/rel9/lib/mult" :dir :system)
+(include-book "rtl/rel11/lib/top" :dir :system)
+; And books not included in lib/top:
+(include-book "rtl/rel11/lib/add" :dir :system)
+(include-book "rtl/rel11/lib/mult" :dir :system)
+(include-book "rtl/rel11/lib/div" :dir :system)
+(include-book "rtl/rel11/lib/srt" :dir :system)
+(include-book "rtl/rel11/lib/sqrt" :dir :system)
 
-(include-book "centaur/fty/deftypes" :dir :system)
+(include-book "centaur/fty/top" :dir :system)
 
 (include-book "misc/find-lemmas" :dir :system)
 (include-book "misc/simp" :dir :system)
@@ -210,19 +231,19 @@
 (include-book "misc/with-waterfall-parallelism" :dir :system)
 (include-book "misc/seq" :dir :system)
 (include-book "misc/seqw" :dir :system)
+(include-book "misc/defpm" :dir :system)
 
 (include-book "make-event/proof-by-arith" :dir :system)
 
 (include-book "centaur/memoize/old/profile" :dir :system)
 (include-book "centaur/memoize/old/watch" :dir :system)
 
-; The following include-book causes a name conflict for set-equal, which is
-; defined both in arithmetic-5/lib/basic-ops/building-blocks.lisp and in
-; data-structures/set-defuns.lisp.  So for now, at least, it is commented out.
-; (include-book "data-structures/top" :dir :system)
-
-;Put ACL2s doc last, since ccg.lisp inclusion might cause problems -- harshrc
+(include-book "data-structures/top" :dir :system)
 (include-book "acl2s/doc" :dir :system)
+
+(include-book "projects/doc" :dir :system)
+
+
 
 #||
 
@@ -240,16 +261,10 @@
 (include-book "std/util/tests/top" :dir :system)
 (include-book "std/util/extensions/assert-return-thms" :dir :system)
 (include-book "centaur/misc/tshell-tests" :dir :system)
+(include-book "centaur/misc/stobj-swap-test" :dir :system)
 (include-book "oslib/tests/top" :dir :system)
 
 (include-book "centaur/ubdds/sanity-check-macros" :dir :system)
-
-;; BOZO why do we care about coi/records/fast?
-(include-book "coi/records/fast/log2" :dir :system)
-(include-book "coi/records/fast/memory" :dir :system)
-(include-book "coi/records/fast/memory-impl" :dir :system)
-(include-book "coi/records/fast/memtree" :dir :system)
-(include-book "coi/records/fast/private" :dir :system)
 
 (include-book "centaur/memoize/old/case" :dir :system)
 (include-book "centaur/memoize/old/profile" :dir :system)
@@ -267,168 +282,10 @@
 ; manual more approachable and relevant, we now try to impose a better
 ; hierarchy and add some context.
 
-(defxdoc acl2::|Building the ACL2+Books Manual|
-  :parents (documentation)
-  :short "How to build the ACL2+Books Manual."
+;; Jared moved the documentation that used to be here into more-topics.lisp so
+;; that it can be easily included in other manuals without including top.
+(include-book "more-topics")
 
-  :long "<p>If you just want to get a copy of the ACL2+Books manual for local
-viewing, you probably <b>don't need to build it yourself</b> because you can
-just <a href='download/'>download</a> a copy.</p>
-
-
-<h4>Quick Instructions</h4>
-
-<p>This should work on CCL on Linux and Mac OS X.  It <b>may not work</b> for
-other OS/Lisp combinations.  In particular, building the manual requires some
-features from @(see oslib) and @(see quicklisp) that may not be available on
-other systems; see <a href='https://github.com/acl2/acl2/issues/189'>Issue
-189</a>.</p>
-
-<p>You need a copy of <b>ACL2(h)</b>.  Then, just run:</p>
-
-@({
-    cd acl2-sources/books
-    make manual ACL2=my-acl2h
-})
-
-<p>The resulting manual may be found in:</p>
-
-@({
-    acl2-sources/books/doc/manual/index.html
-})
-
-<p>For more detailed instructions, see @(see books-certification).</p>
-
-<h4>Other Manuals</h4>
-
-<p>See @(see acl2::acl2-doc) for details about how to build your own
-Emacs-based manual.</p>
-
-<p>See @(see xdoc::save) for general information about how to build and
-distribute custom XDOC manuals.  For instance, you can build manuals that are
-extended to cover proprietary libraries.</p>")
-
-
-(defsection arithmetic
-  :parents (top)
-  :short "Libraries for reasoning about basic arithmetic, bit-vector
-arithmetic, modular arithmetic, etc.")
-
-(defsection boolean-reasoning
-  :parents (top)
-  :short "Libraries related to representing and processing Boolean functions,
-geared toward large-scale automatic reasoning, e.g., via SAT solving and AIG or
-BDD packages."
-
-  :long "<h3>Introduction</h3>
-
-<p><a href='http://en.wikipedia.org/wiki/Boolean_function'>Boolean
-functions</a> are widely useful throughout mathematical logic, computer
-science, and computer engineering.  In formal verification, they are especially
-interesting because many high-capacity, fully automatic techniques are known
-for analyzing, comparing, and simplifying them; for instance, see <a
-href='http://en.wikipedia.org/wiki/Binary_decision_diagram'>binary decision
-diagrams</a> (bdds), <a
-href='http://en.wikipedia.org/wiki/Boolean_satisfiability_problem'>SAT
-solvers</a>, <a
-href='http://en.wikipedia.org/wiki/And-inverter_graph'>and-inverter
-graphs</a> (aigs), <a href='http://en.wikipedia.org/wiki/Model_checking'>model
-checking</a>, <a
-href='http://en.wikipedia.org/wiki/Formal_equivalence_checking'>equivalence
-checking</a>, and so forth.</p>
-
-<h3>Libraries for Boolean Functions</h3>
-
-<p>We have developed some libraries for working with Boolean functions, for
-instance:</p>
-
-<ul>
-
-<li>@(see satlink) provides a representation of <a
-href='http://en.wikipedia.org/wiki/Conjunctive_normal_form'>conjunctive normal
-form</a> formulas and a way to call SAT solvers from ACL2 and trust their
-results.</li>
-
-<li>Libraries like @(see aig) and @(see ubdds) provide @(see hons)-based AIG and
-BDD packages.</li>
-
-<li>@(see aignet) provides a more efficient, @(see stobj)-based AIG
-representation similar to that used by <a
-href='http://www.eecs.berkeley.edu/~alanmi/abc/'>ABC</a>.</li>
-
-</ul>
-
-<p>These libraries are important groundwork for the @(see gl) framework for
-bit-blasting ACL2 theorems, and may be of interest to anyone who is trying to
-develop new, automatic tools or proof techniques.</p>
-
-<h3>Libraries for Four-Valued Logic</h3>
-
-<p>Being able to process large-scale Boolean functions is especially important
-in @(see hardware-verification).  But actually, here, to model certain circuits
-and to implement certain algorithms, it can be useful to go beyond Boolean
-functions and consider a richer logic.</p>
-
-<p>You might call Boolean functions or Boolean logic a two-valued logic, since
-there are just two values (true and false) that any variable can take.  It is
-often useful to add a third value, usually called X, to represent an
-\"unknown\" value.  In some systems, a fourth value, Z, is added to represent
-an undriven wire.  For more on this, see @(see why-4v-logic).</p>
-
-<p>We have developed two libraries to support working in four-valued logic.  Of
-these, the @(see 4v) library is somewhat higher level and is generally simpler
-and more convenient to work with.  It serves as the basis of the @(see esim)
-hardware simulator.  Meanwhile, the @(see faig) library is a bit lower-level
-and does not enjoy the very nice @(see 4v-monotonicity) property of @(see
-4v-sexprs).  On the other hand, @(see faig)s are closer to @(see aig)s, and can
-be useful for loading expressions into @(see aignet) or @(see satlink).</p>
-
-<h3>Related Papers</h3>
-
-<p>Besides the documentation here, you may find the following papers
-useful:</p>
-
-<p>Jared Davis and Sol Swords.  <a
-href='http://dx.doi.org/10.4204/EPTCS.114.8'>Verified AIG Algorithms in
-ACL2.</a>  In ACL2 Workshop 2013. May, 2013. EPTCS 114.  Pages 95-110.</p>
-
-<p>Sol Swords and Jared Davis.  <a
-href='http://dx.doi.org/10.4204/EPTCS.70.7'>Bit-Blasting ACL2 Theorems</a>.
-In ACL2 Workshop 2011.  November, 2011.  EPTCS 70.  Pages 84-102.</p>
-
-<p>Sol Swords and Warren A Hunt, Jr.  <a
-href='http://dx.doi.org/10.1007/978-3-642-14052-5_30'>A Mechanically Verified
-AIG to BDD Conversion Algorithm</a>.  In ITP 2010,LNCS 6172, Springer.  Pages
-435-449.</p>")
-
-
-(defsection hardware-verification
-  :parents (top)
-  :short "Libraries for working with hardware description languages, modeling
-circuits, etc.")
-
-(defxdoc macro-libraries
-  :parents (top macros)
-  :short "Generally useful macros for writing more concise code, and frameworks
- for quickly introducing concepts like typed structures, typed lists, defining
- functions with type signatures, and automating other common tasks.")
-
-(defxdoc proof-automation
-  :parents (top
-
-; Including acl2 as a parent so that all ACL2 system topics can be found under
-; the graph rooted at the acl2 node.
-
-            acl2)
-  :short "Tools, utilities, and strategies for dealing with particular kinds
-of proofs.")
-
-; Huge stupid hack.  Topics that are documented with the old :DOC system can't
-; have XDOC topics for their parents.  So, get them all loaded and converted
-; into proper XDOC topics, then move them around where we want them.
-
-#+acl2-legacy-doc
-(xdoc::import-acl2doc)
 
 (include-book "xdoc/topics" :dir :system)
 (include-book "xdoc/alter" :dir :system)
@@ -438,40 +295,49 @@ of proofs.")
 ; hierarchy at some sensible places.  These changes are not controversial, so
 ; we'll do them globally, so they'll be included, e.g., in the Emacs version of
 ; the combined manual.
-(xdoc::change-parents ihs (arithmetic))
+
 ; data-definitions went away.  It might be reasonable to place with-timeout
 ; under defdata, if that still exists.
 ;(xdoc::change-parents data-definitions (macro-libraries projects debugging))
 ;(xdoc::change-parents with-timeout (data-definitions))
 ;(xdoc::change-parents testing (cgen))
 ;; (xdoc::change-parents data-structures (macro-libraries))
-(xdoc::change-parents hacker (interfacing-tools))
-(xdoc::change-parents witness-cp (proof-automation))
-
-
-(xdoc::change-parents leftist-trees (projects))
-(xdoc::change-parents ltree-sort (leftist-trees))
-(xdoc::change-parents how-many-lt (leftist-trees))
-
-(xdoc::change-parents consideration (hints))
-(xdoc::change-parents untranslate-patterns (macros user-defined-functions-table))
 
 #!XDOC
 (defun fix-redundant-acl2-parents (all-topics)
-  (b* (((when (atom all-topics))
-        nil)
-       (topic (car all-topics))
-       (parents (cdr (assoc :parents topic)))
-       (topic (if (or (equal parents '(acl2::top acl2::acl2))
-                      (equal parents '(acl2::acl2 acl2::top)))
-                  (progn$
-                   (cw "; Note: Removing 'redundant' ACL2 parent for ~x0.~%"
-                       (cdr (assoc :name topic)))
-                   (cons (cons :parents '(acl2::top))
-                         (delete-assoc-equal :parents topic)))
-                topic)))
-    (cons topic
-          (fix-redundant-acl2-parents (cdr all-topics)))))
+
+; Modification 7/19/2015 by Matt K.: The rebinding of topic just below caused
+; the removal of ACL2 as a parent for three topics, as indicated in the
+; following output in books/doc/top.cert.out:
+
+; Note: Removing 'redundant' ACL2 parent for PROOF-AUTOMATION.
+; Note: Removing 'redundant' ACL2 parent for INTERFACING-TOOLS.
+; Note: Removing 'redundant' ACL2 parent for DEBUGGING.
+
+; But I definitely want DEBUGGING to show up under ACL2.  One reason is that
+; otherwise, many ACL2 topics quite appropriately have DEBUGGING as their sole
+; parent, and thus are not included in the tree of topics under ACL2.  I'd
+; prefer that INTERFACING-TOOLS to show up under ACL2 as well (for example, so
+; that COMMAND-LINE is in the tree of topics under ACL2).  But I agree that
+; ther is no reason for PROOF-AUTOMATION to be under ACL2, so I have removed
+; ACL2 as a parent of PROOF-AUTOMATION in books/doc/more-topics.lisp.
+
+; (b* (((when (atom all-topics))
+;       nil)
+;      (topic (car all-topics))
+;      (parents (cdr (assoc :parents topic)))
+;      (topic (if (or (equal parents '(acl2::top acl2::acl2))
+;                     (equal parents '(acl2::acl2 acl2::top)))
+;                 (progn$
+;                  (cw "; Note: Removing 'redundant' ACL2 parent for ~x0.~%"
+;                      (cdr (assoc :name topic)))
+;                  (cons (cons :parents '(acl2::top))
+;                        (delete-assoc-equal :parents topic)))
+;               topic)))
+;   (cons topic
+;         (fix-redundant-acl2-parents (cdr all-topics))))
+
+  all-topics)
 
 (defmacro xdoc::fix-the-hierarchy ()
   ;; Semi-bozo.
@@ -519,6 +385,29 @@ of proofs.")
                               :verbosep t)))
    (value '(value-triple "xdoc.sao"))))
 
+
+; Once upon a time we had a an out-of-control macro generating automatic docs
+; that included every event in the world(!).  To make this sort of problem
+; easier to spot, we now print out a brief listing of the longest topics.
+
+#!XDOC
+(defun find-long-topics (all-topics)
+  (if (atom all-topics)
+      nil
+    (cons (cons (length (cdr (assoc :long (car all-topics))))
+                (cdr (assoc :name (car all-topics))))
+          (find-long-topics (cdr all-topics)))))
+
+#!XDOC
+(value-triple
+ (b* ((lengths->names (find-long-topics (get-xdoc-table (w state)))))
+   (cw "Longest topics listing (length . name):~%~x0~%"
+       (take 30 (reverse (mergesort lengths->names))))))
+
+; GC so the fork for the zip call of xdoc::save has a smaller chance of running
+; out of memory.
+(value-triple (hons-clear t))
+
 (value-triple
  (progn$ (cw "--- Writing ACL2+Books Manual ----------------------------------~%")
          :invisible))
@@ -557,26 +446,27 @@ of proofs.")
 (defttag :open-output-channel!)
 
 #!XDOC
-(acl2::defconsts
- (& & state)
- (state-global-let*
-  ((current-package "ACL2" set-current-package-state))
-  (b* ((all-topics (force-root-parents
-                    (maybe-add-top-topic
-                     (normalize-parents-list ; Should we clean-topics?
-                      (get-xdoc-table (w state))))))
-       ((mv rendered state)
-        (render-topics all-topics all-topics state))
-       (rendered (split-acl2-topics rendered nil nil nil))
-       (outfile (acl2::extend-pathname (cbd)
-                                       "../system/doc/rendered-doc-combined.lsp"
-                                       state))
-       (- (cw "Writing ~s0~%" outfile))
-       ((mv channel state) (open-output-channel! outfile :character state))
-       ((unless channel)
-        (cw "can't open ~s0 for output." outfile)
-        (acl2::silent-error state))
-       (state (princ$ "; Documentation for acl2+books
+(make-event
+ (time$
+  (state-global-let*
+   ((current-package "ACL2" set-current-package-state))
+   (b* ((all-topics (time$
+                     (force-root-parents
+                      (maybe-add-top-topic
+                       (normalize-parents-list ; Should we clean-topics?
+                        (get-xdoc-table (w state)))))))
+        ((mv rendered state)
+         (time$ (render-topics all-topics all-topics state)))
+        (rendered (time$ (split-acl2-topics rendered nil nil nil)))
+        (outfile (acl2::extend-pathname (cbd)
+                                        "../system/doc/rendered-doc-combined.lsp"
+                                        state))
+        (- (cw "Writing ~s0~%" outfile))
+        ((mv channel state) (open-output-channel! outfile :character state))
+        ((unless channel)
+         (cw "can't open ~s0 for output." outfile)
+         (acl2::silent-error state))
+        (state (princ$ "; Documentation for acl2+books
 ; WARNING: GENERATED FILE, DO NOT HAND EDIT!
 ; The contents of this file are derived from the full acl2+books
 ; documentation.  For license and copyright information, see community book
@@ -591,13 +481,13 @@ of proofs.")
 
 (defconst *acl2+books-documentation* '"
                       channel state))
-       (state (fms! "~x0"
+       (state (time$ (fms! "~x0"
                     (list (cons #\0 rendered))
-                    channel state nil))
+                    channel state nil)))
        (state (fms! ")" nil channel state nil))
        (state (newline channel state))
        (state (close-output-channel channel state)))
-      (value nil))))
+      (value '(value-triple :ok))))))
 
 
 
@@ -632,7 +522,8 @@ of proofs.")
       "new-doc.lsp")
      (xdoc::save "./manual"
                  :import nil
-                 :redef-okp t)
+                 :redef-okp t
+                 :zip-p nil)
      (value `(value-triple :manual)))))
 
 

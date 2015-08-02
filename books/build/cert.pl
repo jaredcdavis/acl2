@@ -63,7 +63,8 @@ my %reqparams = ("hons-only"      => "HONS_ONLY",
 		 "ccl-only"       => "CCL_ONLY",
 		 'non-lispworks'  => "NON_LISPWORKS",
 		 'non-allegro'    => "NON_ALLEGRO",
-		 'non-sbcl'       => "NON_SBCL"
+		 'non-sbcl'       => "NON_SBCL",
+		 'non-gcl'       => "NON_GCL"
     );
 
 # use lib "/usr/lib64/perl5/5.8.8/x86_64-linux-thread-multi/Devel";
@@ -157,7 +158,11 @@ that we may correctly decode include-book and other forms with :dir
 
  - (depends-on "<filename>" [:dir :<dirname>])
      Adds the named file as a dependency of the current book.  May
-occur in a comment, since depends-on is not defined in ACL2.
+occur in a comment, since depends-on is not defined in ACL2.  Note: If
+you want to add a dependency on a book, just use include-book (inside
+a multiline comment, if you don\'t want it actually included.
+Depends-on is intended for non-book dependencies, so cert.pl won\'t
+scan the target for its dependencies.
 
  - (loads "<filename>" [:dir :<dirname>])
      Adds the named file as a dependency of the current book, and also
@@ -431,6 +436,21 @@ COMMAND LINE OPTIONS
           of some book with \'-p\', the target extension used is \'cert\'.
           This option allows you to specify this default extension as (say)
           \'pcert0\' instead.
+
+
+USEFUL ENVIRONMENT VARIABLES
+
+    TIME_CERT (default: "")
+         Can be set to 1 to enable .cert.time files, which can be used by tools
+         such as critpath.pl for build profiling.
+
+    CERT_PL_NO_COLOR (default: "")
+         Can be set to disable ANSI color coded output.
+
+    ACL2_BOOKS_DEBUG (default: "")
+         Can be set to 1 to enable extra debugging information and to preserve
+         temporary files.
+
 ';
 
 GetOptions ("help|h"               => sub { print $summary_str;
@@ -654,7 +674,8 @@ my %stubs = (); # maps stub files to the books that include them
 foreach my $cert (@certs) {
     my $certdeps = cert_bookdeps($cert, $depdb);
     foreach my $dep (@$certdeps) {
-	if (cert_get_param($dep, $depdb, "reloc_stub")) {
+	if (cert_get_param($dep, $depdb, "reloc_stub")
+	    || cert_get_param($dep, $depdb, "reloc-stub")) {
 	    if (exists $stubs{$dep}) {
 		push(@{$stubs{$dep}}, $cert);
 	    } else {

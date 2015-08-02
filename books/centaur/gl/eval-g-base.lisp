@@ -79,7 +79,7 @@
    mod
    truncate
    rem
-   acl2::boolfix
+   acl2::bool-fix$inline
    hons-assoc-equal
 
    ;; these are from the constant *expandable-boot-strap-non-rec-fns*.
@@ -90,7 +90,7 @@
    ;; DOUBLE-REWRITE
 
    logapp int-set-sign maybe-integer
-   binary--))
+   binary-minus-for-gl))
 
 
 (in-theory (disable eval-g-base))

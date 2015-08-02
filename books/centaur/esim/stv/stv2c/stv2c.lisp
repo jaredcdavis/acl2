@@ -1,5 +1,5 @@
 ; ESIM Symbolic Hardware Simulator
-; Copyright (C) 2010-2012 Centaur Technology
+; Copyright (C) 2008-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -29,6 +29,9 @@
 ; Added 10/17/2013 by Matt K.: Making this hons-only, because the proof of
 ; RETURN-TYPE-OF-STV2C-OUTPUT-STUFF-AUX seems to bog down in ACL2 as opposed to
 ; ACL2(h), perhaps because worse-than needs to be memoized.
+; NOTE: perhaps this no longer needs to be hons-only, given the new clocked
+; scheme for the "worse-than" algorithm (see source function
+; worse-than-builtin-clocked).
 ; cert_param: (hons-only)
 
 ; stv2c.lisp -- translates STVs into C++ functions
@@ -45,7 +48,7 @@
 
 #||
 (include-book ;; Handy for testing
- "centaur/tutorial/alu16-book" :dir :system)
+ "centaur/esim/tutorial/alu16-book" :dir :system)
 ||#
 
 (define stv2c-tailchar-p ((x characterp))

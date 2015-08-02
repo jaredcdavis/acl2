@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -257,6 +257,8 @@ implementations.")
 ; Create the packages we use.
 
 (load "acl2.lisp")
+
+(acl2::proclaim-optimize)
 
 ; We allow ACL2(h) code to take advantage of Ansi CL features.  It's
 ; conceivable that we don't need this restriction (which only applies to GCL),
@@ -719,9 +721,15 @@ implementations.")
    *acl2-snapshot-string*
 
    "~a"
-   #+hons
-   "~%~% Includes support for hash cons, memoization, and applicative hash~
-    ~% tables.~%"
+
+; Here, we formerly printed "Includes support for hash cons, memoization, and
+; applicative hash tables."  Now that ACL2(c) is deprecated, we have decided
+; that this is no longer appropriate to print (after all, we don't say that
+; ACL2 includes support for rewriting).
+
+   #-hons
+   "~%~% WARNING: ACL2(c) is deprecated and will likely be unsupported or~
+    ~% even eliminated in future releases.~%"
    #+acl2-par
    "~%~% Experimental modification for parallel evaluation.  Please expect at~
     ~% most limited maintenance for this version~%"
@@ -868,6 +876,18 @@ implementations.")
   nil)
 
 #+akcl
+(defvar *gcl-large-maxpages*
+
+; This variable tells GCL to use Camm Maguire's strategy during development of
+; GCL 2.6.13 of using large maxpage limits to postpone garbage collection, and
+; thus avoid SGC.  It appears that si::*code-block-reserve* was introduced at
+; the time this strategy was developed, and that si::set-log-maxpage-bound was
+; already defined at that point (but we check, since we rely on that).
+
+  (and (boundp 'si::*code-block-reserve*)
+       (fboundp 'si::set-log-maxpage-bound)))
+
+#+akcl
 (defun save-acl2-in-akcl-aux (sysout-name gcl-exec-name
                                           write-worklispext
                                           set-optimize-maximum-pages
@@ -908,6 +928,9 @@ implementations.")
 ; 'si::*optimize-maximum-pages* to t just before the save.
 
            (setq si::*optimize-maximum-pages* t)))
+    (when *gcl-large-maxpages*
+      (setq si::*code-block-reserve*
+            (make-array 40000000 :element-type 'character :static t)))
     (chmod-executable sysout-name)
     (si::save-system (concatenate 'string sysout-name "." ext))))
 
@@ -1045,7 +1068,8 @@ implementations.")
   (si::gbc t) ; wfs suggestion [at least if we turn on SGC] -- formerly nil
               ; (don't know why...)
 
-  (cond ((fboundp 'si::sgc-on)
+  (cond ((and (not *gcl-large-maxpages*)
+              (fboundp 'si::sgc-on))
          (print "Executing (si::sgc-on t)") ;debugging GC
          (funcall 'si::sgc-on t)))
 
@@ -1149,77 +1173,79 @@ implementations.")
 (defun acl2-default-restart ()
   (if *acl2-default-restart-complete*
       (return-from acl2-default-restart nil))
+  (let ((produced-by-save-exec-p *lp-ever-entered-p*))
+    (proclaim-optimize) ; see comment in proclaim-optimize
+    (setq *lp-ever-entered-p* nil)
+    (#+cltl2
+     common-lisp-user::acl2-set-character-encoding
+     #-cltl2
+     user::acl2-set-character-encoding)
 
-  (setq *lp-ever-entered-p* nil)
-  (#+cltl2
-   common-lisp-user::acl2-set-character-encoding
-   #-cltl2
-   user::acl2-set-character-encoding)
+    (fix-default-pathname-defaults)
 
-  (fix-default-pathname-defaults)
-
-  #+ccl
-  (progn
+    #+ccl
+    (progn
 
 ; In CCL, print greeting now, rather than upon first re-entry to ACL2 loop.
 ; Here we follow a suggestion from Gary Byers.
 
-    (when *print-startup-banner*
-      (format t "~&Welcome to ~A ~A!~%"
-              (lisp-implementation-type)
-              (lisp-implementation-version)))
-    (setq ccl::*inhibit-greeting* t))
+      (when *print-startup-banner*
+        (format t "~&Welcome to ~A ~A!~%"
+                (lisp-implementation-type)
+                (lisp-implementation-version)))
+      (setq ccl::*inhibit-greeting* t))
 
-  #+hons (qfuncall acl2h-init)
+    #+hons (when (not produced-by-save-exec-p)
+             (qfuncall acl2h-init))
 
-  #+gcl
-  (progn
+    #+gcl
+    (progn
 
 ; Some recent versions of GCL (specifically, 2.6.9 in Sept. 2013) do not print
 ; the startup banner until we first exit the loop.  So we handle that situation
 ; much as we handle a similar issue for CCL above, following GCL source file
 ; lsp/gcl_top.lsp.
 
-    (when (and *print-startup-banner*
-               (boundp 'si::*system-banner*))
-      (format t si::*system-banner*)
-      (setq *saved-system-banner* si::*system-banner*)
-      (makunbound 'si::*system-banner*)
-      (when (boundp 'si::*tmp-dir*)
-        (format t "Temporary directory for compiler files set to ~a~%"
-                si::*tmp-dir*)))
+      (when (and *print-startup-banner*
+                 (boundp 'si::*system-banner*))
+        (format t si::*system-banner*)
+        (setq *saved-system-banner* si::*system-banner*)
+        (makunbound 'si::*system-banner*)
+        (when (boundp 'si::*tmp-dir*)
+          (format t "Temporary directory for compiler files set to ~a~%"
+                  si::*tmp-dir*)))
 ; Growing the sbits array just before si::save-system doesn't seem to avoid
 ; triggering a call of hl-hspace-grow-sbits when the first static hons is
 ; created.  So we do the grow here, i.e., after starting ACL2(h).
-    #+(and hons static-hons)
-    (hl-hspace-grow-sbits (hl-staticp (cons nil nil)) *default-hs*))
+      #+(and hons static-hons)
+      (hl-hspace-grow-sbits (hl-staticp (cons nil nil)) *default-hs*))
 
-  (when *print-startup-banner*
-    (format t
-            *saved-string*
-            *copy-of-acl2-version*
-            (saved-build-dates :terminal)
-            (cond (*saved-mode*
-                   (format nil "~% Initialized with ~a." *saved-mode*))
-                  (t ""))
-            (eval '(latest-release-note-string)) ; avoid possible warning
-            ))
-  (maybe-load-acl2-init)
-  (eval `(in-package ,*startup-package-name*))
+    (when *print-startup-banner*
+      (format t
+              *saved-string*
+              *copy-of-acl2-version*
+              (saved-build-dates :terminal)
+              (cond (*saved-mode*
+                     (format nil "~% Initialized with ~a." *saved-mode*))
+                    (t ""))
+              (eval '(latest-release-note-string)) ; avoid possible warning
+              ))
+    (maybe-load-acl2-init)
+    (eval `(in-package ,*startup-package-name*))
 
 ; The following two lines follow the recommendation in Allegro CL's
 ; documentation file doc/delivery.htm.
 
-  #+allegro (tpl:setq-default *package* (find-package *startup-package-name*))
-  #+allegro (rplacd (assoc 'tpl::*saved-package*
-                           tpl:*default-lisp-listener-bindings*)
-                    'common-lisp:*package*)
-  #+allegro (lp)
-  #+lispworks (lp)
-  #+ccl (eval '(lp)) ; using eval to avoid compiler warning
+    #+allegro (tpl:setq-default *package* (find-package *startup-package-name*))
+    #+allegro (rplacd (assoc 'tpl::*saved-package*
+                             tpl:*default-lisp-listener-bindings*)
+                      'common-lisp:*package*)
+    #+allegro (lp)
+    #+lispworks (lp)
+    #+ccl (eval '(lp)) ; using eval to avoid compiler warning
 
-  (setq *acl2-default-restart-complete* t)
-  nil)
+    (setq *acl2-default-restart-complete* t)
+    nil))
 
 #+cmu
 (defun cmulisp-restart ()
@@ -1438,9 +1464,8 @@ implementations.")
 ; The user is welcome to set this value, which according to
 ; http://www.sbcl.org/manual/, is the "Size of the dynamic space reserved on
 ; startup in megabytes."  It can be done either by setting this variable before
-; saving an ACL2 image, or by editing the resulting script (e.g., saved_acl2 or
-; saved_acl2h).  Here we explain the defaults that we provide for this
-; variable.
+; saving an ACL2 image, or by editing the resulting script (e.g., saved_acl2).
+; Here we explain the defaults that we provide for this variable.
 
 ; We observed during development of Version_5.0 that --dynamic-space-size 2000
 ; is necessary in order to complete an ACL2(h) regression with SBCL 1.0.55 on a
@@ -1485,7 +1510,44 @@ implementations.")
   #-x86-64 2000)
 
 #+sbcl
-(defvar *sbcl-contrib-dir* nil)
+(defvar *sbcl-contrib-dir*
+  (or (getenv$-raw "SBCL_HOME")
+      (let ((suggestions
+             (and
+              (boundp 'sb-ext::*core-pathname*)
+              (ignore-errors
+                (let* ((core-dir
+                        (pathname-directory
+                         sb-ext::*core-pathname*))
+                       (contrib-dir-pathname-new ; see comment above
+                        (and (equal (car (last core-dir))
+                                    "output")
+                             (make-pathname
+                              :directory
+                              (append (butlast core-dir 1)
+                                      (list "obj/sbcl-home")))))
+                       (contrib-dir-pathname
+                        (and (equal (car (last core-dir))
+                                    "output")
+                             (make-pathname
+                              :directory
+                              (append (butlast core-dir 1)
+                                      (list "contrib"))))))
+                  (append (and (probe-file contrib-dir-pathname-new)
+                               (list (namestring contrib-dir-pathname-new)))
+                          (and (probe-file contrib-dir-pathname)
+                               (list (namestring contrib-dir-pathname)))))))))
+        (cond
+         ((consp (cdr suggestions))
+          (error "Please set environment variable SBCL_HOME.  Suggestions:~%~
+                  ~a or ~a"
+                 (car suggestions)
+                 (cadr suggestions)))
+         ((consp suggestions)
+          (error "Please set environment variable SBCL_HOME.  Suggestion:~%~
+                  ~a"
+                 (car suggestions)))
+         (t (error "Please set environment variable SBCL_HOME."))))))
 
 #+sbcl
 (defun save-acl2-in-sbcl-aux (sysout-name core-name
@@ -1521,40 +1583,9 @@ implementations.")
 ; to include the trailing "contrib/" when using obj/sbcl-home/.
 
         ("~a~%"
-         (let ((contrib-dir
-                (or
-                 *sbcl-contrib-dir*
-                 (and (boundp 'sb-ext::*core-pathname*)
-                      (ignore-errors
-                        (let* ((core-dir
-                                (pathname-directory
-                                 sb-ext::*core-pathname*))
-                               (contrib-dir-pathname-new ; see comment above
-                                (and (equal (car (last core-dir))
-                                            "output")
-                                     (make-pathname
-                                      :directory
-                                      (append (butlast core-dir 1)
-                                              (list "obj/sbcl-home")))))
-                               (contrib-dir-pathname
-                                (and (equal (car (last core-dir))
-                                            "output")
-                                     (make-pathname
-                                      :directory
-                                      (append (butlast core-dir 1)
-                                              (list "contrib"))))))
-                          (cond ((probe-file contrib-dir-pathname-new)
-                                 (setq *sbcl-contrib-dir*
-                                       (namestring contrib-dir-pathname-new)))
-                                ((probe-file contrib-dir-pathname)
-                                 (setq *sbcl-contrib-dir*
-                                       (namestring contrib-dir-pathname)))
-                                (t nil))))))))
-           (if contrib-dir
-               (format nil
-                       "export SBCL_HOME=~s"
-                       contrib-dir)
-             "")))
+         (format nil
+                 "export SBCL_HOME=~s"
+                 *sbcl-contrib-dir*))
 
 ; We have observed with SBCL 1.0.49 that "make HTML" fails on our 64-bit linux
 ; system unless we start sbcl with --control-stack-size 4 [or larger].  The
@@ -1897,8 +1928,11 @@ implementations.")
   (declare (ignore other-info))
 
   #+akcl
-  (if (boundp 'si::*optimize-maximum-pages*)
-      (setq si::*optimize-maximum-pages* nil)) ; Camm Maguire suggestion
+  (when (boundp 'si::*optimize-maximum-pages*) ; Camm Maguire suggestions
+    (setq si::*optimize-maximum-pages* nil)
+    (when *gcl-large-maxpages*
+      (si::set-log-maxpage-bound
+       (1+ (integer-length most-positive-fixnum)))))
 
 ; Consider adding something like
 ; (ccl::save-application "acl2-image" :size (expt 2 24))

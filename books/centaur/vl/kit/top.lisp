@@ -29,21 +29,31 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "json")
+;; (include-book "json")
 (include-book "lint")
-(include-book "model")
 (include-book "shell")
 (include-book "pp")
 (include-book "gather")
+(include-book "zip")
 (include-book "server")
 (include-book "oslib/argv" :dir :system)
-(include-book "centaur/esim/stv/stv2c/top" :dir :system)
 (include-book "centaur/misc/intern-debugging" :dir :system)
 (include-book "centaur/misc/memory-mgmt" :dir :system)
 (include-book "centaur/misc/tshell" :dir :system)
 (include-book "centaur/nrev/fast" :dir :system)
 (local (include-book "../util/arithmetic"))
 (local (include-book "../util/osets"))
+
+#||
+
+; Fool the dependency scanner into certifying testing books as part
+; of building top.cert
+
+(include-book "../loader/lexer/tests")
+(include-book "../loader/preprocessor/tests")
+(include-book "../loader/parser/tests/top")
+
+||#
 
 (defconst *vl-generic-help*
   "VL Verilog Toolkit
@@ -56,12 +66,11 @@ Commands:
   help    Print this message, or get help on a particular VL command
   json    Convert Verilog designs into JSON files (for easy parsing)
   lint    Find potential bugs in a Verilog design
-  model   Translate Verilog designs for the ACL2 theorem prover
-  stv2c   Translate symbolic runs of Verilog designs into C++
   pp      Preprocess Verilog designs
   gather  Collect Verilog files into a single file
-  server  Start a VL web server (for web-based module browsing)
+  server  Start a VL web server for web-based module browsing
   shell   Interactive VL shell (for experts)
+  zip     Save a .vlzip file for the VL web server
 
 Use 'vl help <command>' for help on a specific command.
 ")
@@ -97,14 +106,14 @@ commands.</p>
 
   (defconst *vl-help-messages*
     (list (cons "help"   *vl-generic-help*)
-          (cons "json"   *vl-json-help*)
+          ;(cons "json"   *vl-json-help*)
           (cons "lint"   *vl-lint-help*)
-          (cons "model"  *vl-model-help*)
-          (cons "stv2c"  acl2::*stv2c-help*)
           (cons "pp"     *vl-pp-help*)
           (cons "gather" *vl-gather-help*)
           (cons "server" *vl-server-help*)
-          (cons "shell"  *vl-shell-help*)))
+          (cons "shell"  *vl-shell-help*)
+          (cons "zip"    *vl-zip-help*)
+          ))
 
   (encapsulate
     (((vl-toolkit-help-message *) => *
@@ -191,6 +200,7 @@ toolkit with their own commands.</p>
         ;; chance to enter a break loop if something crashes.  Printing a
         ;; backtrace before aborting, then, can be extremely useful.
         (set-debugger-enable :bt-break))
+       (- (gc-verbose t))
        (- (acl2::tshell-ensure))
        ((mv argv state) (oslib::argv))
 
@@ -208,18 +218,13 @@ toolkit with their own commands.</p>
           (exit-ok)
           state))
 
-       ((when (equal cmd "json"))
-        (b* ((state (vl-json args)))
-          (exit-ok)
-          state))
+       ;; ((when (equal cmd "json"))
+       ;;  (b* ((state (vl-json args)))
+       ;;    (exit-ok)
+       ;;    state))
 
        ((when (equal cmd "lint"))
         (b* ((state (vl-lint args)))
-          (exit-ok)
-          state))
-
-       ((when (equal cmd "model"))
-        (b* ((state (vl-model args)))
           (exit-ok)
           state))
 
@@ -233,8 +238,8 @@ toolkit with their own commands.</p>
           (exit-ok)
           state))
 
-       ((when (equal cmd "stv2c"))
-        (b* ((state (acl2::stv2c args)))
+       ((when (equal cmd "zip"))
+        (b* ((state (vl-zip-top args)))
           (exit-ok)
           state))
 

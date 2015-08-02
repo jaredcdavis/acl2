@@ -680,15 +680,12 @@
 
 ; Note:  cert-annotations might be NIL after certify-book.  See below.
 
-; The function include-book-alistp exists in our source code but has a slightly
-; richer interface than needed here.  Using it directly would require us to
-; make pseudo-good-worldp a function of the ACL2 Version.  But the world is so
-; version-dependent that there's no reason to pretend to recognize the worlds of
-; older versions.  So we just define pseudo versions of the predicates in
-; our sources.
-
 ; Cert-annotationsp is defined in the source code and uses ttag-alistp.
 ; We need to admit guard-verified versions of each.
+
+(verify-termination sysfile-p)
+
+(verify-termination sysfile-or-string-listp)
 
 (verify-termination ttag-alistp)
 
@@ -713,7 +710,7 @@
 ; is the natural predicate.
 
           (or (null cert-annotations)
-              (cert-annotationsp cert-annotations))
+              (cert-annotationsp cert-annotations t))
           (or (integerp chk-sum)
               (eq chk-sum nil))))
     (& nil)))
@@ -1181,6 +1178,45 @@
                 (ttags-seenp (cdr val))))))
 
 ; -----------------------------------------------------------------
+; NEVER-UNTOUCHABLE-FNS [GLOBAL-VALUE]
+
+; This is a symbol-alist pairing function names with lists of
+; well-formedness-guarantees.
+
+(verify-termination arity-alistp)
+
+(defun well-formedness-guaranteep (x)
+
+; A well-formedness guarantee is actually: ((name fn thm-name1 hyp-fn
+; thm-name2) . arity-alist) where name is the name of a metatheorem or the
+; correctness of a clause-processor, fn is the metafunction or
+; clause-processor, thm-name1 is the name of the theorem establishing that the
+; output of fn is well-formed, and hyp-fn and thm-name2 are the analogous
+; things for those metatheorems with hyp-fns.  The last two elements are
+; omitted when there is no hyp-fn for name.  The arity-alist maps function
+; symbols to their assumed arities.  We just check the syntatic conditions.
+
+  (and (consp x)
+       (symbol-listp (car x))
+       (or (equal (len (car x)) 3)
+           (equal (len (car x)) 5))
+       (arity-alistp (cdr x))))
+
+(defun well-formedness-guarantee-listp (lst)
+  (if (atom lst)
+      (eq lst nil)
+      (and (well-formedness-guaranteep (car lst))
+           (well-formedness-guarantee-listp (cdr lst)))))
+
+(defun never-untouchable-fnsp (val)
+  (if (atom val)
+      (eq val nil)
+      (and (consp (car val))
+           (symbolp (car (car val)))
+           (well-formedness-guarantee-listp (cdr (car val)))
+           (never-untouchable-fnsp (cdr val)))))
+
+; -----------------------------------------------------------------
 ; UNTOUCHABLE-FNS [GLOBAL-VALUE]
 
 ; Technically, the two untouchable lists, fns and vars, should be function or
@@ -1365,7 +1401,8 @@
 
 (defun clause-processorp (sym val)
   (declare (ignore sym))
-  (booleanp val))
+  (or (booleanp val)
+      (well-formedness-guaranteep val)))
 
 ;-----------------------------------------------------------------
 ; COARSENINGS
@@ -1722,6 +1759,7 @@
     (TAU-MV-NTH-SYNONYMS (pseudo-function-symbol-listp val nil))
     (TAU-LOST-RUNES (pseudo-runep-listp val))
     (TTAGS-SEEN (ttags-seenp val))
+    (NEVER-UNTOUCHABLE-FNS (never-untouchable-fnsp val))
     (UNTOUCHABLE-FNS (untouchable-fnsp val))
     (UNTOUCHABLE-VARS (untouchable-varsp val))
     (DEFINED-HEREDITARILY-CONSTRAINED-FNS
@@ -1889,7 +1927,8 @@
              (pseudo-function-symbolp lhs 1)           ; name of meta function
              (or (null rhs)
                  (eq rhs 'extended))
-             (null heuristic-info)
+             (or (null heuristic-info)
+                 (well-formedness-guaranteep heuristic-info))
              (or (null backchain-limit-lst)
                  (natp backchain-limit-lst))           ; backchain limit for meta rule really can be a nat
 ;            (null var-info) ; ignored

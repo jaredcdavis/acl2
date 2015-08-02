@@ -182,7 +182,7 @@
 
 
 (include-book "hons-sets")
-(include-book "tools/bstar" :dir :system)
+(include-book "std/util/bstar" :dir :system)
 (include-book "tools/mv-nth" :dir :system)
 (include-book "tools/rulesets" :dir :system)
 (include-book "misc/untranslate-patterns" :dir :system)
@@ -540,14 +540,6 @@
                    vars (cons (cons key val) rest))
                   (ifl-ev-lst
                    vars rest))))
-
-
-(defun list-fix (x)
-  (declare (xargs :guard t))
-  (if (consp x)
-      (cons (car x) (list-fix (cdr x)))
-    nil))
-
 
 
 (defthm ifl-ev-lst-pairlis

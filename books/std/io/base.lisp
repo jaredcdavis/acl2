@@ -50,8 +50,9 @@
 
   (defun bytep (x)
     (declare (xargs :guard t))
-    (and (natp x)
-         (< x 256)))
+    (mbe :logic (unsigned-byte-p 8 x)
+         :exec (and (natp x)
+                    (< x 256))))
 
   (defthm bytep-compound-recognizer
     (implies (bytep x)
@@ -343,7 +344,7 @@ input streams.  So, that might be worth considering.</p>"
   ;; Performance testing code
   #||
   (include-book ;; newline to fool dependency scanner
-    "tools/bstar" :dir :system)
+    "std/util/bstar" :dir :system)
   (defun skip-chars-until-eof (channel state)
     (declare (xargs :mode :program :stobjs state))
     (b* (((mv char/nil state) (read-char$ channel state))
@@ -973,8 +974,80 @@ with @('channel').</p>"
     (implies (and (state-p1 state)
                   (open-output-channel-p1 channel :object state))
              (open-output-channel-p1 channel
-                                     :object (print-object$ x channel state)))))
+                                     :object (print-object$ x channel state))))
 
+  "<p>Knowing about @('hons-enabledp') is necessary for using @(see
+   set-serialize-character).</p>"
+
+  (defthm hons-enabledp-of-print-object$
+    (equal (acl2::hons-enabledp (print-object$ obj channel state))
+           (acl2::hons-enabledp state))
+    :hints(("Goal" :in-theory (enable get-global))))
+
+  (defthm get-serialize-character-of-print-object$
+    (equal (get-serialize-character (print-object$ obj channel state))
+           (get-serialize-character state))
+    :hints(("Goal" :in-theory (enable get-serialize-character
+                                      get-global)))))
+
+
+(defsection serialize-characterp
+  :parents (std/io/set-serialize-character)
+  :short "Recognizer for valid serialize characters."
+
+  (defund serialize-characterp (c)
+    (declare (xargs :guard t))
+    (or (not c)
+        (equal c #\Z)
+        (equal c #\Y))))
+
+(defsection std/io/set-serialize-character
+  :parents (std/io set-serialize-character)
+  :short "Control the use of @(see serialize) in @(see print-object$)."
+
+  (defthm state-p1-of-set-serialize-character
+    (implies (state-p1 state)
+             (state-p1 (set-serialize-character c state))))
+
+  (defthm open-output-channel-p1-of-set-serialize-character
+    (implies (and (state-p1 state)
+                  (open-output-channel-p1 channel :object state))
+             (open-output-channel-p1 channel :object (set-serialize-character c state)))
+    :hints(("Goal" :in-theory (enable put-global))))
+
+  (defthm get-serialize-character-of-set-serialize-character
+    ;; Ugh, this is so gross...
+    (equal (get-serialize-character (set-serialize-character c state))
+           (cond ((not c)
+                  nil)
+                 ((and (hons-enabledp state)
+                       (serialize-characterp c))
+                  c)
+                 (t
+                  (get-serialize-character state))))
+    :hints(("Goal" :in-theory (enable acl2::get-serialize-character
+                                      set-serialize-character
+                                      serialize-characterp))))
+
+  (defthm hons-enabledp-of-set-serialize-character
+    (equal (hons-enabledp (set-serialize-character c state))
+           (hons-enabledp state))
+    :hints(("Goal" :in-theory (enable set-serialize-character
+                                      get-global
+                                      put-global
+                                      hons-enabledp))))
+
+  (defthm boundp-global1-of-set-serialize-character
+    (iff (boundp-global1 'serialize-character
+                         (set-serialize-character c state))
+         (cond ((not c)
+                t)
+               ((and (hons-enabledp state)
+                     (serialize-characterp c))
+                t)
+               (t
+                (boundp-global1 'serialize-character state))))
+    :hints(("Goal" :in-theory (enable serialize-characterp)))))
 
 
 
@@ -1138,4 +1211,6 @@ for the guards of @(see close-input-channel) and @(see close-output-channel)."
                     princ$
                     write-byte$
                     print-object$
+                    set-serialize-character
+                    get-serialize-character
                     file-measure))

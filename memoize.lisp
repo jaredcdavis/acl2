@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -69,7 +69,9 @@
     hons-equal
     hons-equal-lite
     hons-clear
+    hons-clear!
     hons-wash
+    hons-wash!
     hons-summary
     hons-resize-fn
     get-slow-alist-action
@@ -85,7 +87,6 @@
     fast-alist-summary
     cons-subtrees
     number-subtrees
-    clear-hash-tables
     flush-hons-get-hash-table-link
     ;; from memoize.lisp
     clear-memoize-table
@@ -159,12 +160,7 @@
                (stobjs-in (getprop fn 'stobjs-in t
                                    'current-acl2-world wrld))
                (condition-fn (or ,condition-fn
-                                 (intern-in-package-of-symbol
-                                  (concatenate
-                                   'string
-                                   (symbol-name fn)
-                                   "-MEMOIZE-CONDITION")
-                                  fn)))
+                                 (add-suffix fn "-MEMOIZE-CONDITION")))
                (hints ,hints)
                (otf-flg ,otf-flg)
                (inline ,inline)
@@ -312,10 +308,7 @@
              ((eq commutative t)
               `(make-event
                 (let* ((fn ,fn)
-                       (commutative
-                        (intern-in-package-of-symbol
-                         (concatenate 'string (symbol-name fn) "-COMMUTATIVE")
-                         fn)))
+                       (commutative (add-suffix fn "-COMMUTATIVE")))
                   (list ; use encapsulate so that each form is printed first
                    'encapsulate
                    ()

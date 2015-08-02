@@ -309,12 +309,15 @@
 
 (set-state-ok t)
 
-(defun ith (i list)
-  (declare (type (integer 0 *) i))
-  (if (consp list)
-      (if (zp i) (car list)
-        (ith (1- i) (cdr list)))
-    nil))
+;; [Jared] there is a conflicting version of Ith in the util directory.
+;; Trying to use its definition now.
+(include-book "../util/ith")
+;; (defun ith (i list)
+;;   (declare (type (integer 0 *) i))
+;;   (if (consp list)
+;;       (if (zp i) (car list)
+;;         (ith (1- i) (cdr list)))
+;;     nil))
 
 (defun remove-ith (i list)
   (declare (type (integer 0 *) i))
@@ -604,13 +607,13 @@
     0))
 
 
-(defun remove-keywords (list)
+(defun remove-any-keywords (list)
   (if (consp list)
       (if (and (symbolp (car list))
                (in-pkg-of (car list) :key))
-          (remove-keywords (cdr list))
+          (remove-any-keywords (cdr list))
         (cons (car list)
-              (remove-keywords (cdr list))))
+              (remove-any-keywords (cdr list))))
     nil))
 
 (defun generate-cong-hyp-np (cong)
@@ -622,7 +625,7 @@
          (exp   (caddr eex)))
     (let* ((ctx-fn        (car exp))
            (fn-witness    (safe-witness ctx-fn))
-           (fix-args      (remove-keywords (cdr exp)))
+           (fix-args      (remove-any-keywords (cdr exp)))
            (fix-fn-unfix  (safe-symbol (list ctx-fn "_UNFIX") fn-witness))
            (fix-fn-unfix-check  (safe-symbol (list ctx-fn "_UNFIX_CHECK") fn-witness))
            (var-wrapped?  (safe-symbol (list ovar "-wrapped?")  ovar))

@@ -33,6 +33,7 @@
 (include-book "expr-tools") ;; bozo for simple delay control stuff
 (local (include-book "../util/arithmetic"))
 (local (std::add-default-post-define-hook :fix))
+(local (in-theory (disable (tau-system))))
 
 (defxdoc stmt-tools
   :parents (mlib)
@@ -46,6 +47,7 @@
                   nil))
   :hints(("Goal" :in-theory (enable vl-stmtlist-fix))))
 
+(fty::deflist vl-exprlistlist :elt-type vl-exprlist)
 
 (defsection vl-caselist-p-thms
 
@@ -280,6 +282,11 @@ expressions.</p>"
 
 
 (define vl-compoundstmt->exprs ((x vl-stmt-p))
+  :prepwork ((local (defthm vl-exprlist-p-of-flatten-when-vl-exprlistlist-p
+                      (implies (vl-exprlistlist-p x)
+                               (vl-exprlist-p (flatten x)))
+                      :hints(("Goal" :in-theory (enable flatten))))))
+                      
   :short "Get all immediate sub-expressions from any compound statement."
   :guard (not (vl-atomicstmt-p x))
   :returns (exprs vl-exprlist-p)
@@ -304,36 +311,47 @@ directly part of the statement.</p>"
   :guard (not (vl-atomicstmt-p x))
   :returns (ctrl vl-maybe-delayoreventcontrol-p)
   :long "<p>This really only makes sense for timing statements.</p>"
-  (if (eq (vl-stmt-kind x) :vl-timingstmt)
+  (if (vl-stmt-case x :vl-timingstmt)
       (vl-timingstmt->ctrl x)
     nil)
   ///
   (defthm vl-compoundstmt->ctrl-is-usually-nil
-    (implies (not (eq (vl-stmt-kind x) :vl-timingstmt))
+    (implies (not (vl-stmt-case x :vl-timingstmt))
              (equal (vl-compoundstmt->ctrl x)
                     nil))))
 
 
-(define vl-compoundstmt->decls
+(define vl-compoundstmt->vardecls
   :short "Get the declarations, if any, from an arbitrary compound (non-atomic) statement."
   ((x vl-stmt-p))
   :guard (not (vl-atomicstmt-p x))
-  :returns (decls vl-blockitemlist-p)
-  :long "<p>This really only makes sense for block statements.</p>"
+  :returns (decls vl-vardecllist-p)
+  :long "<p>This really only makes sense for block/for statements.</p>"
   (vl-stmt-case x
-    :vl-blockstmt x.decls
+    :vl-blockstmt x.vardecls
     :vl-forstmt x.initdecls
     :otherwise nil)
   ///
-  (defthm vl-compoundstmt->decls-is-usually-nil
-    (implies (and (not (eq (vl-stmt-kind x) :vl-blockstmt))
-                  (not (eq (vl-stmt-kind x) :vl-forstmt)))
-             (equal (vl-compoundstmt->decls x)
-                    nil)))
+  (defthm vl-compoundstmt->vardecls-is-usually-nil
+    (implies (and (not (vl-stmt-case x :vl-blockstmt))
+                  (not (vl-stmt-case x :vl-forstmt)))
+             (equal (vl-compoundstmt->vardecls x)
+                    nil))))
 
-  (defthm vl-compoundstmt->decls-when-vl-not-blockstmt
-    (implies (not (eq (vl-stmt-kind x) :vl-blockstmt))
-             (vl-vardecllist-p (vl-compoundstmt->decls x)))))
+(define vl-compoundstmt->paramdecls
+  :short "Get the declarations, if any, from an arbitrary compound (non-atomic) statement."
+  ((x vl-stmt-p))
+  :guard (not (vl-atomicstmt-p x))
+  :returns (decls vl-paramdecllist-p)
+  :long "<p>This really only makes sense for block statements.</p>"
+  (vl-stmt-case x
+    :vl-blockstmt x.paramdecls
+    :otherwise nil)
+  ///
+  (defthm vl-compoundstmt->paramdecls-is-usually-nil
+    (implies (not (vl-stmt-case x :vl-blockstmt))
+             (equal (vl-compoundstmt->paramdecls x)
+                    nil))))
 
 (define vl-rebuild-caselist ((x         vl-caselist-p)
                              (new-exprs vl-exprlist-p)
@@ -343,6 +361,9 @@ directly part of the statement.</p>"
            (and (same-lengthp new-exprs (flatten (alist-keys x)))
                 (same-lengthp new-stmts x)))
   :measure (vl-caselist-count x)
+  :prepwork ((local (defthm true-listp-when-vl-exprlist-p-rw
+                      (implies (vl-exprlist-p x)
+                               (true-listp x)))))
   (b* ((x (vl-caselist-fix x))
        ((when (atom x))
         nil)
@@ -463,15 +484,16 @@ directly part of the statement.</p>"
                           with @(see vl-compoundstmt->exprs).")
    (ctrl  vl-maybe-delayoreventcontrol-p "New timing control to install, for
                                           timing statements only.")
-   (decls vl-blockitemlist-p "New block item declarations to install."))
+   (vardecls vl-vardecllist-p "New variable declarations to install.")
+   (paramdecls vl-paramdecllist-p "New parameter declarations to install."))
   :guard (and (not (vl-atomicstmt-p x))
               (same-lengthp stmts (vl-compoundstmt->stmts x))
               (same-lengthp exprs (vl-compoundstmt->exprs x))
               (iff ctrl (vl-compoundstmt->ctrl x))
-              (or (not decls)
-                  (eq (vl-stmt-kind x) :vl-blockstmt)
-                  (and (eq (vl-stmt-kind x) :vl-forstmt)
-                       (vl-vardecllist-p decls))))
+              (or (not vardecls)
+                  (member (vl-stmt-kind x) '(:vl-blockstmt :vl-forstmt)))
+              (or (not paramdecls)
+                  (vl-stmt-case x :vl-blockstmt)))
   :returns (new-x vl-stmt-p)
   :guard-debug t
   :guard-hints(("Goal" :do-not '(generalize fertilize eliminate-destructors)))
@@ -481,7 +503,8 @@ directly part of the statement.</p>"
                                        vl-compoundstmt->stmts
                                        vl-compoundstmt->exprs
                                        vl-compoundstmt->ctrl
-                                       vl-compoundstmt->decls)))
+                                       vl-compoundstmt->vardecls
+                                       vl-compoundstmt->paramdecls)))
              (local (defthm l1
                       (implies (vl-caselist-p x)
                                (equal (len (alist-vals x))
@@ -491,7 +514,11 @@ directly part of the statement.</p>"
                       (implies (equal (len x) (+ 1 (len y)))
                                (equal (len (cdr x)) (len y)))))
 
-             (local (in-theory (enable len))))
+             (local (in-theory (enable len)))
+             (local (defthm vl-timingstmt->ctrl-type
+                      (vl-timingstmt->ctrl x)
+                      :hints(("Goal" :in-theory (enable (tau-system))))
+                      :rule-classes :type-prescription)))
 
   (let ((x (vl-stmt-fix x)))
     (vl-stmt-case x
@@ -524,7 +551,7 @@ directly part of the statement.</p>"
            (stmts        (vl-stmtlist-fix stmts))
            (stmts-starting-with-stepforms (nthcdr ninitassigns stmts)))
         (change-vl-forstmt x
-                           :initdecls decls
+                           :initdecls vardecls
                            :initassigns (take ninitassigns stmts)
                            :test    (first exprs)
                            :stepforms (take nstepforms stmts-starting-with-stepforms)
@@ -535,7 +562,8 @@ directly part of the statement.</p>"
                             :body (first stmts))
       :vl-blockstmt
       (change-vl-blockstmt x
-                           :decls decls
+                           :vardecls vardecls
+                           :paramdecls paramdecls
                            :stmts stmts)
       :vl-timingstmt
       (change-vl-timingstmt x
@@ -556,7 +584,8 @@ directly part of the statement.</p>"
                                         (vl-compoundstmt->stmts x)
                                         (vl-compoundstmt->exprs x)
                                         (vl-compoundstmt->ctrl x)
-                                        (vl-compoundstmt->decls x))
+                                        (vl-compoundstmt->vardecls x)
+                                        (vl-compoundstmt->paramdecls x))
            (vl-stmt-fix x)))
 
   (defthm vl-stmtlist-fix-of-take
@@ -582,7 +611,7 @@ directly part of the statement.</p>"
   (defthm vl-compoundstmt->stmts-of-change-vl-compoundstmt-core
     (implies (and (same-lengthp stmts (vl-compoundstmt->stmts x))
                   (same-lengthp exprs (vl-compoundstmt->exprs x)))
-             (equal (vl-compoundstmt->stmts (change-vl-compoundstmt-core x stmts exprs ctrl decls))
+             (equal (vl-compoundstmt->stmts (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
                     (vl-stmtlist-fix stmts)))
     :hints ((and stable-under-simplificationp
                  (acl2::equal-by-nths-hint))))
@@ -590,26 +619,27 @@ directly part of the statement.</p>"
   (defthm vl-compoundstmt->exprs-of-change-vl-compoundstmt-core
     (implies (and (same-lengthp stmts (vl-compoundstmt->stmts x))
                   (same-lengthp exprs (vl-compoundstmt->exprs x)))
-             (equal (vl-compoundstmt->exprs (change-vl-compoundstmt-core x stmts exprs ctrl decls))
+             (equal (vl-compoundstmt->exprs (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
                     (list-fix (vl-exprlist-fix exprs)))))
 
   (defthm vl-compoundstmt->ctrl-of-change-vl-compoundstmt-core
     (implies (iff ctrl (vl-compoundstmt->ctrl x))
-             (equal (vl-compoundstmt->ctrl (change-vl-compoundstmt-core x stmts exprs ctrl decls))
+             (equal (vl-compoundstmt->ctrl (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
                     (vl-maybe-delayoreventcontrol-fix ctrl)))
     :hints(("Goal" :in-theory (enable vl-maybe-delayoreventcontrol-fix))))
 
-  (defthm vl-compoundstmt->ctrl-of-change-vl-compoundstmt-decls
-    (implies (or (not decls)
-                 (equal (vl-stmt-kind x) :vl-blockstmt))
-             (equal (vl-compoundstmt->decls (change-vl-compoundstmt-core x stmts exprs ctrl decls))
-                    (vl-blockitemlist-fix decls))))
+  (defthm vl-compoundstmt->ctrl-of-change-vl-compoundstmt-vardecls
+    (implies (or (not vardecls)
+                 (vl-stmt-case x :vl-blockstmt)
+                 (vl-stmt-case x :vl-forstmt))
+             (equal (vl-compoundstmt->vardecls (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
+                    (vl-vardecllist-fix vardecls))))
 
-  (local (defthm vl-vardecllist-fix-of-vl-blockitemlist-fix
-           (equal (vl-vardecllist-fix (vl-blockitemlist-fix x))
-                  (vl-vardecllist-fix x))
-           :hints(("Goal" :in-theory (enable vl-vardecllist-fix vl-blockitemlist-fix
-                                             vl-blockitem-fix))))))
+  (defthm vl-compoundstmt->ctrl-of-change-vl-compoundstmt-paramdecls
+    (implies (or (not paramdecls)
+                 (vl-stmt-case x :vl-blockstmt))
+             (equal (vl-compoundstmt->paramdecls (change-vl-compoundstmt-core x stmts exprs ctrl vardecls paramdecls))
+                    (vl-paramdecllist-fix paramdecls)))))
 
 
 (defsection change-vl-compoundstmt
@@ -621,7 +651,8 @@ directly part of the statement.</p>"
                             [:stmts stmts]
                             [:exprs exprs]
                             [:ctrl ctrl]
-                            [:decls decls])
+                            [:vardecls vardecls]
+                            [:paramdecls paramdecls])
 })
 
 <p>This expands into a suitable call of @(see change-vl-compoundstmt-core).  It
@@ -647,13 +678,16 @@ provide a :ctrl when there is one, etc.</p>
                 (if (assoc :ctrl alist)
                     (cdr (assoc :ctrl alist))
                   (list 'vl-compoundstmt->ctrl x))
-                (if (assoc :decls alist)
-                    (cdr (assoc :decls alist))
-                  (list 'vl-compoundstmt->decls x)))))
+                (if (assoc :vardecls alist)
+                    (cdr (assoc :vardecls alist))
+                  (list 'vl-compoundstmt->vardecls x))
+                (if (assoc :paramdecls alist)
+                    (cdr (assoc :paramdecls alist))
+                  (list 'vl-compoundstmt->paramdecls x)))))
 
   (defmacro change-vl-compoundstmt (x &rest args)
     (change-vl-compoundstmt-fn x
-                               (std::da-changer-args-to-alist args '(:stmts :exprs :ctrl :decls))))
+                               (std::da-changer-args-to-alist args '(:stmts :exprs :ctrl :vardecls :paramdecls))))
 
   (local (defthm test0
            (equal (change-vl-compoundstmt x)
@@ -666,8 +700,8 @@ provide a :ctrl when there is one, etc.</p>
                                                stmts
                                                (vl-compoundstmt->exprs x)
                                                (vl-compoundstmt->ctrl x)
-                                               (vl-compoundstmt->decls x)
-                                               ))
+                                               (vl-compoundstmt->vardecls x)
+                                               (vl-compoundstmt->paramdecls x)))
            :rule-classes nil))
 
   (local (defthm test2
@@ -676,17 +710,18 @@ provide a :ctrl when there is one, etc.</p>
                                                (vl-compoundstmt->stmts x)
                                                exprs
                                                (vl-compoundstmt->ctrl x)
-                                               (vl-compoundstmt->decls x)
-                                               ))
+                                               (vl-compoundstmt->vardecls x)
+                                               (vl-compoundstmt->paramdecls x)))
            :rule-classes nil))
 
   (local (defthm test3
-           (equal (change-vl-compoundstmt x :exprs exprs :stmts stmts :ctrl ctrl :decls decls)
+           (equal (change-vl-compoundstmt x :exprs exprs :stmts stmts :ctrl ctrl :vardecls vardecls :paramdecls paramdecls)
                   (change-vl-compoundstmt-core x
                                                stmts
                                                exprs
                                                ctrl
-                                               decls))
+                                               vardecls
+                                               paramdecls))
            :rule-classes nil)))
 
 
@@ -769,26 +804,6 @@ process them.</p>"
   (deffixequiv-mutual vl-stmt-atomicstmts))
 
 
-(define vl-filter-blockitems ((x vl-blockitemlist-p))
-  :parents (vl-blockitemlist-p)
-  :short "Split up blockitems into lists by their type."
-  :returns (mv (vardecls vl-vardecllist-p)
-               (paramdecls vl-paramdecllist-p))
-  (b* (((when (atom x))
-        (mv nil nil))
-       ((mv vardecls paramdecls)
-        (vl-filter-blockitems (cdr x)))
-       (x1 (vl-blockitem-fix (car x))))
-    (case (tag x1)
-      (:vl-vardecl   (mv (cons x1 vardecls) paramdecls))
-      (:vl-paramdecl (mv vardecls (cons x1 paramdecls)))
-      (otherwise
-       (progn$ (impossible)
-               (mv vardecls paramdecls)))))
-  ///
-  (defmvtypes vl-filter-blockitems
-    (true-listp true-listp)))
-
 
 (define vl-simpledelaycontrol-p ((x vl-delaycontrol-p))
   :returns bool
@@ -814,59 +829,59 @@ process them.</p>"
 (define vl-ifstmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-ifstmt))
+  (vl-stmt-case x :vl-ifstmt))
 
 (define vl-nullstmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-nullstmt))
+  (vl-stmt-case x :vl-nullstmt))
 
 (define vl-assignstmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-assignstmt))
+  (vl-stmt-case x :vl-assignstmt))
 
 (define vl-enablestmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-enablestmt))
+  (vl-stmt-case x :vl-enablestmt))
 
 ;; NOTE: Moved vl-blockstmt-p to parsetree because scopsetack needs it.
 
 (define vl-casestmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-casestmt))
+  (vl-stmt-case x :vl-casestmt))
 
 (define vl-waitstmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-waitstmt))
+  (vl-stmt-case x :vl-waitstmt))
 
 (define vl-whilestmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-whilestmt))
+  (vl-stmt-case x :vl-whilestmt))
 
 (define vl-foreverstmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-foreverstmt))
+  (vl-stmt-case x :vl-foreverstmt))
 
 (define vl-repeatstmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-repeatstmt))
+  (vl-stmt-case x :vl-repeatstmt))
 
 (define vl-forstmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-forstmt))
+  (vl-stmt-case x :vl-forstmt))
 
 (define vl-timingstmt-p ((x vl-stmt-p))
   :inline t
   :enabled t
-  (eq (vl-stmt-kind x) :vl-timingstmt))
+  (vl-stmt-case x :vl-timingstmt))
 
 
 

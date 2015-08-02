@@ -1,5 +1,5 @@
 ; ESIM Symbolic Hardware Simulator
-; Copyright (C) 2010-2012 Centaur Technology
+; Copyright (C) 2008-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -504,6 +504,15 @@ documentation, creating autohyps macros, etc.</p>"
                         ;; Blah, silly, (good-esim-modulep nil) is true, so
                         ;; explicitly check for this.
                         (raise "No :mod was specified.")))
+
+       (-
+        ;; Horribly primitive sanity check, but in practice even this
+        ;; may be helpful for avoiding gross errors.
+        (or (and (gpl :n mod)
+                 (symbolp (gpl :n mod)))
+            (raise "Alleged module doesn't have a non-nil symbol :n field?  ~
+                    Is this a proper ESIM module?")))
+
        (inputs      (if (true-list-listp inputs)
                         inputs
                       (raise ":inputs are not even a true-list-listp")))
@@ -936,9 +945,9 @@ irrelevant inputs are removed.</p>"
   showing that the sum of the parts is equivalent to the original whole
   circuit.  We call this proof a <it>compositional equivalence proof.</it></p>
 
-  <p>Currently the most thorough example of such a proof can be found in the book
-  @('centaur/tutorial/boothmul.lisp').  This example highlights two ways of
-  performing a compositional equivalence proof:</p>
+  <p>Currently the most thorough example of such a proof can be found in the
+  book @('centaur/esim/tutorial/boothmul.lisp').  This example highlights two
+  ways of performing a compositional equivalence proof:</p>
 
   <ol>
     <li>By using @(see gl)</li>

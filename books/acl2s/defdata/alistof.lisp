@@ -67,14 +67,12 @@ data last modified: [2014-08-06]
        (str-alist `(("_PRED_" . ,(symbol-name pred)) ("_KEYPRED_" . ,(symbol-name keypred))))
        (local-events (template-subst local-events-template
                                      :features features
-                                     :subtree-alist nil
                                      :splice-alist splice-alist
                                      :atom-alist atom-alist
                                      :str-alist str-alist
                                      :pkg-sym 'acl2::asdf))
        (export-defthms (template-subst export-defthms-template
                                      :features features
-                                     :subtree-alist nil
                                      :splice-alist splice-alist
                                      :atom-alist atom-alist
                                      :str-alist str-alist
@@ -93,10 +91,10 @@ data last modified: [2014-08-06]
 
 (defun alistof-theory-ev (p top-kwd-alist wrld)
   (b* (((cons name A) p)
-       ((acl2::assocs odef new-types kwd-alist) A) ;what about pdef?
+       ((acl2::assocs pdef new-types kwd-alist) A) ;ignore odef
        (kwd-alist (append kwd-alist top-kwd-alist)))
        
-    (case-match odef
+    (case-match pdef
       (('ALISTOF key-body val-body) (alistof-theory-events name key-body val-body new-types kwd-alist wrld))
       (& '()))))
              

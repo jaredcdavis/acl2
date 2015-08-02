@@ -31,7 +31,7 @@
 ;
 ; BOZO properly integrate this with ihsext-basics.lisp.
 
-(in-package "ACL2")
+(in-package "BITOPS")
 (include-book "xdoc/top" :dir :system)
 (include-book "ihs/basic-definitions" :dir :system)
 (local (include-book "arithmetic/top-with-meta" :dir :system))
@@ -56,7 +56,8 @@
 (defsection bitops/signed-byte-p
   :parents (bitops signed-byte-p unsigned-byte-p)
   :short "Lemmas about @(see signed-byte-p) and @(see unsigned-byte-p) that are
-often useful when optimizing definitions with @(see type-spec) declarations."
+often useful when optimizing definitions with @(see acl2::type-spec)
+declarations."
   :long "<p>BOZO document me.</p>")
 
 (defthm basic-unsigned-byte-p-of-+
@@ -81,6 +82,13 @@ often useful when optimizing definitions with @(see type-spec) declarations."
   (implies (signed-byte-p n x)
            (signed-byte-p (+ 1 n) (- x)))
   :hints(("Goal" :in-theory (enable signed-byte-p))))
+
+(defthm basic-signed-byte-p-of-unary-minus-2
+  ;; ACL2's fancy unification stuff means this works fine in the common case
+  ;; that you're dealing with quoted constants.
+  (implies (unsigned-byte-p n x)
+           (signed-byte-p (+ 1 n) (- x)))
+  :hints(("Goal" :in-theory (enable signed-byte-p unsigned-byte-p))))
 
 (defthm basic-signed-byte-p-of-binary-minus
   ;; ACL2's fancy unification stuff means this works fine in the common case
@@ -321,7 +329,7 @@ often useful when optimizing definitions with @(see type-spec) declarations."
                        (expt 2 (+ -1 n n))))
            :rule-classes ((:rewrite) (:linear))
            :hints(("Goal"
-                   :in-theory (disable exponents-add)
+                   :in-theory (disable acl2::exponents-add)
                    :nonlinearp t
                    :use ((:instance step1b)
                          (:instance step2)
@@ -390,7 +398,7 @@ often useful when optimizing definitions with @(see type-spec) declarations."
                         (expt 2 (+ -2 n n))))
            :rule-classes ((:rewrite) (:linear))
            :hints(("Goal"
-                   :in-theory (disable exponents-add)
+                   :in-theory (disable acl2::exponents-add)
                    :nonlinearp t
                    :use ((:instance step1c)
                          (:instance step2)
@@ -789,7 +797,7 @@ often useful when optimizing definitions with @(see type-spec) declarations."
                          (natp n))
                     (< (- x) (expt 2 n)))
            :hints(("Goal"
-                   :in-theory (disable expt-is-increasing-for-base>1)
+                   :in-theory (disable acl2::expt-is-increasing-for-base>1)
                    :use ((:instance l1)
                          (:instance l2))))))
 
@@ -982,14 +990,14 @@ often useful when optimizing definitions with @(see type-spec) declarations."
            :hints(("Goal" :use ((:instance m3a)
                                 (:instance m3b))))))
 
-  (defun m4-induction-hint (n width)
-; Added by Matt K. to accommodate tau soundness bug fix 7/23/2014.
-    (declare (xargs :measure (nfix n)))
-    (cond ((zp n) width)
-          (t (m4-induction-hint (1- n) (1- width)))))
+  (local (defun m4-induction-hint (n width)
+           ;; Added by Matt K. to accommodate tau soundness bug fix 7/23/2014.
+           (declare (xargs :measure (nfix n)))
+           (cond ((zp n) width)
+                 (t (m4-induction-hint (1- n) (1- width))))))
 
   (local (defthm equal-0-ash-reduction
-; Added by Matt K. to accommodate tau soundness bug fix 7/23/2014.
+           ;; Added by Matt K. to accommodate tau soundness bug fix 7/23/2014.
            (implies (and (<= 0 n)
                          (integerp x))
                     (equal (equal 0 (ash x n))
@@ -1008,7 +1016,7 @@ often useful when optimizing definitions with @(see type-spec) declarations."
                                 (equal x 0))))
            :hints(("Goal"
                    :induct
-; Modified by Matt K. to accommodate tau soundness bug fix 7/23/2014.
+                   ;; Modified by Matt K. to accommodate tau soundness bug fix 7/23/2014.
                    (m4-induction-hint n width)
                    :in-theory (enable* ihsext-recursive-redefs
                                        ihsext-inductions)))))

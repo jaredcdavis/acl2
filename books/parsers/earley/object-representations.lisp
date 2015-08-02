@@ -21,11 +21,11 @@
 (include-book "std/util/defaggregate" :dir :system)
 (include-book "std/util/deflist" :dir :system)
 (include-book "std/util/defalist" :dir :system)
-(include-book "tools/bstar" :dir :system)
+(include-book "std/util/bstar" :dir :system)
 (include-book "std/util/define" :dir :system)
 ;(include-book "countereg-gen/top" :dir :system)
 (include-book "defprimitive")
-(include-book "regex/regex-ui" :dir :system)
+(include-book "projects/regex/regex-ui" :dir :system)
 
 ;(acl2s-defaults :set testing-enabled t)
 

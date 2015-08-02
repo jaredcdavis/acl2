@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -859,7 +859,7 @@
   (make-hash-table :size size
                    :test test
                    :rehash-size 2.2
-                   #+Clozure :shared #+Clozure nil
+                   #+ccl :shared #+ccl nil
                    ))
 
 (defstruct ser-encoder

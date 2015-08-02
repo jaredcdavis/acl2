@@ -31,7 +31,6 @@
 (in-package "VL")
 (include-book "base")
 (include-book "../ports")
-(include-book "../../../checkers/portcheck") ;; bozo for regularportlist->exprs
 
 ;; BOZO more unit tests!
 
@@ -61,10 +60,10 @@
                              (vl-regularport-p val))
                      (prog2$ (cw "Name: ~x0.~%" (vl-regularport->name val))
                              (equal (vl-regularport->name val) ',name))
-                     (prog2$ (cw "Expr: ~x0.~%"
-                                 (vl-pretty-expr (vl-regularport->expr val)))
-                             (equal (vl-pretty-expr (vl-regularport->expr val))
-                                    ',expr))
+                     (prog2$ (cw "Expr: ~x0.~%" (vl-pretty-expr (vl-regularport->expr val)))
+                             (or (equal (vl-pretty-expr (vl-regularport->expr val))
+                                        ',expr)
+                                 (cw "Expected ~x0~%" ',expr)))
                      (prog2$ (cw "Tokens: ~x0.~%" tokens)
                              (not tokens))
                      (prog2$ (cw "Warnings: ~x0.~%" pstate.warnings)
@@ -76,11 +75,11 @@
 
 (test-parse-port :input "a[3:0]"
                  :name nil
-                 :expr (:vl-select-colon nil (id "a") 3 0))
+                 :expr (:index nil "a" nil (:colon 3 0)))
 
 (test-parse-port :input "a[3]"
                  :name nil
-                 :expr (:vl-index nil (id "a") 3))
+                 :expr (:index nil "a" (3) nil))
 
 (test-parse-port :input "{a, b, c}"
                  :name nil
@@ -95,11 +94,11 @@
 
 (test-parse-port :input ".foo(a[3:0])"
                  :name "foo"
-                 :expr (:vl-select-colon nil (id "a") 3 0))
+                 :expr (:index nil "a" nil (:colon 3 0)))
 
 (test-parse-port :input ".foo(a[3])"
                  :name "foo"
-                 :expr (:vl-index nil (id "a") 3))
+                 :expr (:index nil "a" (3) nil))
 
 (test-parse-port :input ".foo({a, b, c})"
                  :name "foo"
@@ -121,6 +120,11 @@
                  :successp nil)
 
 
+(defprojection vl-regularportlist->exprs ((x vl-regularportlist-p))
+  :parents (vl-portlist-p)
+  :nil-preservingp t
+  (vl-regularport->expr x))
+
 
 
 (defun vl-pretty-maybe-exprlist (x)
@@ -141,7 +145,7 @@
                    (pstate (make-vl-parsestate :warnings 'blah-warnings))
                    ((mv erp val tokens (vl-parsestate pstate))
                     (vl-parse-module-port-list-top-top))
-                   (val (vl-parsed-ports->ports val))
+                   (val (vl-nonansi-ports->ports val))
                    ((unless ,successp)
                     (cw "Expect failure.  Actual Erp: ~x0.~%" erp)
                     erp))
@@ -206,5 +210,5 @@
 
 (test-parse-portlist :input "(.a(), b[3:0])"
                      :names ("a" nil)
-                     :exprs (nil (:vl-select-colon nil (id "b") 3 0)))
+                     :exprs (nil (:index nil "b" nil (:colon 3 0))))
 

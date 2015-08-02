@@ -1,2 +1,2 @@
-curl.log
-quicklisp.lsp
+!*.c
+!*.h

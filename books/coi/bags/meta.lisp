@@ -34,6 +34,7 @@
 (include-book "ordinals/e0-ordinal" :dir :system)
 (include-book "../util/mv-nth")
 (local (include-book "../util/iff"))
+(include-book "tools/defevaluator-fast" :dir :system)
 (include-book "../syntax/syntax")
 (local (include-book "arithmetic/top-with-meta" :dir :system))
 
@@ -45,6 +46,22 @@
   :hints (("goal" :in-theory (enable acl2::member list::memberp))))
 
 (local (in-theory (enable member-to-memberp)))
+
+;; [Jared] dumb speed hacking
+(local (in-theory (disable syn::pseudo-term-listp-of-cdr
+                           list::disjoint
+                           list::disjoint-remove-definition
+                           bag::memberp-car-when-disjoint
+                           bag::disjoint-cdr-from-disjoint
+                           default-cdr
+                           default-car
+                           bag::count-0-for-non-memberp
+                           acl2::equal-booleans-reducton
+                           bag::count-when-non-member
+                           bag::count-linear
+                           )))
+
+
 
 ;eventually, move the any-subbagp meta rule below to a different book?
 
@@ -77,21 +94,25 @@
 
 #|
 Without the :meta rule, this fails:
-(thm (memberp x (cons y (cons yy (append w (cons x (append ww z))))))
-     :hints (("Goal" :in-theory (disable memberp))))
+ (thm (memberp x (cons y (cons yy (append w (cons x (append ww z))))))
+      :hints (("Goal" :in-theory (disable memberp))))
 |#
 
 ;The evaluator for the :meta rule syntactic-membership-meta-rule.
-(syn::defevaluator evaluator-for-memberp-cons-and-append evaluator-for-memberp-cons-and-append-list
-  ((list::memberp x l)
+
+
+
+(acl2::defevaluator-fast evaluator-for-memberp-cons-and-append
+   evaluator-for-memberp-cons-and-append-list
+   ((list::memberp x l)
 ; [Changed by Matt K. to handle changes to member, assoc, etc. after ACL2 4.2
 ;  (replaced member by member-equal).]
-   (acl2::member-equal x l)
-   (binary-append x y)
-   (cons x y)
+    (acl2::member-equal x l)
+    (binary-append x y)
+    (cons x y)
 ;   (quote x)
-   (list::fix x)
-   ))
+    (acl2::list-fix x)
+    ))
 
 ;TERM is a nest of conses and appends
 ;This function looks through that nest for a cons of X.
@@ -124,7 +145,7 @@ Without the :meta rule, this fails:
                    )
               (or (syntax-memberp x (cadr term))
                   (syntax-memberp x (caddr term)))
-;            (if (and (equal (car term) 'list::fix)   ;; '(list::fix arg1)
+;            (if (and (equal (car term) 'acl2::list-fix)   ;; '(acl2::list-fix arg1)
   ;                   (null (cddr term)) ;consider inlining this?
    ;                  )
 ;                (syntax-memberp x (cadr term))
@@ -209,7 +230,7 @@ Without the :meta rule, this fails:
   (declare (type t a x))
   (if (consp x)
       (if (equal a (car x))
-          (mv t (list::fix (cdr x))) ;we removed (car x)
+          (mv t (acl2::list-fix (cdr x))) ;we removed (car x)
           (met ((hit result) (run-remove-1 a (cdr x)))
                (mv hit (cons (car x) result))))
       (mv nil nil)))
@@ -248,7 +269,7 @@ Without the :meta rule, this fails:
             (met ((hit newarg1) (syntax-remove-1 elem arg1))
                  (if hit
                      (mv t `(binary-append ,newarg1 ,arg2)) ; jcd - change
-                       ; to... (binary-append ,newarg1 (list::fix ,arg2))) ??
+                       ; to... (binary-append ,newarg1 (acl2::list-fix ,arg2))) ??
                    (met ((hit newarg2) (syntax-remove-1 elem arg2))
                         (if hit
                             (mv t `(binary-append ,arg1 ,newarg2))
@@ -260,7 +281,7 @@ Without the :meta rule, this fails:
               (if (equal elem arg1) ;if arg1 is equal to elem
                   (mv t arg2)       ;then just return arg2 (we just drop
                   ;arg1, since it matches elem)
-                  ; jcd - change to ... (mv t `(list::fix ,arg2)) ?
+                  ; jcd - change to ... (mv t `(acl2::list-fix ,arg2)) ?
                 (met ((hit newarg2) (syntax-remove-1 elem arg2)) ;otherwise, try to remove elem from arg2
                      (if hit ;if we succeeded in removing it
                          (mv t `(cons ,arg1 ,newarg2))  ;the return the result of removing it, with arg1 tacked onto the front
@@ -276,13 +297,13 @@ Without the :meta rule, this fails:
                    (if hit
                        (mv t `(quote ,result))
                      (mv nil term)))
-;;             (if (and (equal (car term) 'list::fix) ;; '(list::fix arg1)
+;;             (if (and (equal (car term) 'acl2::list-fix) ;; '(acl2::list-fix arg1)
 ;;                      (consp (cdr term))
 ;;                      (null  (cddr term)))
 ;;                 (let ((arg1 (cadr term)))
 ;;                   (met ((hit newarg1) (syntax-remove-1 elem arg1))
 ;;                        (if hit ;if we succeeded in removing it
-;;                            (mv t `(list::fix ,newarg1))  ;should we not re-add the list::fix call around the result?
+;;                            (mv t `(acl2::list-fix ,newarg1))  ;should we not re-add the acl2::list-fix call around the result?
 ;;                          (mv nil term) ;otherwise, we failed to remove elem from term
 ;;                          )))
               (mv nil term)
@@ -304,7 +325,7 @@ Without the :meta rule, this fails:
 ;shouldn't be a cons or append, for example.  can X be a quoted
 ;constant bag?  what about nil?  only removes one copy of X.  bzo
 ;handle quoted stuff? or not?  can x ever be a quoted thing?  bzo
-;handle list::fix?
+;handle acl2::list-fix?
 
 (defignore syntax-remove-bag-1 a (x term)
   (declare (type t x term)
@@ -354,6 +375,9 @@ Without the :meta rule, this fails:
            (equal (v1 (syntax-remove-bag-1 x y))
                       y))
   :hints (("goal" :in-theory (enable syntax-remove-bag-1-fn))))
+
+;; [Jared] speed hint
+(local (in-theory (disable not-v0-no-change-syntax-remove-bag-1)))
 
 (defirrelevant syntax-remove-bag-1 2 a (x term)
   :hints (("goal" :in-theory (enable syntax-remove-bag-1-fn))))
@@ -437,11 +461,11 @@ Without the :meta rule, this fails:
                     (mv t ''nil term2))
                   ))
 
-;;           (if (and (equal (car term1) 'list::fix) ;; '(list::fix arg1)
+;;           (if (and (equal (car term1) 'acl2::list-fix) ;; '(acl2::list-fix arg1)
 ;;                    (null (cddr term1))
 ;;                    )
 ;;               (let ((arg1 (cadr term1)))
-;;                 (met ((hit newarg1 newterm2) (syntax-remove-bag arg1 term2)) ;we drop the list::fix; is that the right thing to do?
+;;                 (met ((hit newarg1 newterm2) (syntax-remove-bag arg1 term2)) ;we drop the acl2::list-fix; is that the right thing to do?
 ;;                      (declare (ignore hit))
 ;;                      (mv t newarg1 newterm2)))
 
@@ -460,7 +484,6 @@ Without the :meta rule, this fails:
              (mv t '(quote nil) newterm2)
            (mv nil term1 term2))))
   )
-
 
 (defirrelevant syntax-remove-bag 3 a (term1 term2)
   :hints (("goal" :do-not '(generalize eliminate-destructors )
@@ -481,6 +504,9 @@ Without the :meta rule, this fails:
            term1)
     (equal (v2 (syntax-remove-bag term1 term2))
            term2)))
+  ;; [Jared] speed hint
+  :rule-classes ((:forward-chaining)
+                 (:rewrite :backchain-limit-lst 1))
   :hints (("goal" :in-theory (enable syntax-remove-bag-fn))))
 
 (defthm pseudo-termp-quote
@@ -733,7 +759,7 @@ old version:
 
 
 
-(syn::defevaluator syntax-ev syntax-ev-list
+(acl2::defevaluator-fast syntax-ev syntax-ev-list
   (
    (hide x)
    (hide-unique list)
@@ -759,7 +785,7 @@ old version:
    (meta-memberp x list)
    (any-subbagp x list) ;remove this?
    (finalcdr x)
-   (list::fix x)
+   (acl2::list-fix x)
    (subbagp x y) ;added by eric
    (list::memberp a x) ;added by eric
 ; [Changed by Matt K. to handle changes to member, assoc, etc. after ACL2 4.2
@@ -907,13 +933,13 @@ old version:
            (equal (syntax-count elem term1) 0))
  :hints (("Goal" :in-theory (enable syntax-count))))
 
-
 (defthm count-in-SYNTAX-REMOVE-1-linear
   (<= (COUNT ELEM (SYNTAX-EV (VAL 1 (SYNTAX-REMOVE-1 x Y)) a))
       (COUNT ELEM (SYNTAX-EV Y a)))
   :rule-classes (:rewrite :linear)
   :hints (("Goal" :in-theory (enable SYNTAX-REMOVE-1-fn))))
 
+(local (in-theory (disable count-in-SYNTAX-REMOVE-1-linear)))
 
 (defthm count-in-SYNTAX-REMOVE-bag-1-linear
   (>= (COUNT ELEM (SYNTAX-EV (VAL 1 (SYNTAX-REMOVE-bag-1 x Y)) a))
@@ -955,8 +981,6 @@ old version:
             :in-theory (disable syntax-remove-1-did-something-iff-1
                                 syntax-remove-1-did-something-iff-2)))))
 
-
-
 (defthm count-of-syntax-remove-1
   (equal (count (syntax-ev x a)
                 (syntax-ev (val 1 (syntax-remove-1 x y)) a))
@@ -980,13 +1004,17 @@ old version:
   :hints (("Goal" :in-theory (enable syntax-remove-1-fn)
            :do-not '(generalize eliminate-destructors))))
 
+;; [Jared] dumb speed hint
+(local (in-theory (disable syntax-remove-1-did-something-iff)))
+
 (defthm count-in-syntax-remove-bag-linear
   (>= (count elem (syntax-ev (val 2 (syntax-remove-bag x y)) a))
      (- (count elem (syntax-ev y a))
         (count elem (syntax-ev x a))))
   :rule-classes (:rewrite :linear)
   :hints (("Goal" :do-not '(generalize eliminate-destructors)
-           :in-theory (enable syntax-remove-bag-fn))))
+           :in-theory (enable syntax-remove-bag-fn
+                              bag::count-when-non-member))))
 
 
 #|kill?
@@ -1012,7 +1040,9 @@ old version:
   (implies (memberp elem (remove-bag (syntax-ev x a) (syntax-ev y a)))
            (memberp elem (syntax-ev (val 2 (syntax-remove-bag x y)) a)))
   :hints (("Goal" :do-not '(generalize eliminate-destructors)
-           :in-theory (enable syntax-remove-bag-fn memberp))))
+           :in-theory (enable syntax-remove-bag-fn
+                              memberp
+                              bag::count-when-non-member))))
 
 ;do we even need this?
 ;bzo handle constants!
@@ -1043,7 +1073,7 @@ old version:
                        (list 'cons arg1 (syntax-intersection arg2 newterm2))
                      (syntax-intersection arg2 term2))))
 
-;;           (if (and (equal (car term1) 'list::fix) ;; '(list::fix arg1)
+;;           (if (and (equal (car term1) 'acl2::list-fix) ;; '(acl2::list-fix arg1)
 ;;                    (null (cddr term1))
 ;;                    )
 ;;               (syntax-intersection (cadr term1) term2)
@@ -1062,7 +1092,7 @@ old version:
                   ''nil
                   ))
 
-;term1 isn't a call to binary-append or cons or list::fix:
+;term1 isn't a call to binary-append or cons or acl2::list-fix:
             (met ((hit newterm2) (syntax-remove-bag-1 term1 term2))
                  (declare (ignore newterm2))
                  (if hit
@@ -1184,7 +1214,8 @@ old version:
             (count elem (syntax-ev (val 2 (syntax-remove-bag term1 term2)) a)))
          nil)
   :hints (("Goal" :do-not '(generalize eliminate-destructors)
-           :in-theory (enable syntax-remove-bag-fn))))
+           :in-theory (enable syntax-remove-bag-fn
+                              bag::count-when-non-member))))
 
 
 (defthm bubs
@@ -1208,7 +1239,9 @@ old version:
          (- (count elem (syntax-ev (v1 (syntax-remove-bag term1 term2)) a))
             (count elem (syntax-ev (v2 (syntax-remove-bag term1 term2)) a))))
   :hints (("Goal" :do-not '(generalize eliminate-destructors)
-           :in-theory (e/d (syntax-remove-bag-fn)
+           :in-theory (e/d (syntax-remove-bag-fn
+                            syntax-remove-1-did-something-iff
+                            )
                            (v1-syntax-remove-1-perm-remove-1
                             ;for efficiency:
                             SYNTAX-REMOVE-BAG-1-FN
@@ -1220,7 +1253,8 @@ old version:
 (defthm not-syntax-memberp-means-syntax-remove-1-does-nothing
   (implies (not (syntax-memberp elem term))
            (equal (val 1 (syntax-remove-1 elem term))
-                  term)))
+                  term))
+  :hints(("Goal" :in-theory (enable syntax-remove-1-did-something-iff))))
 
 
 (in-theory (disable SYNTAX-REMOVE-BAG-1-fn SYNTAX-MEMBERP-fn))
@@ -1400,7 +1434,8 @@ old version:
            (subbagp (syntax-ev x a)
                     (syntax-ev y a)))
   :hints (("Goal" :do-not '(generalize eliminate-destructors)
-           :in-theory (enable syntax-remove-bag-fn))))
+           :in-theory (enable syntax-remove-bag-fn
+                              syntax-remove-1-did-something-iff))))
 
 
 
@@ -1431,7 +1466,8 @@ old version:
    (subbagp (syntax-ev y a)
            (remove-bag (syntax-ev x a)
                         (syntax-ev list a))))
-  :hints (("Goal'" :in-theory (disable v1-syntax-remove-bag-implication
+; Matt K. v7-1 mod for avoiding "Goal'", 2/13/2015: "Goal'" changed to "Goal".
+  :hints (("Goal" :in-theory (disable v1-syntax-remove-bag-implication
                                        v2-subbagp-remove-bag)
            :use ((:instance v1-syntax-remove-bag-implication (y list))
                  (:instance v1-syntax-remove-bag-implication (x y)
@@ -1832,7 +1868,7 @@ PUTBACK
 ;appended, we drop it.  If we find an element of L at a leaf, we also discard it.
 ;We refuse to look inside any function which is not a cons or an append.
 
-(syn::defevaluator ev2 ev2-list
+(acl2::defevaluator-fast ev2 ev2-list
   ((list::memberp x l)
 ; [Changed by Matt K. to handle changes to member, assoc, etc. after ACL2 4.2
 ;  (replaced member by member-equal).]
@@ -1980,6 +2016,7 @@ PUTBACK
 
 (encapsulate
  ()
+ (local (in-theory (enable acl2::equal-booleans-reducton)))
  (local (defthm test
           (implies (not (memberp x foo))
                    (equal (memberp x (append a foo))
@@ -2067,6 +2104,7 @@ PUTBACK
            (subbagp (syntax-ev term1 a) (syntax-ev term2 a)))
   :hints (("Goal" :do-not '(generalize eliminate-destructors)
            :in-theory (enable syntax-subbagp-helper-fn
+                              syntax-remove-1-did-something-iff
                               meta-subbagp)))
   :rule-classes (:rewrite :forward-chaining))
 
@@ -2398,7 +2436,8 @@ to handle
   (implies (syntax-memberp v x)
            (memberp (syntax-ev v a)
                     (syntax-ev x a)))
-  :rule-classes (:rewrite :forward-chaining))
+  :rule-classes (:rewrite :forward-chaining)
+  :hints(("Goal" :in-theory (enable syntax-remove-1-did-something-iff))))
 
 (defthm memberp-of-syntax-ev-helper
   (implies (and (syntax-memberp x blah)

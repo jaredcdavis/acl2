@@ -166,6 +166,36 @@ function renderMathFragments ()
     });
 }
 
+function maybePowertip(selector, options)
+{
+    // Gross hack follows.  Sorry.
+    //
+    // I've used PowerTip since the first version of the fancy viewer and it
+    // works great for Desktop browsers.  However, for mobile it seems buggy.
+    // In particular, even though you are touching the screen and have no
+    // mouse, the powertip would still get activated when you would touch the
+    // menu button.  Worse, it wouldn't go away(!) and just sat there blocking
+    // the menu.
+    //
+    // So awful workaround: I now use this stupid wrapper instead of directly
+    // activating .powerTip() -- this lets me track every powertip'able element
+    // has the horrible-powertip-tracker class.  This allows me to write
+    // closeAllPowertips to close all possible powertips.
+    //
+    // Sprinkling calls of closeAllPowertips() throughout the code then
+    // suffices to make sure that, e.g., toggling the navigation menu doesn't
+    // leave you with powertips hanging around.
+
+    $(selector).powerTip(options);
+    $(selector).addClass("horrible-powertip-tracker");
+}
+
+function closeAllPowertips()
+{
+//    console.log("CloseAllPowertips Enters");
+    $(".horrible-powertip-tracker").powerTip('hide');
+//    console.log("CloseAllPowertips Exits");
+}
 
 // --------------------------------------------------------------------------
 //
@@ -198,9 +228,12 @@ var XD_LONG = 3;
 
 function keyTitle(key)
 {
+    var prefix = XDOCTITLE;
+    if (!prefix) { prefix = "XDOC"; }
+
     return (topicExists(key))
-       ? ("XDOC &mdash; " + topicName(key))
-       : ("XDOC &mdash; " + key);
+       ? (prefix + " &mdash; " + topicName(key))
+       : (prefix + " &mdash; " + key);
 }
 
 
@@ -381,7 +414,7 @@ function navActivateTooltip(id) {
     // This sort of "should" be part of navMakeNode, but it can't be because
     // the node has to be properly installed into the document before jquery
     // can find it.
-    $("#_golink" + id).powerTip({placement:'se',smartPlacement: true});
+    maybePowertip("#_golink" + id, {placement:'se',smartPlacement: true});
 }
 
 function navExpand(id) {
@@ -438,6 +471,7 @@ function navTree() {
     $("#left").scrollTop(navTree_top);
     $("#flat").hide();
     $("#nav").show();
+    closeAllPowertips();
     nav_mode = "tree";
 }
 
@@ -451,6 +485,7 @@ function navFlat() {
     $("#left").scrollTop(navFlat_top);
     $("#nav").hide();
     $("#flat").show();
+    closeAllPowertips();
     nav_mode = "flat";
 
     if (navFlat_ever_shown) {
@@ -493,7 +528,7 @@ function navFlatReallyInstall() {
                   + "</li>");
     }
     $("#flat").html(dl);
-    $(".flatnav").powerTip({placement:'se',smartPlacement: true});
+    maybePowertip(".flatnav", {placement:'se',smartPlacement: true});
 }
 
 
@@ -509,6 +544,15 @@ function navGo(id)
 {
     var key = nav_id_table[id]["key"];
     actionGoKey(key);
+}
+
+function navToggleVisible()
+{
+    // Small displays (mobile) only -- we hide the navigation until the menu
+    // button is pressed.
+
+    $("#left").toggleClass("active");
+    closeAllPowertips();
 }
 
 
@@ -556,7 +600,7 @@ function datLoadParents(key) {
     }
     acc += "</ul>";
     $("#parents").html(acc);
-    $("#parents a").powerTip({placement:'se',smartPlacement: true});
+    maybePowertip("#parents a", {placement:'se',smartPlacement: true});
     $("#parents").show();
 }
 
@@ -606,7 +650,7 @@ function datExpand(dat_id)
         }
     });
 
-    $(".basepkg").powerTip({placement:'sw',smartPlacement: true});
+    maybePowertip(".basepkg", {placement:'sw',smartPlacement: true});
     renderMathFragments();
 }
 
@@ -717,7 +761,7 @@ function datLoadKey(key, scroll_to)
         dat_id_table = [];
         datLoadParents(key);
         $("#data").append(datLongTopic(key));
-	$(".basepkg").powerTip({placement:'sw',smartPlacement: true});
+	maybePowertip(".basepkg", {placement:'sw',smartPlacement: true});
         $("title").html(keyTitle(key));
 	renderMathFragments();
 	setTimeout("datReallyScrollTo(" + scroll_to + ")", 10);
@@ -825,6 +869,11 @@ function searchGo(str) {
 
     var query = searchTokenize(str);
 
+    // if we're in mobile mode, hide the navigation bar whenever the
+    // user navigates to a new page.
+    $("#left").removeClass("active");
+    closeAllPowertips();
+
     // Now wait a bit to allow that to render, before starting the search.
     setTimeout(searchGoMain, 10, query);
     return false;
@@ -919,15 +968,17 @@ function searchGoMain(query) {
 $(document).ready(function()
 {
     LazyLoad.js('xindex.js', onIndexLoaded);
-    $(".toolbutton").powerTip({placement: 'se'});
-    $(".rtoolbutton").powerTip({placement: 'sw'});
+    maybePowertip(".toolbutton", {placement: 'se'});
+    maybePowertip(".rtoolbutton", {placement: 'sw'});
 });
 
 
 function jumpRender(datum) {
     var key = datum["value"];
     var ret = "";
-    ret += "<p><b class=\"sf\">" + topicName(key) + "</b>";
+    ret += "<p>";
+//    ret += topicUid(key) + " &mdash; "; // nice for debugging
+    ret += "<b class=\"sf\">" + topicName(key) + "</b>";
     var shortmsg = topicShortPlaintext(key);
     if (shortmsg != "") {
 	ret += " &mdash; " + shortmsg;
@@ -946,7 +997,10 @@ function jumpInit() {
         tokens.push(topicRawname(key));
         var entry = {"value": key,
 		     "nicename": topicName(key),
-                     "tokens": tokens
+                     "tokens": tokens,
+		     // We precompute these for faster sorting:
+		     "nicelow": topicName(key).toLowerCase(),
+		     "uid": topicUid(key),
 		     };
         ta_data.push(entry);
     }
@@ -958,9 +1012,68 @@ function jumpInit() {
 	datumTokenizer: function(data) {
 	    return data.tokens;
 	},
-	queryTokenizer: Bloodhound.tokenizers.whitespace,
-	sorter: function(a,b) { return alphanum(a.nicename,b.nicename); }
+	queryTokenizer: Bloodhound.tokenizers.whitespace
     });
+
+    // Bloodhound natively lets you supply a sort function that just
+    // compares two elements.  However, that turned out to be too
+    // slow.  By using our own sorting function we can
+    //
+    //  (1) avoid having to look at the current typeahead value on
+    //      every single comparison, which was very slow when doing lots of
+    //      comparisons.
+    //
+    //  (2) pre-filter the array to make this mostly linear.
+    engine1.sorter = function(matches)
+    {
+	//console.log("My sorter called on " + matches.length + " elements.");
+	var curr = $("#jump").typeahead('val').toLowerCase();
+
+	var compare = function(a,b)
+	{
+	    // Special cases to ensure any literal matches come first, no
+	    // matter how unimportant they are. :)
+	    if (a.nicelow == curr) return -1;
+	    if (b.nicelow == curr) return 1;
+
+	    // Otherwise, put them in importance order.
+	    return a.uid - b.uid;
+	};
+
+	if (matches.length < 100) {
+	    // We can just sort it and that'll be plenty fast.
+	    return matches.sort(compare);
+	}
+
+	// Lots of elements -- do something fancier for more speed.  Since we
+	// are only going to show 20 results, it is definitely safe to throw
+	// away any entries whose UID is larger than some CUTOFF, as long as
+	// CUTOFF is bigger than at least 20 UIDs.  So, gather a reasonable
+	// subset of UIDs, sort them, and pick the 20th one.  Then throw away
+	// everything past it in a linear sweep.
+	var first_uids = [];
+	for(var i = 0; i < 100; ++i) {
+	    first_uids.push(matches[i].uid);
+	}
+	//console.log("Gathered up UIDs: ", first_uids);
+	first_uids = first_uids.sort(function(a,b){ return a-b; });
+	//console.log("Sorted UIDs:", first_uids);
+	var cutoff = first_uids[19];
+
+	var consider = [];
+	for(var i = 0;i < matches.length; ++i) {
+	    var entry = matches[i];
+	    if (entry.nicelow == curr || entry.uid < cutoff) {
+		consider.push(entry);
+	    }
+	}
+	//console.log("Down to " + consider.length + " entries to consider:", consider);
+
+	// Then we just sort whatever survived using our ordinary comparison
+	// function, which now doesn't need to consider the vast majority of
+	// the array.
+	return consider.sort(compare);
+    };
 
     engine1.initialize();
 
@@ -981,7 +1094,7 @@ function jumpInit() {
 
     $("#jump").bind('typeahead:selected', jumpGo);
     $("#jump").bind('typeahead:autocompleted', jumpGo);
-    $("#jumpmsg").powerTip({placement:'se'});
+    maybePowertip("#jumpmsg", {placement:'se'});
     $("#jump").attr("placeholder", "append");
     $("#jump").removeAttr("disabled");
 
@@ -989,7 +1102,7 @@ function jumpInit() {
     $("#jumpform").submit(function(event)
     {
 	// Magic code that took me way too much hacking to get working.
-	console.log("In form submitter.");
+	//console.log("In form submitter.");
 
 	// Don't actually try to "submit" the form.
 	event.preventDefault();
@@ -1175,6 +1288,11 @@ function actionGoKey(key) {
     window.history.pushState({key:key,rtop:0}, keyTitle(key),
 			     "?topic=" + key);
     datLoadKey(key, 0);
+
+    // if we're in mobile mode, hide the navigation bar whenever the
+    // user navigates to a new page.
+    $("#left").removeClass("active");
+    closeAllPowertips();
 }
 
 function historySavePlace() {

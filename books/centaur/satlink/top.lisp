@@ -127,10 +127,10 @@ with many solvers.)</p>
 open source, recommended</h3>
 
 <p>Based on our experiences using @(see gl) for proofs about hardware modules
-at Centaur, we usually try Glucose first.  Version 3.0 should work with Satlink
-without any modifications.  (We have also successfully used earlier versions
-with Satlink, but occasionally needed to patch them in minor ways, e.g., to
-print counterexamples.)</p>
+at Centaur, we usually try Glucose first.  Version 3.0 or 4.0 should work with
+Satlink without any modifications.  (We have also successfully used earlier
+versions with Satlink, but occasionally needed to patch them in minor ways,
+e.g., to print counterexamples.)</p>
 
 <p>Quick instructions:</p>
 
@@ -277,8 +277,8 @@ i/o contract seems to be working.  It should be easy to adapt one of the
 solver.</p>
 
 <p>If the @('check-config') passes and you want a more thorough check, you
-might try to run your new solver on, e.g., @('centaur/tutorial/sat.lsp') and
-the various files in @('centaur/regression').</p>")
+might try to run your new solver on, e.g., @('centaur/esim/tutorial/sat.lsp')
+and the various files in @('centaur/regression').</p>")
 
 
 (defsection unsat-checking
@@ -648,12 +648,12 @@ satlink-run).</p>"
        ((acl2::fun (cleanup filename config))
         (b* (((unless (config->remove-temps config))
               nil)
-             ((mv & & &)
+             ((mv & &)
               (acl2::tshell-call (str::cat "rm " filename))))
           nil))
 
        (cmd (str::cat config.cmdline " " filename))
-       ((mv finishedp & lines)
+       ((mv & lines)
         (time$ (acl2::tshell-call cmd
                                   ;; Print only if :verbose t is on, and use a
                                   ;; custom printing function that skips variable
@@ -664,10 +664,6 @@ satlink-run).</p>"
                :args (list cmd)
                :mintime config.mintime))
 
-       ((unless finishedp)
-        (cw "SATLINK: Call of ~s0 somehow did not finish.~%" cmd)
-        (cleanup filename config)
-        (mv :failed env$ state))
        ((unless (string-listp lines))
         (cw "SATLINK: Tshell somehow didn't give us a string list.~%")
         (cleanup filename config)

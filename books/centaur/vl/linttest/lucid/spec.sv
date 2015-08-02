@@ -1,5 +1,5 @@
-// VL Verilog Toolkit
-// Copyright (C) 2008-2014 Centaur Technology
+// VL 2014 -- Verilog Toolkit, 2014 Edition
+// Copyright (C) 2008-2015 Centaur Technology
 //
 // Contact:
 //   Centaur Technology Formal Verification Group
@@ -30,14 +30,16 @@
 
 /*+VL `define HAVE_VL */
 
-`ifdef HAVE_VL
-parameter top_spurious;
-parameter top_unset;
-`else
-// NCVerilog/VCS don't like parameters without initial values
-parameter top_spurious = 1;
-parameter top_unset = 1;
-`endif
+// We no longer expect to support top-level unset parameters
+
+// `ifdef HAVE_VL
+// parameter top_spurious;
+// parameter top_unset;
+// `else
+// // NCVerilog/VCS don't like parameters without initial values
+// parameter top_spurious = 1;
+// parameter top_unset = 1;
+// `endif
 
 parameter top_normal = 3;
 parameter top_unused = 4;
@@ -472,5 +474,39 @@ module useprim ;
   wire w1_unset;
 
   awfulbuf (w1_unused, w1_unset);
+
+endmodule
+
+
+
+module trickyscope;
+
+  // This once caused a scopestack/shadowcheck mismatch
+
+  integer d;
+  always_comb
+  begin
+    for (int d=0; d < 4 ; d=d+1)
+    begin
+      $display("Hello");
+    end
+  end
+
+  logic [16-1:0] counter_unused;
+  assign counter_unused = 0;
+
+
+endmodule
+
+
+module minuscolon ;
+
+  wire [10:0] normal1;
+  wire [10:0] normal2;
+
+  assign normal1[3 -: 4] = normal2[3 -: 4];
+  assign normal1[7 -: 4] = normal2[7 -: 4];
+  assign normal1[9:8] = normal2[9:8];
+  assign normal1[10] = normal2[10];
 
 endmodule

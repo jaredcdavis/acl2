@@ -73,7 +73,7 @@
 	     (equal (logand i j)
 		    (+ (* 2 (logand (fl (* 1/2 i)) (fl (* 1/2 j))))
 		       (logand (mod i 2) (mod j 2)))))
-  :rule-classes ((:definition :controller-alist ((binary-logand t t)))))
+  :rule-classes ((:definition :controller-alist ((acl2::binary-logand t t)))))
 
 
 (defthmd logior-def
@@ -82,7 +82,7 @@
 	     (equal (logior i j)
 		    (+ (* 2 (logior (fl (* 1/2 i)) (fl (* 1/2 j))))
 		       (logior (mod i 2) (mod j 2)))))
-  :rule-classes ((:definition :controller-alist ((binary-logior t t)))))
+  :rule-classes ((:definition :controller-alist ((acl2::binary-logior t t)))))
 
 
 (defthmd logxor-def
@@ -91,7 +91,7 @@
 	     (equal (logxor i j)
 		    (+ (* 2 (logxor (fl (* 1/2 i)) (fl (* 1/2 j))))
 		       (logxor (mod i 2) (mod j 2)))))
-  :rule-classes ((:definition :controller-alist ((binary-logxor t t)))))
+  :rule-classes ((:definition :controller-alist ((acl2::binary-logxor t t)))))
 
 
 ;;;;;;
@@ -425,8 +425,9 @@
    :hints (("Goal" :in-theory (e/d (bitn_alt-lognot-lemma
                                     bitn-lnot)
                                    ()))
-           ("Goal''" :in-theory (e/d (bitn_alt-is-bitn lnot)
-                                     ()))))
+; Matt K. v7-1 mod for avoiding "Goal'", 2/13/2015: "Goal''" changed to "Goal'".
+           ("Goal'" :in-theory (e/d (bitn_alt-is-bitn lnot)
+                                    ()))))
                   
 ;;;;;
 ;;;;;

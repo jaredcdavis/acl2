@@ -31,7 +31,7 @@
 ; definitions, e.g., from Centaur libraries.
 
 (in-package "ACL2")
-(include-book "tools/bstar" :dir :system)
+(include-book "std/util/bstar" :dir :system)
 
 ; This book is intended to be a rather bare-minimum set of list definitions.
 ; Historically it included most of the books in the std/lists library and then
@@ -53,12 +53,43 @@
          (equal (- (+ x y)) (+ (- x) (- y)))))
 
 
-(defund list-fix (x)
+(defund list-fix-exec (x)
   (declare (xargs :guard t))
   (if (consp x)
       (cons (car x)
-            (list-fix (cdr x)))
+            (list-fix-exec (cdr x)))
     nil))
+
+(defund list-fix (x)
+  (declare (xargs :guard t :verify-guards nil))
+  (mbe :logic
+       (if (consp x)
+           (cons (car x)
+                 (list-fix (cdr x)))
+         nil)
+       :exec
+       (if (true-listp x)
+           x
+         (list-fix-exec x))))
+
+(encapsulate
+  ()
+  (local (in-theory (enable list-fix list-fix-exec)))
+
+  (defthm list-fix-exec-removal
+    (equal (list-fix-exec x)
+           (list-fix x)))
+
+  (local (defthm list-fix-when-true-listp
+           (implies (true-listp x)
+                    (equal (list-fix x) x))))
+
+  (verify-guards list-fix)
+
+  (defun-inline llist-fix (x)
+    (declare (xargs :guard (true-listp x)))
+    (mbe :logic (list-fix x)
+         :exec x)))
 
 (defund fast-list-equiv (x y)
   (declare (xargs :guard t))
@@ -69,6 +100,9 @@
     (atom y)))
 
 (defund list-equiv (x y)
+  (declare (xargs :guard t
+                  :guard-hints(("Goal" :in-theory (enable fast-list-equiv
+                                                          list-fix)))))
   (mbe :logic (equal (list-fix x) (list-fix y))
        :exec (fast-list-equiv x y)))
 

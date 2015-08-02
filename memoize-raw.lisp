@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -158,14 +158,15 @@
 ;   that "leaving on EGC could really reduce the memory requirements of 95+% of
 ;   the ACL2 jobs in the community books, and could be really good."
 
-; - Consider moving start-sol-gc and supporting functions out of the ACL2 code
-;   base, quite possibly into community books directory
-;   books/centaur/misc/memory-mgmt/.  But perhaps create some way (an interface
-;   of some sort) to get the effect of start-sol-gc, when desirable, without
-;   the need for trust tags.  Perhaps consider the effect on ACL2(hp).  Jared
-;   thinks that removing memory management responsibility out of the ACL2
-;   sources "might be especially useful if you are going to turn EGC back on by
-;   default."
+; - Consider moving set-gc-strategy (note that set-gc-strategy-builtin-delay
+;   was formerly called start-sol-gc) and supporting functions out of the ACL2
+;   code base, quite possibly into community books directory
+;   books/centaur/misc/memory-mgmt/.  But if so, perhaps retain some way (an
+;   interface of some sort) to get the effect of set-gc-strategy when
+;   desirable, without the need for trust tags.  Perhaps consider the effect on
+;   ACL2(hp).  Jared thinks that removing memory management responsibility out
+;   of the ACL2 sources "might be especially useful if you are going to turn
+;   EGC back on by default."
 
 ; - In pons-addr-of-argument, (+ hl-dynamic-base-addr (hl-staticp x)) is
 ;   probably a fixnum.  Especially for GCL, maybe wrap (the fixnum ...) around
@@ -415,34 +416,6 @@
 ; browse it lightly, returning to look at specific constants and globals when
 ; they are encountered later.
 
-; Subsection: type mfixnum
-
-; We use the type mfixnum for counting things that are best counted in the
-; trillions or more.  Mfixnums happen to coincide with regular fixnums on
-; 64-bit CCL, and may be fixnums in other Lisps (e.g. SBCL 1.1.8 and, as
-; confirmed by Camm Maguire Sept. 2014, in 64-bit GCL where fixnums are 64 bits
-; long).
-
-(defconstant most-positive-mfixnum
-
-; Warning: In function internal-real-ticks, we rely on this value having a
-; binary representation as a sequence of ones.
-
-; This is more than 10^18, that is, more than a billion billions.  It seems
-; reasonable to assume (at least in 2014 and for some years beyond) that any
-; integer quantities that we accumulate, such as call counts, are less than
-; that.  This number is also more than the (2*500,000,000)^2, which is the size
-; of *memoize-call-array* when we have approximately 500 million memoized
-; functions.  [Note: if a countable event, like a call, took just the time of
-; the fastest single instruction on a 100GHz (!) machine, then counting up
-; most-positive-mfixnum of them would take over 4 months.]
-
-  (1- (expt 2 60)))
-
-(deftype mfixnum ()
-  `(integer ,(- -1 most-positive-mfixnum)
-            ,most-positive-mfixnum))
-
 ; Subsection: User-settable variables for recording
 
 ; To minimize metering overhead costs, one may set the "*RECORD-" variables
@@ -464,7 +437,8 @@
 ; probably been here for many versions through 6.5 and at this point (August
 ; 2014) we don't expect much use of 32-bit CCL when doing memoization.
 
-  (and (member :ccl *features*) ; most Lisps don't report bytes
+  (and (or (member :ccl *features*) ; most Lisps don't report bytes
+           (member :sbcl *features*))
        (> most-positive-fixnum (expt 2 32))))
 
 (defparameter *record-calls*
@@ -515,7 +489,7 @@
 ; heap, if this variable is not nil at that time and the host Lisp supports
 ; providing that information.
 
-  #+ccl t #-ccl nil)
+  #+(or ccl sbcl) t #-(or ccl sbcl) nil)
 
 (defv *report-calls*
 
@@ -608,8 +582,8 @@
 
 ; Options for the functions include the following.
 
-;    bytes-allocated [CCL only]
-;    bytes-allocated/call [CCL only]
+;    bytes-allocated [CCL and SBCL only]
+;    bytes-allocated/call [CCL and SBCL only]
 ;    execution-order
 ;    hits/calls
 ;    pons-calls
@@ -629,7 +603,7 @@
 ; The value is either nil or the maximum number of functions upon which
 ; memoize-summary reports.  A nil value means report on all."
 
-  20)
+  100)
 
 (defg *condition-nil-as-hit*
 
@@ -940,28 +914,9 @@
 (defg *2max-memoize-fns* ; length of *memoize-call-array*
   *initial-2max-memoize-fns*)
 
-(defg *max-mem-usage*
-
-; This global is set in start-sol-gc.  It is an upper bound, in bytes of memory
-; used, that when exceeded results in certain garbage collection actions.
-
-; See also the centaur/misc/memory-mgmt books.
-
-  (expt 2 32))
-
-(defg *gc-min-threshold*
-
-; This is set in start-sol-gc.
-
-; See also the centaur/misc/memory-mgmt books.
-
-  (expt 2 30))
-
 (defg *memoize-init-done* nil)
 
 (defg *hons-gentemp-counter* 0)
-
-(defvar *sol-gc-installed* nil)
 
 (defg *memoize-use-attachment-warning-p* t)
 
@@ -1071,7 +1026,12 @@
   (let ((temp (get sym 'acl2-saved-def)))
     (cond (temp (cdr temp))
           (t (let* ((fn (symbol-function sym))
-                    (lam (and fn (function-lambda-expression fn))))
+                    (lam (and fn
+                              #+gcl ; accommodate early GCL 2.6.13
+                              (and (fboundp 'function-lambda-expression)
+                                   (funcall 'function-lambda-expression fn))
+                              #-gcl
+                              (function-lambda-expression fn))))
                (cond (lam (assert (eq (car lam) 'lambda))
                           lam)
                      (quiet-p nil)
@@ -1195,21 +1155,6 @@
   (float internal-time-units-per-second))
 
 (declaim (float *float-internal-time-units-per-second*))
-
-(defmacro the-mfixnum (x)
-
-; This silly macro may help someday in debugging, using code such as is found
-; in the comment just below.  Of course, by adding an optional argument that
-; specifies some sort of location for this call, we can get more specific
-; debugging information.  Debugging could also be aided by replacing this with
-; a corresponding defun, which could be traced.
-
-; `(let ((x ,x))
-;    (cond ((not (typep x 'fixnum))
-;           (error "OUCH")))
-;    (the mfixnum x))
-
-  `(the mfixnum ,x))
 
 (defmacro internal-real-ticks ()
 
@@ -2165,10 +2110,6 @@
          `(when ,s ; optimization
             (memoize-flush1 ,s)))))
 
-#+ccl
-(defmacro heap-bytes-allocated ()
-  '(the-mfixnum (ccl::%heap-bytes-allocated)))
-
 (defun sync-memoize-call-array ()
 
 ; Warning: Be careful if you call this function from other than memoize-init or
@@ -2845,7 +2786,7 @@
   ;; global lock, so we shouldn't need any locking inside here.  See
   ;; memoize-fn-def.
 
-  `(let (#+ccl
+  `(let (#+(or ccl sbcl)
          ,@(and *record-bytes* ; performance counting
                 `((,*mf-start-bytes* (heap-bytes-allocated))))
          ,@(and *record-pons-calls* ; performance counting
@@ -2854,13 +2795,13 @@
                             '(internal-real-ticks)
                           '0)))
      (declare
-      (ignorable #+ccl
+      (ignorable #+(or ccl sbcl)
                  ,@(and *record-bytes* `(,*mf-start-bytes*))
                  ,@(and *record-pons-calls* `(,*mf-start-pons*)))
       (type mfixnum
             ,start-ticks
             ,@(and *record-pons-calls* `(,*mf-start-pons*))
-            #+ccl
+            #+(or ccl sbcl)
             ,@(and *record-bytes* `(,*mf-start-bytes*))))
      (,(cond ((or *record-pons-calls*
                   *record-bytes*
@@ -2903,7 +2844,7 @@
                 (aref ,*mf-ma*
                       ,(ma-index-from-col-base fn-col-base *ma-pons-index*))
                 (the-mfixnum (- *pons-call-counter* ,*mf-start-pons*)))))
-      #+ccl
+      #+(or ccl sbcl)
       ,@(and *record-bytes* ; performance counting
              `((safe-incf
                 (aref ,*mf-ma*
@@ -4042,7 +3983,7 @@
   (aref *memoize-call-array*
         (ma-index x *ma-pons-index*)))
 
-#+ccl
+#+(or ccl sbcl)
 (defun-one-output bytes-allocated (x)
 
 ; This function symbol can be included in *memoize-summary-order-list*.
@@ -4159,7 +4100,7 @@
 
          (float n)))))
 
-#+ccl
+#+(or ccl sbcl)
 (defun-one-output bytes-allocated/call (x)
 
 ; This function symbol can be included in *memoize-summary-order-list*.
@@ -4325,7 +4266,7 @@
            (ma *memoize-call-array*)
            (len-orig-fn-pairs (len fn-pairs))
            (len-fn-pairs 0)      ; set below
-           #+ccl
+           #+(or ccl sbcl)
            (global-bytes-allocated 0) ; set below
            (global-pons-calls 0)      ; set below
            )
@@ -4342,11 +4283,11 @@
         (when (< len-fn-pairs len-orig-fn-pairs)
           (format t
                   "~%Reporting on ~:d of ~:d functions because ~
-                 *memoize-summary-limit* = ~a."
+                   *memoize-summary-limit* = ~a."
                   len-fn-pairs
                   len-orig-fn-pairs
                   *memoize-summary-limit*)))
-      #+ccl
+      #+(or ccl sbcl)
       (setq global-bytes-allocated
             (loop for pair in fn-pairs sum
                   (bytes-allocated (car pair))))
@@ -4377,7 +4318,7 @@
                    (pons-calls (the-mfixnum (pons-calls num)))
                    (no-hits (or (not *report-hits*)
                                 (null (memoize-condition fn))))
-                   #+ccl
+                   #+(or ccl sbcl)
                    (bytes-allocated (bytes-allocated num))
                    (tt (max .000001
 
@@ -4393,7 +4334,7 @@
               (declare (type integer start-ticks)
                        (type mfixnum num nhits nmht ncalls
                              pons-calls
-                             #+ccl bytes-allocated))
+                             #+(or ccl sbcl) bytes-allocated))
               (format t "~%(~s~%" fn)
               (mf-print-alist
                `(,@(when (or *report-calls* *report-hits*)
@@ -4442,7 +4383,7 @@
 ;                           (< t/c 1e-6))
 ;                  `((,(format nil " Doubtful timing info for ~a." fn)
 ;                     "Heisenberg effect.")))
-                 #+ccl
+                 #+(or ccl sbcl)
                  ,@(when (and (> bytes-allocated 0) *report-bytes*)
                      (assert (> global-bytes-allocated 0))
                      `((" Heap bytes allocated"
@@ -4679,15 +4620,14 @@
 ; (Memoize-summary) reports data stored during the execution of the functions
 ; in (memoized-functions).
 
-; Typically each call of a memoized function, fn, is counted.
-; The elapsed time until an outermost function call of fn ends, the
-; number of heap bytes allocated in that period (CCL only), and other
-; 'charges' are 'billed' to fn.  That is, quantities such as elapsed
-; time and heap bytes allocated are not charged to subsidiary
-; recursive calls of fn while an outermost call of fn is running.
-; Recursive calls of fn, and memoized 'hits', are counted, unless fn
-; was memoized with nil as the value of the :inline parameter of
-; memoize.
+; Typically each call of a memoized function, fn, is counted.  The elapsed time
+; until an outermost function call of fn ends, the number of heap bytes
+; allocated in that period (CCL and SBCL only), and other 'charges' are
+; 'billed' to fn.  That is, quantities such as elapsed time and heap bytes
+; allocated are not charged to subsidiary recursive calls of fn while an
+; outermost call of fn is running.  Recursive calls of fn, and memoized 'hits',
+; are counted, unless fn was memoized with nil as the value of the :inline
+; parameter of memoize.
 
 ; The settings of the following determine, at the time a function is
 ; given to memoize, the information that is collected for calls of
@@ -4695,7 +4635,7 @@
 
 ;        Variable              type
 
-;        *record-bytes*       boolean    (available in CCL only)
+;        *record-bytes*       boolean    (available in CCL and SBCL only)
 ;        *record-calls*       boolean
 ;        *record-hits*        boolean
 ;        *record-mht-calls*   boolean
@@ -4705,7 +4645,7 @@
 ; The settings of the following determine, at the time that
 ; memoize-summary is called, what information is printed:
 
-;        *report-bytes*       boolean   (available in ccl only)
+;        *report-bytes*       boolean   (available in CCL and SBCL only)
 ;        *report-calls*       boolean
 ;        *report-calls-from*  boolean
 ;        *report-calls-to*    boolean
@@ -4848,9 +4788,7 @@
 (defun-one-output memoize-init ()
 
 ; This function initializes most globals that are managed automatically by the
-; memoization implementation, i.e., that are not user-settable.  Not included
-; here is *sol-gc-installed*, which we consider to pertain to ACL2(h) but to be
-; outside memoization proper.
+; memoization implementation, i.e., that are not user-settable.
 
   (with-global-memoize-lock
    (when *memoize-init-done*
@@ -4930,247 +4868,12 @@
         do (with-lower-overhead
             (apply 'memoize-fn entry))))
 
-;;;;;;;;;;
-;;; Start memory management code (start-sol-gc)
-;;;;;;;;;;
-
-; This section of code was suggested by Jared Davis as a way to regain
-; performance of ACL2(h) on regressions at UT CS.  Initially, these regressions
-; showed significant slowdown upon including new memoization code from Centaur
-; on 3/28/2013:
-; ; old:
-; 24338.570u 1357.200s 1:19:02.75 541.7%	0+0k 0+1918864io 0pf+0w
-; ; new:
-; 33931.460u 1017.070s 1:43:24.28 563.2%	0+0k 392+1931656io 0pf+0w
-; After restoring (start-sol-gc) in function acl2h-init, we regained the old
-; level of performance for a UT CS ACL2(h) regression, with the new memoizaion
-; code.
-
-(defun mf-looking-at (str1 str2 &key (start1 0) (start2 0))
-
-; (Mf-looking-at str1 str2 :start1 s1 :start2 s2) is non-nil if and only if
-; string str1, from location s1 to its end, is an initial segment of string
-; str2, from location s2 to its end.
-
-   (unless (typep str1 'simple-base-string)
-     (error "looking at:  ~a is not a string." str1))
-   (unless (typep str2 'simple-base-string)
-     (error "looking at:  ~a is not a string." str2))
-   (unless (typep start1 'fixnum)
-     (error "looking at:  ~a is not a fixnum." start1))
-   (unless (typep start2 'fixnum)
-     (error "looking at:  ~a is not a fixnum." start2))
-   (locally
-     (declare (simple-base-string str1 str2)
-              (fixnum start1 start2))
-     (let ((l1 (length str1)) (l2 (length str2)))
-       (declare (fixnum l1 l2))
-       (loop
-        (when (>= start1 l1) (return t))
-        (when (or (>= start2 l2)
-                  (not (eql (char str1 start1)
-                            (char str2 start2))))
-          (return nil))
-        (incf start1)
-        (incf start2)))))
-
-(defun our-uname ()
-
-; Returns nil or else a keyword, currently :darwin or :linux, to indicate the
-; result of shell command "uname".
-
-  (multiple-value-bind
-   (exit-code val)
-   (system-call+ "uname" nil)
-   (and (eql exit-code 0)
-        (stringp val)
-        (<= 6 (length val))
-        (cond ((string-equal (subseq val 0 6) "Darwin") :darwin)
-              ((string-equal (subseq val 0 5) "Linux") :linux)))))
-
-(defun meminfo (&optional arg)
-
-; With arg = nil, this function either returns 0 or else the size of the
-; physical memory.  See the code below to understand what information might be
-; returned for non-nil values of arg.
-
-  (assert (or (null arg)
-              (stringp arg)))
-  (or
-   (with-standard-io-syntax
-    (case (our-uname)
-      (:linux
-       (let ((arg (or arg  "MemTotal:")))
-         (and
-          (our-ignore-errors (probe-file "/proc/meminfo"))
-          (with-open-file
-           (stream "/proc/meminfo")
-           (let (line)
-             (loop while (setq line (read-line stream nil nil)) do
-                   (when (mf-looking-at arg line)
-                     (return
-                      (values
-                       (read-from-string line nil nil
-                                         :start (length arg)))))))))))
-      (:darwin
-       (let* ((arg (or arg "hw.memsize"))
-              (len (length arg)))
-         (multiple-value-bind
-          (exit-code val)
-          (system-call+ "sysctl" (list arg))
-          (and (eql exit-code 0)
-               (mf-looking-at arg val)
-               (mf-looking-at arg ": " :start1 len)
-               (let ((ans (read-from-string val nil nil :start (+ 2 len))))
-                 (and (integerp ans)
-                      (equal (mod ans 1024) 0)
-                      (/ ans 1024)))))))
-      (t nil)))
-   0))
-
-(let ((physical-memory-cached-answer nil))
-(defun physical-memory () ; in KB
-  (or physical-memory-cached-answer
-      (setq physical-memory-cached-answer
-            (meminfo))))
-)
-
-#+ccl
-(defun set-and-reset-gc-thresholds ()
-
-; See start-sol-gc for a full discussion.  The comments here summarize how that
-; works out if, for example, there are 8G bytes of physical memory, just to
-; make the concepts concrete -- so it might be helpful to read the comments in
-; this function before reading the more general discussion in start-sol-gc.
-
-  (let ((n
-
-; E.g., with 8G bytes of physical memory, *max-mem-usage* is 1/8 of that --
-; i.e., 1G -- and *gc-min-threshold* is 1/4 of that -- i.e., (1/4)G.  Then here
-; we arrange to allocate enough memory after a GC to reach *max-mem-usage* = 1G
-; bytes before the next GC, unless the current memory usage is more than
-; (3/4)G, in which case we allocate the minimum of (1/4)G.
-
-         (max (- *max-mem-usage* (ccl::%usedbytes))
-              *gc-min-threshold*)))
-
-; Now set the "threshold" to the number of bytes computed above (unless that
-; would be a no-op).
-
-    (unless (eql n (ccl::lisp-heap-gc-threshold))
-      (ccl::set-lisp-heap-gc-threshold n)))
-
-; The above setting won't take effect until the next GC unless we take action.
-; Here is that action, which actually allocates the bytes computed above as
-; free memory.
-
-  (ccl::use-lisp-heap-gc-threshold)
-
-; Finally, still assuming 8G bytes of phyical memory, set the "threshold" to
-; (1/4)G.  This is how much the next GC will set aside as free memory -- at
-; least initially, but then the post-gc hook will call this function.  As
-; explained above, in the case that the current memory usage is less than
-; (3/4)G, enough free memory will be allocated so that the next GC is triggered
-; after *max-mem-usage* = 1G bytes are in use.
-
-  (unless (eql *gc-min-threshold* (ccl::lisp-heap-gc-threshold))
-    (ccl::set-lisp-heap-gc-threshold *gc-min-threshold*)))
-
-#+ccl
-(defun start-sol-gc ()
-
-;          Sol Swords's scheme to control GC in CCL
-;
-; The goal is to get CCL to perform a GC whenever we're using almost
-; all the physical memory, but not otherwise.
-;
-; The discussion below is self-contained, but for more discussion, relevant CCL
-; documentation is at http://ccl.clozure.com/ccl-documentation.html, Chapter
-; 16.
-;
-; The usual way of controlling GC on CCL is via LISP-HEAP-GC-THRESHOLD.  This
-; value is approximately the amount of free memory that will be allocated
-; immediately after GC.  This means that the next GC will occur after
-; LISP-HEAP-GC-THRESHOLD more bytes are used (by consing or array allocation or
-; whatever).  But this means the total memory used by the time the next GC
-; comes around is the threshold plus the amount that remained in use at the end
-; of the previous GC.  This is a problem because of the following scenario:
-;
-;  - We set the LISP-HEAP-GC-THRESHOLD to 3GB since we'd like to be able
-;    to use most of the 4GB physical memory available.
-;
-;  - A GC runs or we say USE-LISP-HEAP-GC-THRESHOLD to ensure that 3GB
-;    is available to us.
-;
-;  - We run a computation until we've exhausted this 3GB, at which point
-;    a GC occurs.
-;
-;  - The GC reclaims 1.2 GB out of the 3GB used, so there is 1.8 GB
-;    still in use.
-;
-;  - After GC, 3GB more is automatically allocated -- but this means we
-;    won't GC again until we have 4.8 GB in use, meaning we've gone to
-;    swap.
-;
-; What we really want is, instead of allocating a constant additional
-; amount after each GC, to allocate up to a fixed total amount including
-; what's already in use.  To emulate that behavior, we use the hack
-; below.  This operates as follows, assuming the same 4GB total physical
-; memory as in the above example (or, unknown physical memory that defaults to
-; 4GB as shown below, i.e., when function meminfo returns 0).
-;
-; 1. We set the LISP-HEAP-GC-THRESHOLD to (0.5G minus used bytes) and call
-; USE-LISP-HEAP-GC-THRESHOLD so that our next GC will occur when we've used a
-; total of 0.5G.
-;
-; 2. We set the threshold back to *gc-min-threshold*= 0.125GB without calling
-; USE-LISP-HEAP-GC-THRESHOLD.
-;
-; 3. Run a computation until we use up the 0.5G and the GC is called.  Say the
-; GC reclaims 0.3GB so there's 0.2GB in use.  0.125GB more (the current
-; LISP-HEAP-GC-THRESHOLD) is allocated so the ceiling is 0.325GB.
-;
-; 4. A post-GC hook runs which again sets the threshold to (0.5G minus used
-; bytes), calls USE-LISP-HEAP-GC-THRESHOLD to raise the ceiling to 0.5G, then
-; sets the threshold back to 0.125GB, and the process repeats.
-;
-; A subtlety about this scheme is that post-GC hooks runs in a separate
-; thread from the main execution.  A possible bug is that in step 4,
-; between checking the amount of memory in use and calling
-; USE-LISP-HEAP-GC-THRESHOLD, more memory might be used up by the main
-; execution, which would set the ceiling higher than we intended.  To
-; prevent this, we interrupt the main thread to run step 4.
-
-; The following settings are highly heuristic.  We arrange that gc
-; occurs at 1/8 of the physical memory size in bytes, in order to
-; leave room for the gc point to grow (as per
-; set-and-reset-gc-thresholds).  If we can determine the physical
-; memory; great; otherwise we assume that it it contains at least 4GB,
-; a reasonable assumption we think for anyone using the HONS version
-; of ACL2.
-
-  (let* ((phys (physical-memory))
-         (memsize (cond ((> phys 0) (* phys 1024)) ; to bytes
-                        (t (expt 2 32)))))
-    (setq *max-mem-usage* (min (floor memsize 8)
-                               (expt 2 31)))
-    (setq *gc-min-threshold* (floor *max-mem-usage* 4)))
-  (unless *sol-gc-installed*
-    (ccl::add-gc-hook
-     #'(lambda ()
-         (ccl::process-interrupt
-          (slot-value ccl:*application* 'ccl::initial-listener-process)
-          #'set-and-reset-gc-thresholds))
-     :post-gc)
-    (setq *sol-gc-installed* t))
-  (set-and-reset-gc-thresholds))
-
 (defun-one-output acl2h-init ()
 
 ; ACL2-DEFAULT-RESTART is called whenever a saved image for any version of ACL2
-; is started up.  For ACL2(h), ACL2-DEFAULT-RESTART calls ACL2H-INIT.  Although
-; we expect ACL2-DEFAULT-RESTART to be called only once, nevertheless for
-; robustness we code ACL2H-INIT so that it may be called multiple times.
+; is started up.  For ACL2(h), ACL2-DEFAULT-RESTART calls ACL2H-INIT only the
+; first time we save an image, not after save-exec, so that *print-array* and
+; the gc-strategy persist after save-exec.
 
 ; (memoize-init) ; skipped, since this call is in exit-boot-strap-mode
 
@@ -5183,9 +4886,6 @@
 ; doesn't have sbits anyway.
 
         nil)
-
-  #+(and ccl (not mswindows))
-  (start-sol-gc)
 
 ; We have decided not to print garbage collector messages, since these can be
 ; distracting to ordinary users.  Those who want such messages can put
@@ -5205,12 +4905,8 @@
 ;   #+(or ccl cmu gcl) ; Lisps where gc-verbose is supported
 ;   (gc-verbose t nil)
 
-; We turn off EGC because it doesn't seem to work well with memoizing
-; worse-than-builtin and sometimes seems buggy; but we want to investigate this
-; more.
-
   #+ccl
-  (ccl::egc nil)
+  (set-gc-strategy (if cl-user::*acl2-egc-on* :egc :delay))
 
   nil)
 

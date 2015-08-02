@@ -1,5 +1,5 @@
 ; ESIM Symbolic Hardware Simulator
-; Copyright (C) 2010-2012 Centaur Technology
+; Copyright (C) 2008-2015 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -139,7 +139,7 @@
 
 
 
-;; Produces a pattern containing fully expaneded names of all internal signals
+;; Produces a pattern containing fully expanded names of all internal signals
 ;; of a module.
 (mutual-recursion
  (defun mod-internals (mod)

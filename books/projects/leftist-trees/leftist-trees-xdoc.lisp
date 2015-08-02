@@ -1,3 +1,28 @@
+#|
+Leftist Trees, Version 0.1
+Copyright (C) 2012 by Ben Selfridge <benself@cs.utexas.edu>
+
+   License: (An MIT/X11-style license)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to
+   deal in the Software without restriction, including without limitation the
+   rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+   sell copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+   IN THE SOFTWARE.
+|#
+
 ; This file was initially generated automatically from legacy documentation
 ; strings.  See source files in this directory for copyright and license
 ; information.
@@ -31,7 +56,7 @@
  question is PROPER-LT, this is just the root of the tree.</p>")
 
 (defxdoc how-many-lt
-  :parents (how-many-lt)
+  :parents (leftist-trees)
   :short "Returns the number of times an object occurs in a leftist tree"
   :long "<p>Counts the number of occurrences of a given object in a leftist
  tree. This function takes advantage of the heap-ordering property, and returns
@@ -142,7 +167,7 @@
   :long "")
 
 (defxdoc leftist-trees
-  :parents (leftist-trees)
+  :parents (projects)
   :short "An implementation of Leftist Trees."
   :long "<p>Leftist trees are an efficient implementation of binary
   heaps. Regular
@@ -217,7 +242,7 @@
   :long "<p>(length-to-nil-lt tree) ==&gt; (rank-lt tree)</p>")
 
 (defxdoc ltree-sort
-  :parents (ltree-sort)
+  :parents (leftist-trees)
   :short "Sort an input list using leftist tree-based heapsort"
   :long "<p>Sorts an input list by first INSERT-LTing each element of the list
  into a leftist tree, then DELETE-MIN-LTing the min element from the tree one

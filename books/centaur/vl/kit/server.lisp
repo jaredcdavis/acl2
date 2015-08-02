@@ -29,6 +29,12 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
+
+; Added by Matt K., May 2015.  Improvement observed when certification used
+; the :delay strategy:
+; 47.43 sec. vs. 55.41 sec.
+(value-triple (set-gc-strategy :delay))
+
 (include-book "shell")
 (include-book "../server/server")
 (include-book "../util/gc")
@@ -126,7 +132,6 @@ Options:" *nls* *nls* *vl-server-opts-usage* *nls*))
            max-mem))
        (- (set-vl-gc-baseline))
        (- (set-vl-gc-threshold 1/3-mem))
-       (- (set-vls-root opts.root))
 
        ((unless (<= opts.port 65535))
         (die "Invalid port ~x0~%" opts.port)
@@ -136,8 +141,10 @@ Options:" *nls* *nls* *vl-server-opts-usage* *nls*))
        (- (cw "Starting VL server on ~s0:~x1~%" hostname opts.port))
 
        (- (start :port       opts.port
-                 :public-dir opts.public)))
+                 :public-dir opts.public
+                 :root-dir   opts.root)))
     (cw "Starting VL Shell for the server.~%")
     (vl-shell nil)))
+
 
 

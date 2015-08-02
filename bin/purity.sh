@@ -12,7 +12,7 @@ fi
 export PAGER=cat
 
 # Matt might update this when confident of purity since the indicated date.
-export SINCE=2015-01-13
+export SINCE=2015-05-09
 
 export basecmd="\
 git log \
@@ -29,6 +29,8 @@ $basecmd \
   --author='Matt Kaufmann <kaufmann@cs.utexas.edu>' \
   --author='MattKaufmann <matthew.j.kaufmann@gmail.com>' \
   --author='kaufmann <kaufmann@unknown58b035fde782.attlocal.net>' \
+  --author='Matt Kaufmann <kaufmann@matts-mbp.attlocal.net>' \
+  --author='Matt Kaufmann <kaufmann@Matts-MBP.attlocal.net>' \
   | grep -v '^[a-z0-9]\{40\}' \
   | grep -v '^books/' \
   > /tmp/git-log-matt.txt

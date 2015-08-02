@@ -30,43 +30,15 @@
 
 (in-package "BITSETS")
 
-#+(and Clozure x86-64)
-(declaim (inline bignum-extract))
+#+(or sbcl lispworks)
+;; See bignum-extract-opt-raw.lsp: for SBCL and LispWorks don't do anything and
+;; prefer to use the straightforward bitset-members version.
+(defun ttag-bitset-members (x)
+  (bitset-members x))
 
-#+(and Clozure x86-64)
-(defun bignum-extract (x slice)
-  (cond ((not (typep slice 'fixnum))
-         ;; If the slice is not even a fixnum, you have bigger problems.  We
-         ;; just fall back to the logical definition.
-         (bignum-extract-slow x slice))
-        ((typep x 'fixnum)
-         ;; Since fixnums are 60 bits, the only valid slices are 0 and 1.
-         (cond ((= (the fixnum slice) 0)
-                (the fixnum (logand (1- (expt 2 32))
-                                    (the fixnum x))))
-               ((= (the fixnum slice) 1)
-                (the fixnum (logand (1- (expt 2 32))
-                                    (the fixnum (ash (the fixnum x) -32)))))
-               ;; For slices beyond these, we need to consider whether X is
-               ;; negative since in 2's complement negative numbers have
-               ;; "infinite leading 1's."
-               ((< x 0)
-                (1- (expt 2 32)))
-               (t
-                0)))
-        ;; Else, a bignum.  CCL represents bignums as vectors of 32-bit numbers
-        ;; with the least significant chunks coming first.
-        ((< (the fixnum slice) (the fixnum (ccl::uvsize x)))
-         ;; In bounds for the array -- just an array access.
-         (ccl::uvref x slice))
-        ;; Else, out of bounds -- like indexing beyond a fixnum, we need to
-        ;; return all 0's or all 1's depending on whether X is negative.
-        ((< x 0)
-         (1- (expt 2 32)))
-        (t
-         0)))
-
-#+(and Clozure x86-64)
+#-(or sbcl lispworks)
+;; For other Lisps, try to use our optimized version.
 (defun bitset-members (x)
   (ttag-bitset-members x))
+
 

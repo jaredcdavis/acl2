@@ -238,6 +238,43 @@ other than @('1') is considered to be a zero bit."
        :exec (the unsigned-byte
                   (ash 1 (the unsigned-byte n)))))
 
+(define binary-minus-for-gl ((x acl2-numberp)
+                             (y acl2-numberp))
+  :parents (binary--)
+  :short "Hack for implementing @(see binary--).  Don't use this."
+  :long "<p>You should never need to use this, call @(see binary--) instead.</p>
+
+<p>This is the logical definition for @(see binary--).  It has a custom GL
+symbolic counterpart.  The only reason to make this a separate function,
+instead of directly putting a symbolic counterpart on @('binary--') itself, is
+to avoid infinite inlining problems when we define custom symbolic counterparts
+for inlined functions on Lisps like SBCL.</p>"
+  :enabled t
+  (- x y))
+
+(define binary--
+  :parents (logops-definition)
+  :short "@('(binary-- x y)') is the same as @('(- x y)'), but may symbolically
+simulate more efficiently in @(see gl)."
+  ((x acl2-numberp)
+   (y acl2-numberp))
+  :enabled t
+  :inline t
+  :long "<p>This is an alias for @('(- x y)').  It should always be left
+enabled and you should never prove any theorems about it.</p>
+
+<p>In ACL2, @(see -) is a macro and @('(- x y)') expands to @('(+ x (unary--
+y))').  This form is often not particularly good for symbolic simulation with
+@(see gl): GL first has to negate @('y') and then carry out the addition.</p>
+
+<p>In contrast, @('binary--') has a custom symbolic counterpart that avoids
+this intermediate negation.  This may result in fewer BDD computations or AIG
+nodes.  In the context of @(see hardware-verification), it may also help your
+spec functions to better match the real implementation of subtraction circuits
+in the hardware being analyzed.</p>"
+
+  (mbe :logic (binary-minus-for-gl x y)
+       :exec (- x y)))
 
 (define logcar
   :short "Least significant bit of a number."
@@ -449,8 +486,8 @@ long word.</p>
   (logapp size i (logtail size j)))
 
 (define logext
-  :short "Logical sign extension, signed version.  @('(logext size i)')
-sign-extends @('i') to an integer with @('size - 1') significant bits."
+  :short "@('(logext size i)') sign-extends @('i') to a @('size')-bit signed
+integer."
   ((size (and (integerp size)
               (< 0 size))
          :type unsigned-byte)
@@ -459,20 +496,39 @@ sign-extends @('i') to an integer with @('size - 1') significant bits."
                 :rule-classes :type-prescription
                 :name logext-type)
   :split-types t
-  :long "<p>@('logext') coerces any integer @('i') into a signed integer by
-\"sign extending\" the bit at @('size - 1') to infinity.</p>
+  :long "<p>@('logext') interprets the least significant @('size') bits of
+@('i') as a signed, 2's complement integer.</p>
 
-<p>We specify logext in terms of the @('size') of the result instead of as a
-bit position because we normally specify integer subranges by the number of
-significant (including sign) bits.</p>
+<p>Basic examples:</p>
+
+@({
+    (logext 4 7)  --> 7        Bottom four bits are 0111
+                               Sign bit is 0
+                               Sign extension creates {0000......0}111
+                               2's complement interpretation: 7.
+
+    (logext 3 7)  --> -1       Bottom 3 bits are 111
+                               Sign bit is 1
+                               Sign extension creates {1111.....1}111
+                               2's complement interpretation: -1.
+
+    (logext 4 8)  --> -8       Bottom 4 bits are 1000
+                               Sign bit is 1
+                               Sign extension creates {1111.....1}1000
+                               2's complement interpretation: -8.
+})
 
 <p>This function returns a (possibly negative) integer.  For consistency with
 @(see SIGNED-BYTE-P), @('size') must be strictly greater than 0.  In contrast,
 the related function @(see logextu) carries out a sign-extension but only
 returns the low @('size') bits, i.e., it always returns a natural number.</p>
 
-<p>See also @(see bitops/fast-logext) for an optimized implementation of @(see
-logext).</p>"
+<p>We specify @('logext') in terms of the @('size') of the result instead of as
+a bit position because we normally specify integer subranges by the number of
+significant (including sign) bits.</p>
+
+<p>See also @(see bitops::bitops/fast-logext) for a logically identical
+function that is optimized for better performance.</p>"
   :enabled t
 
   (let* ((size-1 (- size 1)))
@@ -527,8 +583,8 @@ the performance of the FFT.</p>
 <p>@('logrev') entails a recursive definition of bit-reversing via the helper
 function @(see logrev1).</p>
 
-<p>See also @(see bitops/fast-logrev) for some optimized definitions of @(see
-logrev).</p>"
+<p>See also @(see bitops::bitops/fast-logrev) for some optimized definitions of
+@(see logrev).</p>"
   :inline t
   :enabled t
   (logrev1 size i 0))
@@ -552,8 +608,8 @@ will be @($2^{size-1} - 1$).  For negative @('i'), this will be
 
 <p>This function returns a (possibly negative) integer.  For consistency with
 @(see signed-byte-p), size must be strictly greater than 0.  In contrast, the
-related @(see bitops/saturate) functions always return @('size')-bit natural
-numbers.</p>"
+related @(see bitops::bitops/saturate) functions always return @('size')-bit
+natural numbers.</p>"
 
   :split-types t
   :enabled t
@@ -806,3 +862,5 @@ explicitly in terms of 0 and 1 to simplify reasoning.</p>")
      (:type-prescription :corollary (natp (b-orc2 i j))))))
 
 
+(defmacro loglist* (&rest args)
+  (xxxjoin 'logcons args))

@@ -28,7 +28,7 @@
 ;
 ; Original author: Jared Davis <jared@centtech.com>
 
-(in-package "ACL2")
+(in-package "BITOPS")
 (include-book "std/util/define" :dir :system)
 (include-book "std/basic/defs" :dir :system)
 (include-book "centaur/misc/arith-equivs" :dir :system)
@@ -152,6 +152,29 @@ about it.</p>"
     (unsigned-byte-p 64 (nth-slice64 n x))))
 
 
+(define nth-slice128 ((n natp)
+                      (x integerp))
+  :returns (slice natp :rule-classes :type-prescription)
+  :parents (bitops/extra-defs)
+  :short "Extract the @('n')th 128-bit slice of the integer @('x')."
+  :long "<p>We leave this enabled; we would usually not expect to try to reason
+about it.</p>"
+  :enabled t
+  :inline t
+  (mbe :logic
+       (logand (ash (ifix x) (* (nfix n) -128)) (1- (expt 2 128)))
+       :exec
+       (the (unsigned-byte 128)
+         (logand (ash x (* n -128))
+                 #ux_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF)))
+  ///
+  (defcong nat-equiv equal (nth-slice128 n x) 1)
+  (defcong int-equiv equal (nth-slice128 n x) 2)
+  (defthm unsigned-byte-p-128-of-nth-slice128
+    (unsigned-byte-p 128 (nth-slice128 n x))))
+
+
+
 (define negate-slice8 ((x :type (unsigned-byte 8)))
   :returns (~x natp :rule-classes :type-prescription)
   :parents (bitops/extra-defs)
@@ -246,7 +269,7 @@ about it.</p>"
   :returns (ans natp :rule-classes :type-prescription)
   :parents (bitops/extra-defs)
   :short "@(call abs-diff) is just @('(abs (- (ifix a) (ifix b)))'), but
-optimized for @(see gl)."
+optimized for @(see gl::gl)."
 
   :long "<p>@('abs-diff') is similar to @('(abs (- a b))') but has better
 performance for symbolic simulations with GL: it decides whether the

@@ -29,9 +29,9 @@
 ; Original author: Jared Davis <jared@centtech.com>
 
 (in-package "VL")
-(include-book "../translation")
 (include-book "../mlib/hierarchy")
-(include-book "../checkers/use-set-report")
+(include-book "../loader/filemap")
+(include-book "../loader/preprocessor/defines")
 (include-book "../loader/descriptions")
 (local (include-book "../util/arithmetic"))
 
@@ -52,15 +52,17 @@
   :parents (server)
   :short "Data that is available to @(see vls-commands)."
   :tag :vls-data
-  ((good vl-design-p
-         "The successfully translated portion of the design.")
-
-   (bad  vl-design-p
-         "The portion of the design that had errors or is otherwise
-          unsupported.")
-
-   (orig vl-design-p
+  ((orig vl-design-p
          "The original design, as seen very shortly after parsing.")
+
+   (name  stringp :rule-classes :type-prescription
+          "Project name for this design.")
+
+   (date  stringp :rule-classes :type-prescription
+          "Date stamp for this zip file.")
+
+   (ltime natp :rule-classes :type-prescription
+          "Lisp time stamp for this zip file.")
 
    ;; (orig-depalist (vl-depalist-okp (vl-design->mods orig) orig-depalist)
    ;;                "A @(see vl-depalist) for the original modules.")
@@ -74,11 +76,7 @@
              to particular locations.")
 
    (defs vl-defines-p
-     "Summary of all @('`define')s encountered while parsing.")
-
-   (use-set-report vl-useset-report-p
-                   "The pre-computed use-set-report for these modules; BOZO consider
-                    eliminating this and generating it dynamically instead."))
+     "Summary of all @('`define')s encountered while parsing."))
 
   :long "<p>A @('vls-data-p') structure just aggregates a bunch of data that is
 produced when we run the translator.</p>

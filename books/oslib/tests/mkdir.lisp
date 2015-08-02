@@ -36,6 +36,18 @@
 (include-book "std/osets/top" :dir :system)
 (include-book "misc/assert" :dir :system)
 
+(local (defthm true-listp-when-string-listp
+         (implies (string-listp x)
+                  (true-listp x))))
+
+#||
+(acl2::with-redef
+  (defun mkdir-fn (dir state)
+    (declare (ignorable dir)
+             (xargs :stobjs state))
+    (mv t state)))
+||#
+
 (define basic-mkdir-test ((new-dir-name stringp) &key (state 'state))
   :returns (state state-p1 :hyp (state-p1 state))
   (b* (((mv errp orig-dirs state) (ls-subdirs "."))
@@ -46,12 +58,13 @@
        ((unless okp)
         (raise "Error making directory ~x0." new-dir-name)
         state)
+       (- (sleep 1)) ;; BOZO shouldn't be necessary, yet I get failures sometimes...
        ((mv errp new-dirs state) (ls-subdirs "."))
        ((when errp)
         (raise "Error listing new subdirectories.")
         state)
-       ((unless (equal (set::mergesort new-dirs)
-                       (set::mergesort (cons new-dir-name orig-dirs))))
+       ((unless (and (not (member-equal new-dir-name orig-dirs))
+                     (member-equal new-dir-name new-dirs)))
         (cw "Prev dirs: ~x0." orig-dirs)
         (cw "New dirs: ~x0." new-dirs)
         (raise "New directory ~x0 didn't get created." new-dir-name)
@@ -60,12 +73,12 @@
        ((unless okp)
         (raise "Error removing directory ~x0." new-dir-name)
         state)
+       (- (sleep 1)) ;; BOZO shouldn't be necessary, yet I get failures sometimes...
        ((mv errp new-dirs state) (ls-subdirs "."))
        ((when errp)
         (raise "Error listing new subdirectories.")
         state)
-       ((unless (equal (set::mergesort orig-dirs)
-                       (set::mergesort new-dirs)))
+       ((when (member-equal new-dir-name new-dirs))
         (cw "Prev dirs: ~x0." orig-dirs)
         (cw "New dirs: ~x0." new-dirs)
         (raise "New directory didn't get deleted?")

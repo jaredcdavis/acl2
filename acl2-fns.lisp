@@ -1,4 +1,4 @@
-; ACL2 Version 7.0 -- A Computational Logic for Applicative Common Lisp
+; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
 ; Copyright (C) 2015, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
@@ -19,6 +19,8 @@
 ; Austin, TX 78712 U.S.A.
 
 (in-package "ACL2")
+
+(proclaim-optimize)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                            PRELIMINARIES
@@ -1758,14 +1760,6 @@ notation causes an error and (b) the use of ,. is not permitted."
             (get-os)
             *the-live-state*))
 
-(defun cancel-dot-dots (full-pathname)
-  (let ((p (search "/.." full-pathname)))
-    (cond (p (cancel-dot-dots
-              (qfuncall merge-using-dot-dot
-                        (subseq full-pathname 0 p)
-                        (subseq full-pathname (1+ p) (length full-pathname)))))
-          (t full-pathname))))
-
 (defun unix-full-pathname (name &optional extension)
 
 ; We formerly used Common Lisp function merge-pathnames.  But in CCL,
@@ -1788,7 +1782,8 @@ notation causes an error and (b) the use of ,. is not permitted."
                                           extension)
                            name)
                          os state)))
-    (cancel-dot-dots
+    (qfuncall
+     cancel-dot-dots
      (cond ((qfuncall absolute-pathname-string-p name nil os)
             name)
            (t
@@ -1905,9 +1900,9 @@ notation causes an error and (b) the use of ,. is not permitted."
   reference such a variable than an ordinary special, which may have a
   per-thread binding that needs to be locked up."
 
-  #-Clozure
+  #-ccl
   `(defparameter ,@r)
-  #+Clozure
+  #+ccl
   `(ccl::defstatic ,@r))
 
 (defmacro defv (&rest r)
@@ -1921,9 +1916,9 @@ notation causes an error and (b) the use of ,. is not permitted."
   the CCL documentation string for DEFSTATICVAR: ``Like DEFVAR, the initial
   value form is not evaluated if the variable is already BOUNDP.''"
 
-  #-Clozure
+  #-ccl
   `(defvar ,@r)
-  #+Clozure
+  #+ccl
   `(ccl::defstaticvar ,@r))
 
 (defmacro without-interrupts (&rest forms)
@@ -2076,26 +2071,9 @@ notation causes an error and (b) the use of ,. is not permitted."
     #-(or ccl sb-thread lispworks)
     `(progn ,@forms)))
 
-(defmacro gv (fn args val)
-  (sublis `((funny-fn . ,fn)
-            (funny-args . ,args))
-          `(let ((gc-on (not (gc-off *the-live-state*))))
-             (if (or gc-on
-                     (f-get-global 'safe-mode *the-live-state*))
-                 (throw-raw-ev-fncall
-                  (list 'ev-fncall-guard-er
-                        'funny-fn
-                        ,(cons 'list 'funny-args)
-                        (untranslate* (guard 'funny-fn nil (w *the-live-state*))
-                                      t
-                                      (w *the-live-state*))
-                        (stobjs-in 'funny-fn (w *the-live-state*))
-                        (not gc-on)))
-               ,val))))
-
-; Through ACL2 Version_6.5, acl2-gentemp was deined in interface-raw.lisp.  But
-; since it is used in parallel-raw.lisp, we have moved it here in support of
-; the toothbrush.
+; Through ACL2 Version_6.5, acl2-gentemp was defined in interface-raw.lisp.
+; But since it is used in parallel-raw.lisp, we have moved it here in support
+; of the toothbrush.
 (defvar *acl2-gentemp-counter* 0)
 (defun-one-output acl2-gentemp (root)
   (let ((acl2-pkg (find-package "ACL2")))
@@ -2107,3 +2085,46 @@ notation causes an error and (b) the use of ,. is not permitted."
 ; See comment in intern-in-package-of-symbol for an explanation of this trick.
                      ans))
          (incf *acl2-gentemp-counter*))))))
+
+; Subsection: type mfixnum
+
+; We use the type mfixnum for counting things that are best counted in the
+; trillions or more.  Mfixnums happen to coincide with regular fixnums on
+; 64-bit CCL, and may be fixnums in other Lisps (e.g. SBCL 1.1.8 and, as
+; confirmed by Camm Maguire Sept. 2014, in 64-bit GCL where fixnums are 64 bits
+; long).
+
+(defconstant most-positive-mfixnum
+
+; Warning: In function internal-real-ticks, we rely on this value having a
+; binary representation as a sequence of ones.
+
+; This is more than 10^18, that is, more than a billion billions.  It seems
+; reasonable to assume (at least in 2014 and for some years beyond) that any
+; integer quantities that we accumulate, such as call counts, are less than
+; that.  This number is also more than the (2*500,000,000)^2, which is the size
+; of *memoize-call-array* when we have approximately 500 million memoized
+; functions.  [Note: if a countable event, like a call, took just the time of
+; the fastest single instruction on a 100GHz (!) machine, then counting up
+; most-positive-mfixnum of them would take over 4 months.]
+
+  (1- (expt 2 60)))
+
+(deftype mfixnum ()
+  `(integer ,(- -1 most-positive-mfixnum)
+            ,most-positive-mfixnum))
+
+(defmacro the-mfixnum (x)
+
+; This silly macro may help someday in debugging, using code such as is found
+; in the comment just below.  Of course, by adding an optional argument that
+; specifies some sort of location for this call, we can get more specific
+; debugging information.  Debugging could also be aided by replacing this with
+; a corresponding defun, which could be traced.
+
+; `(let ((x ,x))
+;    (cond ((not (typep x 'fixnum))
+;           (error "OUCH")))
+;    (the mfixnum x))
+
+  `(the mfixnum ,x))
