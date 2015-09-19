@@ -2829,45 +2829,47 @@
                   forget)
 
 ; The test above is the condition under which there are forms following the
-; inner-body call below.  If there are no such forms, we simply lay down a
-; progn (which presumably will be compiled away).
+; inner-body call below.  We usually don't want to pay the price of
+; unwind-protect'ing the statistics gathering forms, but we make it possible
+; for users to do so by setting *protect-memoize-statistics* before memoizing
+; their functions.
 
-              prog1-fn)
-             (t 'progn))
-
-; [Jared] We usually don't want to pay the price of unwind-protect'ing the
-; statistics gathering forms, but users can now choose to do so by setting up
-; *protect-memoize-statistics* before memoizing their functions.  See also the
-; comments in *protect-memoize-statistics*.
+; [Jared] An old comment from before *protect-memoize-statistics*:
 ;
-; [Jared] An old comment from before this change read as follows:
-;
-;   At one time we used unwind-protect here (actually, we used
-;   unwind-protect-disable-interrupts-during-cleanup).  But some very simple
-;   experiments show that prog1 and multiple-value-prog1 are much cheaper than
-;   unwind-protect, even if we introduce *caller* and start-ticks as special
-;   variables (so that they can be let-bound) instead of defg.  Maybe that's in
-;   the noise, but it seems worth trying, even if when aborting computations,
-;   some of the statistics are skewed or, if forget is true, some tables fail
-;   to be flushed.
+;   "At one time we used unwind-protect here (actually, we used
+;    unwind-protect-disable-interrupts-during-cleanup).  But some very simple
+;    experiments show that prog1 and multiple-value-prog1 are much cheaper than
+;    unwind-protect, even if we introduce *caller* and start-ticks as special
+;    variables (so that they can be let-bound) instead of defg.  Maybe that's
+;    in the noise, but it seems worth trying, even if when aborting
+;    computations, some of the statistics are skewed or, if forget is true,
+;    some tables fail to be flushed."
 
-      (,(if *protect-memoize-statistics* 'unwind-protect 'progn)
+              (if *protect-memoize-statistics*
+                  'unwind-protect
+                prog1-fn))
+             (t
 
-          ,(cond ((or *record-bytes*
-                      *record-calls*
-                      *record-hits*
-                      *record-mht-calls*
-                      *record-pons-calls*
-                      *record-time*)
+; There are no forms to protect, so we simply lay down a progn (which
+; presumably will be compiled away).
+
+              'progn))
+
+      ,(cond ((or *record-bytes*
+                  *record-calls*
+                  *record-hits*
+                  *record-mht-calls*
+                  *record-pons-calls*
+                  *record-time*)
 
 ; Then we are gathering performance counting statistics for this function, so
 ; we need to make a note of the caller.  Otherwise, this function is invisible
 ; from the standpoint of performance counting, and we should let the caller
 ; stay as it was.
 
-                  `(let ((*caller* ,fn-col-base)) ; performance counting
-                     ,inner-body))
-                 (t inner-body))
+              `(let ((*caller* ,fn-col-base)) ; performance counting
+                 ,inner-body))
+             (t inner-body))
 
       ,@(and *record-pons-calls* ; performance counting
              `((safe-incf
@@ -2915,7 +2917,7 @@
 
              `((setq ,tablename nil)
                ,@(and (> number-of-args 1)
-                      `((setq ,ponstablename nil)))))))))
+                      `((setq ,ponstablename nil))))))))
 
 (defun memoize-fn-def (inner-body outer-body
                                   fn formals specials dcls fnn start-ticks
