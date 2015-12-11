@@ -36,7 +36,7 @@
 (include-book "ihs/basic-definitions" :dir :system)
 (local (include-book "arithmetic/top-with-meta" :dir :system))
 (local (include-book "tools/do-not" :dir :system))
-(local (in-theory (disable signed-byte-p)))
+(local (in-theory (disable signed-byte-p floor truncate)))
 (local (do-not generalize fertilize))
 
 (local (defthm signed-byte-p-forward
@@ -1059,3 +1059,231 @@ declarations."
     (implies (and (integerp m)
                   (< (nfix size) m))
              (signed-byte-p m (loghead size x)))))
+
+
+
+(local (defthm truncate-of-zero
+         (equal (truncate a 0)
+                0)
+         :hints(("Goal" :in-theory (enable truncate)))))
+
+(local (defthm truncate-of-negative-1
+            (implies (integerp a)
+                     (equal (truncate a -1)
+                            (- a)))
+            :hints(("Goal" :in-theory (enable truncate)))))
+
+(local (defthmd truncate-is-floor-when-naturals
+         (implies (and (natp a)
+                       (natp b))
+                  (equal (truncate a b)
+                         (floor a b)))
+         :hints(("Goal" :in-theory (enable truncate floor)))))
+
+(local (defthm floor-of-1-when-integerp
+         (implies (integerp a)
+                  (equal (floor a 1)
+                         a))
+         :hints(("Goal" :in-theory (enable floor)))))
+
+(local (defthm floor-of-naturals-lower-bound
+         (implies (and (natp a)
+                       (natp b))
+                  (<= 0 (floor a b)))
+         :hints(("Goal" :in-theory (enable floor)))))
+
+(local
+ (encapsulate
+   ()
+   (local (include-book "ihs/quotient-remainder-lemmas" :dir :system))
+
+   (defthmd floor-strong-self-upper-bound-when-naturals
+     (implies (and (natp a)
+                   (natp b))
+              (equal (< (floor a b) a)
+                     (if (posp a)
+                         (not (equal b 1))
+                       nil)))
+     :hints(("Goal" :nonlinearp t)))
+
+   (defthm floor-weak-self-upper-bound-when-naturals
+     (implies (and (natp a)
+                   (natp b))
+              (<= (floor a b) a))
+     :hints(("Goal"
+             :do-not '(generalize fertilize eliminate-destructors)
+             :do-not-induct t
+             :cases ((< (floor a b) a))
+             :in-theory (e/d (floor-strong-self-upper-bound-when-naturals)
+                             (floor)))))))
+
+
+
+(defthm basic-unsigned-byte-p-of-floor
+  (implies (and (unsigned-byte-p n a)
+                (natp b))
+           (unsigned-byte-p n (floor a b)))
+  :hints(("Goal"
+          :in-theory (e/d (unsigned-byte-p)
+                          (floor-weak-self-upper-bound-when-naturals))
+          :use ((:instance floor-weak-self-upper-bound-when-naturals)))))
+
+(defthm basic-unsigned-byte-p-of-truncate
+  (implies (and (unsigned-byte-p n a)
+                (natp b))
+           (unsigned-byte-p n (truncate a b)))
+  :hints(("Goal"
+          :in-theory (e/d (truncate-is-floor-when-naturals)
+                          (floor truncate)))))
+
+
+(defsection basic-signed-byte-p-of-truncate
+
+  ;; Unfortunately the asymmetry of signed-byte-p makes the signed-byte-p lemma
+  ;; for truncate ugly.
+  ;;
+  ;; You might normally think of division as decreasing the magnitude of the
+  ;; numerator.  But there's a bad case: if we divide the minimum n-bit signed
+  ;; integer by -1, the asymmetry of 2's complement arithmetic means we get a
+  ;; result that is too large to represent.  For example, for N=32:
+  ;;
+  ;;   (defconst *int-min* (- (expt 2 31)))
+  ;;   (signed-byte-p 32 *int-min*)               ;; T
+  ;;   (signed-byte-p 32 (truncate *int-min* -1)) ;; NIL(!) -- it's 2^31
+  ;;
+  ;; As a result, our final theorems has to rule out this one special case.
+  ;; The proof is a bit long/involved, but is essentially very simple and just
+  ;; boils down to cases about whether the numerator/denominator are
+  ;; positive/negative.
+
+  (local (in-theory (enable signed-byte-p)))
+
+  ;; Case 1 (positive/positive):
+
+  (local (defthm truncate-weak-self-upper-bound-when-naturals
+           (implies (and (natp a)
+                         (natp b))
+                    (<= (truncate a b) a))
+           :rule-classes ((:rewrite) (:linear))
+           :hints(("Goal" :in-theory (enable truncate-is-floor-when-naturals)))))
+
+  (local (defthm truncate-lower-bound-when-naturals
+           (implies (and (natp a)
+                         (natp b))
+                    (<= 0 (truncate a b)))
+           :rule-classes ((:rewrite) (:linear))
+           :hints(("Goal" :in-theory (enable truncate)))))
+
+  (local (defthm basic-signed-byte-p-of-truncate-when-naturals
+           (implies (and (signed-byte-p n a)
+                         (case-split (natp a))
+                         (case-split (natp b)))
+                    (signed-byte-p n (truncate a b)))
+           :hints(("Goal"
+                   :in-theory (disable basic-unsigned-byte-p-of-truncate)
+                   :use ((:instance basic-unsigned-byte-p-of-truncate
+                          (n (- n 1))))))))
+
+  ;; Case 2 (positive/negative):
+
+  (local
+   (encapsulate ()
+     (local (defthm truncate-when-positive-over-negative
+              (implies (and (natp a)
+                            (negp b))
+                       (equal (truncate a b)
+                              (- (truncate a (- b)))))
+              :hints(("Goal" :in-theory (enable truncate)))))
+
+     (defthm basic-signed-byte-p-of-truncate-when-positive-over-negative
+       (implies (and (signed-byte-p n a)
+                     (case-split (natp a))
+                     (case-split (negp b)))
+                (signed-byte-p n (truncate a b))))))
+
+  ;; Case 3 (negative/positive):
+
+  (local
+   (encapsulate ()
+     (local (defthm truncate-when-negative-over-positive
+              (implies (and (negp a)
+                            (natp b))
+                       (equal (truncate a b)
+                              (- (truncate (- a) b))))
+              :hints(("Goal" :in-theory (enable truncate)))))
+
+     (defthm basic-signed-byte-p-of-truncate-when-negative-over-positive
+       (implies (and (signed-byte-p n a)
+                     (case-split (negp a))
+                     (case-split (posp b)))
+                (signed-byte-p n (truncate a b))))))
+
+  ;; Case 4 (negative/negative -- the tricky case):
+
+  (local
+   (encapsulate ()
+     (local (defthm truncate-when-both-negative
+              (implies (and (negp a)
+                            (negp b))
+                       (equal (truncate a b)
+                              (truncate (- a) (- b))))
+              :hints(("Goal" :in-theory (enable truncate)))))
+
+     (local (defthm truncate-strong-self-upper-bound-when-naturals
+              (implies (and (natp a)
+                            (natp b))
+                       (equal (< (truncate a b) a)
+                              (if (posp a)
+                                  (not (equal b 1))
+                                nil)))
+              :hints(("Goal" :in-theory (enable truncate-is-floor-when-naturals
+                                                floor-strong-self-upper-bound-when-naturals
+                                                floor-strong-self-upper-bound-when-naturals)))))
+
+     (local (defthm basic-signed-byte-p-of-truncate-when-negatives-except-for-int-min
+              (implies (and (signed-byte-p n a)
+                            (negp a)
+                            (negp b)
+                            (not (equal a (- (expt 2 (- n 1))))))
+                       (signed-byte-p n (truncate a b)))))
+
+     (local (defthm basic-signed-byte-p-of-truncate-int-min
+              (implies (and (signed-byte-p n a)
+                            (equal a (- (expt 2 (- n 1))))
+                            (negp b)
+                            (not (equal b -1)))
+                       (signed-byte-p n (truncate a b)))))
+
+     (defthm basic-signed-byte-p-of-truncate-when-negatives
+       (implies (and (signed-byte-p n a)
+                     (case-split (negp a))
+                     (case-split (negp b)))
+                (equal (signed-byte-p n (truncate a b))
+                       (not (and (equal a (- (expt 2 (- n 1))))
+                                 (equal b -1))))))))
+
+  ;; Wrapping it all up into a coherent top-level theorem:
+
+  (defthmd basic-signed-byte-p-of-truncate-split
+    ;; Stronger form.  We leave this disabled since it can case split.
+    (implies (and (signed-byte-p n a)
+                  (integerp b))
+             (equal (signed-byte-p n (truncate a b))
+                    (not (and (equal a (- (expt 2 (- n 1))))
+                              (equal b -1)))))
+    :hints(("Goal"
+            :in-theory (disable signed-byte-p)
+            :do-not '(generalize fertilize eliminate-destructors)
+            :do-not-induct t)
+           (and stable-under-simplificationp
+                '(:in-theory (enable signed-byte-p)))))
+
+  (defthm basic-signed-byte-p-of-truncate
+    ;; Weaker form.  Won't case split so it's probably safe enough to leave
+    ;; enabled, even though it's a bit unsatisfying.
+    (implies (and (signed-byte-p n a)
+                  (integerp b)
+                  (not (and (equal a (- (expt 2 (- n 1))))
+                            (equal b -1))))
+             (signed-byte-p n (truncate a b)))
+    :hints(("Goal" :in-theory (enable basic-signed-byte-p-of-truncate-split)))))
