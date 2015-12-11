@@ -30,34 +30,8 @@
 ;
 ; Original author: Jared Davis <jared@kookamara.com>
 
-#!ACL2
-(in-package "ACL2")
+(in-package "NATIVEARITH")
+(include-book "i64ops")
 
-(include-book "std/portcullis" :dir :system)
-(include-book "centaur/bitops/portcullis" :dir :system)
-
-(defpkg "NATIVEARITH"
-  (union-eq *standard-acl2-imports*
-            std::*std-exports*
-            bitops::*bitops-exports*
-            '(enable*
-              disable*
-              e/d*
-              assert!
-              maybe-natp
-              lnfix
-              b*
-              fun
-              why
-              with-redef
-              do-not
-              bitops
-
-              str::cat
-              str::natstr
-
-              a b c d e f g h i j k l m n o p q r s t u v w x y z
-              pos size size1
-              )))
-
-(assign acl2::verbose-theory-warning nil)
+(defxdoc nativearith
+  :short "A library of machine(-like) arithmetic operations.")
