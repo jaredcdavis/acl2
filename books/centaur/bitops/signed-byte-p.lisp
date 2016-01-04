@@ -1342,25 +1342,6 @@ declarations."
                    :use ((:instance truncate-is-floor-when-naturals)
                          (:instance basic-signed-byte-p-of-floor-when-naturals))))))
 
-  (local (defthm basic-signed-byte-p-of-mod-when-naturals
-           (implies (and (signed-byte-p n a)
-                         (case-split (natp a))
-                         (case-split (natp b)))
-                    (signed-byte-p n (mod a b)))
-           :hints(("Goal"
-                   :in-theory (disable basic-unsigned-byte-p-of-mod)
-                   :use ((:instance basic-unsigned-byte-p-of-mod
-                          (n (- n 1))))))))
-
-  (local (defthm basic-signed-byte-p-of-rem-when-naturals
-           (implies (and (signed-byte-p n a)
-                         (case-split (natp a))
-                         (case-split (natp b)))
-                    (signed-byte-p n (rem a b)))
-           :hints(("Goal"
-                   :use ((:instance rem-is-mod-when-naturals)
-                         (:instance basic-signed-byte-p-of-mod-when-naturals))))))
-
   ;; Case 2 (positive/negative):
 
   (local
@@ -1577,4 +1558,77 @@ declarations."
     :hints(("Goal" :in-theory (enable basic-signed-byte-p-of-floor-split)))))
 
 
-;; Still todo: rem and mod.
+(defsection basic-signed-byte-p-of-mod
+
+  (local (include-book "ihs/quotient-remainder-lemmas" :dir :system))
+
+  (local (in-theory (enable signed-byte-p)))
+
+  (local (defthm basic-signed-byte-p-of-mod-when-negp-b
+           ;; When B is negative, MOD-BOUNDED-BY-MODULUS tells us that the mod
+           ;; is greater than B, so signed-byte-p of B suffices.
+           (implies (and (integerp a)
+                         (signed-byte-p n b)
+                         (case-split (negp b)))
+                    (signed-byte-p n (mod a b)))
+           :hints(("Goal"
+                   :do-not-induct t
+                   :do-not '(generalize fertilize eliminate-destructors)
+                   :in-theory (e/d ()
+                                   (mod floor))
+                   ))))
+
+  (local (defthm basic-signed-byte-p-of-mod-when-posp-b
+           ;; When B is positive, MOD-BOUNDED-BY-MODULUS tells us that the mod
+           ;; is less than B, so signed-byte-p of B suffices.
+           (implies (and (integerp a)
+                         (signed-byte-p n b)
+                         (case-split (posp b)))
+                    (signed-byte-p n (mod a b)))
+           :hints(("Goal"
+                   :do-not-induct t
+                   :do-not '(generalize fertilize eliminate-destructors)
+                   :in-theory (e/d ()
+                                   (mod floor))
+                   ))))
+
+  ;; That leaves only the case where B is zero.  In that case MOD-OF-ZERO shows
+  ;; us that the mod is A.  So in this case we need that A is a signed-byte-p.
+
+  (defthm basic-signed-byte-p-of-mod
+    (implies (and (signed-byte-p n a)
+                  (signed-byte-p n b))
+             (signed-byte-p n (mod a b))))
+
+
+  ;; Same argument now for REM.
+
+  (local (defthm basic-signed-byte-p-of-rem-when-negp-b
+           (implies (and (integerp a)
+                         (signed-byte-p n b)
+                         (case-split (negp b)))
+                    (signed-byte-p n (rem a b)))
+           :hints(("Goal"
+                   :do-not-induct t
+                   :do-not '(generalize fertilize eliminate-destructors)
+                   :in-theory (e/d ()
+                                   (rem truncate))
+                   ))))
+
+  (local (defthm basic-signed-byte-p-of-rem-when-posp-b
+           (implies (and (integerp a)
+                         (signed-byte-p n b)
+                         (case-split (posp b)))
+                    (signed-byte-p n (rem a b)))
+           :hints(("Goal"
+                   :do-not-induct t
+                   :do-not '(generalize fertilize eliminate-destructors)
+                   :in-theory (e/d ()
+                                   (rem truncate))
+                   ))))
+
+  (defthm basic-signed-byte-p-of-rem
+    (implies (and (signed-byte-p n a)
+                  (signed-byte-p n b))
+             (signed-byte-p n (rem a b)))))
+
