@@ -32,6 +32,7 @@
 (include-book "base")
 (include-book "bordeaux")
 (include-book "bt-semaphore")
+(include-book "cffi")
 (include-book "cl-fad")
 (include-book "external-program")
 (include-book "fastnumio")
