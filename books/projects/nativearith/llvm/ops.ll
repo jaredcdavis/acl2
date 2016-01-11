@@ -30,85 +30,85 @@
 ;
 ; Original author: Jared Davis <jared@kookamara.com>
 
-define i64 @i64eql (i64 %a, i64 %b)
+define i64 @narith_i64eql (i64 %a, i64 %b)
 {
 	%ans = icmp eq i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
 
-define i64 @i64neq (i64 %a, i64 %b)
+define i64 @narith_i64neq (i64 %a, i64 %b)
 {
 	%ans = icmp ne i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
 
-define i64 @i64sle (i64 %a, i64 %b)
+define i64 @narith_i64sle (i64 %a, i64 %b)
 {
 	%ans = icmp sle i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
 
-define i64 @i64slt (i64 %a, i64 %b)
+define i64 @narith_i64slt (i64 %a, i64 %b)
 {
 	%ans = icmp slt i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
 
-define i64 @i64sge (i64 %a, i64 %b)
+define i64 @narith_i64sge (i64 %a, i64 %b)
 {
 	%ans = icmp sge i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
 
-define i64 @i64sgt (i64 %a, i64 %b)
+define i64 @narith_i64sgt (i64 %a, i64 %b)
 {
 	%ans = icmp sgt i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
 
-define i64 @i64bitand (i64 %a, i64 %b)
+define i64 @narith_i64bitand (i64 %a, i64 %b)
 {
 	%ans = and i64 %a, %b
 	ret i64 %ans
 }
 
-define i64 @i64bitor (i64 %a, i64 %b)
+define i64 @narith_i64bitor (i64 %a, i64 %b)
 {
 	%ans = or i64 %a, %b
 	ret i64 %ans
 }
 
-define i64 @i64bitxor (i64 %a, i64 %b)
+define i64 @narith_i64bitxor (i64 %a, i64 %b)
 {
 	%ans = xor i64 %a, %b
 	ret i64 %ans
 }
 
-define i64 @i64plus (i64 %a, i64 %b)
+define i64 @narith_i64plus (i64 %a, i64 %b)
 {
        %ans = add i64 %a, %b
        ret i64 %ans
 }
 
-define i64 @i64minus (i64 %a, i64 %b)
+define i64 @narith_i64minus (i64 %a, i64 %b)
 {
 	%ans = sub i64 %a, %b
 	ret i64 %ans
 }
 
-define i64 @i64times (i64 %a, i64 %b)
+define i64 @narith_i64times (i64 %a, i64 %b)
 {
 	%ans = mul i64 %a, %b
 	ret i64 %ans
 }
 
-define i64 @i64sdiv (i64 %a, i64 %b)
+define i64 @narith_i64sdiv (i64 %a, i64 %b)
 {
 	%b.zero = icmp eq i64 %b, 0
 	br i1 %b.zero, label %case.zero, label %case.nonzero
