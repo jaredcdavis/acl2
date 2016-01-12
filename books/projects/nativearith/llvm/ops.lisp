@@ -31,7 +31,7 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "../i64ops")
+(include-book "../ops")
 (include-book "centaur/quicklisp/cffi" :dir :system)
 (include-book "std/util/defconsts" :dir :system)
 ; (depends-on "ops-raw.lsp")
@@ -71,19 +71,29 @@ them.</p>")
      (progn$ (raise "LLVM definition not installed?")
              (,name . ,(strip-cars args)))))
 
+
 (def-narith-op i64eql    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
 (def-narith-op i64neq    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-;(def-narith-op i64sle    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-;(def-narith-op i64slt    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-;(def-narith-op i64sge    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-;(def-narith-op i64sgt    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+
+(def-narith-op i64sle    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64slt    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64sge    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64sgt    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+
+(def-narith-op i64ule    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64ult    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64uge    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64ugt    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+
 (def-narith-op i64bitand ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
 (def-narith-op i64bitor  ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
 (def-narith-op i64bitxor ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
 (def-narith-op i64plus   ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
 (def-narith-op i64minus  ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
 (def-narith-op i64times  ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-;(def-narith-op i64sdiv   ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+
+(def-narith-op i64sdiv   ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64udiv   ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
 
 (defttag :nativearith.llvm)
 

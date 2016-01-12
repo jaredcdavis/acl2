@@ -50,16 +50,25 @@
 
 (cffi:defcfun "narith_i64eql"    :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64neq"    :int64 (a :int64) (b :int64))
+
 (cffi:defcfun "narith_i64sle"    :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64slt"    :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64sge"    :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64sgt"    :int64 (a :int64) (b :int64))
+
+(cffi:defcfun "narith_i64ule"    :int64 (a :int64) (b :int64))
+(cffi:defcfun "narith_i64ult"    :int64 (a :int64) (b :int64))
+(cffi:defcfun "narith_i64uge"    :int64 (a :int64) (b :int64))
+(cffi:defcfun "narith_i64ugt"    :int64 (a :int64) (b :int64))
+
 (cffi:defcfun "narith_i64bitand" :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64bitor"  :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64bitxor" :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64plus"   :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64minus"  :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64times"  :int64 (a :int64) (b :int64))
+
 (cffi:defcfun "narith_i64sdiv"   :int64 (a :int64) (b :int64))
+(cffi:defcfun "narith_i64udiv"   :int64 (a :int64) (b :int64))
 
 

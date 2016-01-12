@@ -28,3 +28,4 @@ clean:
 	rm -f main
 	rm -f libnarith_ops.so
 	rm -f *.o *.s
+	../../../build/clean.pl

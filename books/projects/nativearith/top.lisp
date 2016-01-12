@@ -31,7 +31,8 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "i64ops")
+(include-book "ops")
+(include-book "llvm/ops")
 
 (defxdoc nativearith
   :short "A library of ``native'' machine-like arithmetic expressions with a

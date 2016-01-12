@@ -30,6 +30,9 @@
 ;
 ; Original author: Jared Davis <jared@kookamara.com>
 
+
+; Equality comparisons --------------------------------------------------------
+
 define i64 @narith_i64eql (i64 %a, i64 %b)
 {
 	%ans = icmp eq i64 %a, %b
@@ -43,6 +46,9 @@ define i64 @narith_i64neq (i64 %a, i64 %b)
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
+
+
+; Signed comparisons ----------------------------------------------------------
 
 define i64 @narith_i64sle (i64 %a, i64 %b)
 {
@@ -71,6 +77,40 @@ define i64 @narith_i64sgt (i64 %a, i64 %b)
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
+
+
+; Unsigned comparisons --------------------------------------------------------
+
+define i64 @narith_i64ule (i64 %a, i64 %b)
+{
+	%ans = icmp sle i64 %a, %b
+	%ext = zext i1 %ans to i64
+	ret i64 %ext
+}
+
+define i64 @narith_i64ult (i64 %a, i64 %b)
+{
+	%ans = icmp slt i64 %a, %b
+	%ext = zext i1 %ans to i64
+	ret i64 %ext
+}
+
+define i64 @narith_i64uge (i64 %a, i64 %b)
+{
+	%ans = icmp sge i64 %a, %b
+	%ext = zext i1 %ans to i64
+	ret i64 %ext
+}
+
+define i64 @narith_i64ugt (i64 %a, i64 %b)
+{
+	%ans = icmp sgt i64 %a, %b
+	%ext = zext i1 %ans to i64
+	ret i64 %ext
+}
+
+
+; Basic arithmetic ------------------------------------------------------------
 
 define i64 @narith_i64bitand (i64 %a, i64 %b)
 {
@@ -108,6 +148,9 @@ define i64 @narith_i64times (i64 %a, i64 %b)
 	ret i64 %ans
 }
 
+
+; Division --------------------------------------------------------------------
+
 define i64 @narith_i64sdiv (i64 %a, i64 %b)
 {
 	%b.zero = icmp eq i64 %b, 0
@@ -128,5 +171,18 @@ define i64 @narith_i64sdiv (i64 %a, i64 %b)
     case.usual:
 	%ans = sdiv i64 %a, %b
 	ret i64 %ans
+}
+
+define i64 @narith_i64udiv (i64 %a, i64 %b)
+{
+	%b.zero = icmp eq i64 %b, 0
+	br i1 %b.zero, label %case.zero, label %case.nonzero
+
+    case.nonzero:
+        %ans = udiv i64 %a, %b
+	ret i64 %ans
+
+    case.zero:
+	ret i64 0
 }
 

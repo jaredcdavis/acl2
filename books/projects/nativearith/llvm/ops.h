@@ -37,16 +37,25 @@
 
 extern int64_t narith_i64eql(int64_t a, int64_t b);
 extern int64_t narith_i64neq(int64_t a, int64_t b);
+
 extern int64_t narith_i64sle(int64_t a, int64_t b);
 extern int64_t narith_i64slt(int64_t a, int64_t b);
 extern int64_t narith_i64sge(int64_t a, int64_t b);
 extern int64_t narith_i64sgt(int64_t a, int64_t b);
+
+extern int64_t narith_i64ule(int64_t a, int64_t b);
+extern int64_t narith_i64ult(int64_t a, int64_t b);
+extern int64_t narith_i64uge(int64_t a, int64_t b);
+extern int64_t narith_i64ugt(int64_t a, int64_t b);
+
 extern int64_t narith_i64bitand(int64_t a, int64_t b);
 extern int64_t narith_i64bitor(int64_t a, int64_t b);
 extern int64_t narith_i64bitxor(int64_t a, int64_t b);
 extern int64_t narith_i64plus(int64_t a, int64_t b);
 extern int64_t narith_i64minus(int64_t a, int64_t b);
 extern int64_t narith_i64times(int64_t a, int64_t b);
+
 extern int64_t narith_i64sdiv(int64_t a, int64_t b);
+extern int64_t narith_i64udiv(int64_t a, int64_t b);
 
 #endif

@@ -42,7 +42,7 @@
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 
-(defxdoc i64ops
+(defxdoc ops
   :parents (nativearith)
   :short "Operations on 64-bit signed integers."
 
@@ -53,8 +53,8 @@ they operate on objects that satisfy @('(signed-byte-p 64 x)').</p>
 this means all of these operations follows the @(see fty::fty-discipline) for
 integers.  For execution performance, each operation is an inlined,
 guard-verified function that avoids this fixing with @(see mbe).  But most
-Common Lisp systems don't provide full 64-bit fixnums, so these I64 operations
-may still not be especially efficient: they may create bignums and may require
+Common Lisp systems don't provide full 64-bit fixnums, so these operations may
+still not be especially efficient: they may create bignums and may require
 using bignum operations.</p>
 
 <p>The arithmetic and logical operations (add, multiply, bitwise and, etc.)
@@ -80,9 +80,9 @@ course that doesn't mean much.  At any rate, if this ever seems important, we
 could add alternate versions of these operations that follow the -1 convention,
 but for now just using @(see bitp)s seems easy and possibly good.</p>")
 
-(local (xdoc::set-default-parents i64ops))
+(local (xdoc::set-default-parents ops))
 
-(defmacro def-i64-cmp2 (name &key short long logic exec)
+(defmacro def-i64-cmp2 (name &key short long logic exec (fix 'logext) rest)
   `(define ,name ((a integerp :type (signed-byte 64))
                   (b integerp :type (signed-byte 64)))
      :short ,short
@@ -90,8 +90,8 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
      :returns (ans bitp)
      :inline t
      (mbe :logic
-          (b* ((a (logext 64 a))
-               (b (logext 64 b)))
+          (b* ((a (,fix 64 a))
+               (b (,fix 64 b)))
             ,logic)
           :exec
           ,exec)
@@ -100,42 +100,88 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
      (defret ,(intern-in-package-of-symbol
                (cat "SIGNED-BYTE-P-64-OF-" (symbol-name name))
                name)
-       (signed-byte-p 64 ans))))
+       (signed-byte-p 64 ans))
+     ,@rest))
 
 (def-i64-cmp2 i64eql
-  :short "Equality, i.e., @('a == b'), for signed 64-bit integers."
+  :short "64-bit integer equality, i.e., @('a == b')."
+  :long "<p>Note that this produces the same answer whether @('a') and @('b')
+         are interpreted as signed or unsigned.</p>"
   :logic (bool->bit (eql a b))
   :exec (if (eql a b) 1 0))
 
 (def-i64-cmp2 i64neq
-  :short "Inequality, i.e., @('a != b'), for signed 64-bit integers."
+  :short "64-bit integer inequality, i.e., @('a != b')."
+  :long "<p>Note that this produces the same answer whether @('a') and @('b')
+         are interpreted as signed or unsigned.</p>"
   :logic (bool->bit (not (eql a b)))
   :exec (if (eql a b) 0 1))
 
-(def-i64-cmp2 i64lt
-  :short "Less than, i.e., @('a < b'), for signed 64-bit integers."
+
+(def-i64-cmp2 i64slt
+  :short "64-bit signed integer less than, i.e., @('a < b')."
   :logic (bool->bit (< a b))
   :exec (if (< a b) 1 0))
 
-(def-i64-cmp2 i64leq
-  :short "Less than or equal, i.e., @('a <= b'), for signed 64-bit integers."
+(def-i64-cmp2 i64sle
+  :short "64-bit signed integer less than or equal, i.e., @('a <= b')."
   :logic (bool->bit (<= a b))
   :exec (if (<= a b) 1 0))
 
-(def-i64-cmp2 i64gt
-  :short "Greater than, i.e., @('a > b'), for signed 64-bit integers."
+(def-i64-cmp2 i64sgt
+  :short "64-bit signed integer greater than, i.e., @('a > b')."
   :logic (bool->bit (> a b))
   :exec (if (> a b) 1 0))
 
-(def-i64-cmp2 i64geq
-  :short "Greater than or equal, i.e., @('a >= b'), for signed 64-bit integers."
+(def-i64-cmp2 i64sge
+  :short "64-bit signed integer greater than or equal, i.e., @('a >= b')."
   :logic (bool->bit (>= a b))
   :exec (if (>= a b) 1 0))
 
 
+(defmacro uint64-max ()
+  (1- (expt 2 64)))
 
 
-(defmacro def-i64-arith2 (name &key short long logic exec prepwork (inline 't))
+(def-i64-cmp2 i64ult
+  :short "64-bit unsigned integer less than, i.e., @('a < b')."
+  :fix loghead
+  :logic (bool->bit (< a b))
+  :exec (if (< (the (unsigned-byte 64) (logand a (uint64-max)))
+               (the (unsigned-byte 64) (logand b (uint64-max))))
+            1
+          0))
+
+(def-i64-cmp2 i64ule
+  :short "64-bit unsigned integer less than or equal, i.e., @('a <= b')."
+  :fix loghead
+  :logic (bool->bit (<= a b))
+  :exec (if (<= (the (unsigned-byte 64) (logand a (uint64-max)))
+                (the (unsigned-byte 64) (logand b (uint64-max))))
+            1
+          0))
+
+(def-i64-cmp2 i64ugt
+  :short "64-bit unsigned integer greater than, i.e., @('a > b')."
+  :fix loghead
+  :logic (bool->bit (> a b))
+  :exec (if (> (the (unsigned-byte 64) (logand a (uint64-max)))
+               (the (unsigned-byte 64) (logand b (uint64-max))))
+            1
+          0))
+
+(def-i64-cmp2 i64uge
+  :short "64-bit unsigned integer greater than or equal, @('a >= b')."
+  :fix loghead
+  :logic (bool->bit (>= a b))
+  :exec (if (>= (the (unsigned-byte 64) (logand a (uint64-max)))
+                (the (unsigned-byte 64) (logand b (uint64-max))))
+            1
+          0))
+
+
+
+(defmacro def-i64-arith2 (name &key short long logic exec prepwork (inline 't) (fix 'logext) rest)
   `(define ,name ((a integerp :type (signed-byte 64))
                   (b integerp :type (signed-byte 64)))
      :short ,short
@@ -144,8 +190,8 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
      :inline ,inline
      :prepwork ,prepwork
      (mbe :logic
-          (b* ((a (logext 64 a))
-               (b (logext 64 b)))
+          (b* ((a (,fix 64 a))
+               (b (,fix 64 b)))
             ,logic)
           :exec
           ,exec)
@@ -153,49 +199,74 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
      (defret ,(intern-in-package-of-symbol
                (cat "SIGNED-BYTE-P-64-OF-" (symbol-name name))
                name)
-       (signed-byte-p 64 ans))))
+       (signed-byte-p 64 ans))
+     ,@rest))
 
 (def-i64-arith2 i64bitand
-  :short "Bitwise and, i.e., @('a & b'), for signed 64-bit integers."
+  :short "64-bit integer bitwise and, i.e., @('a & b')."
+  :long "<p>Note that this produces the same answer whether @('a') and @('b')
+         are interpreted as signed or unsigned.</p>"
   :logic (logand a b)
   :exec (logand a b))
 
 (def-i64-arith2 i64bitor
-  :short "Bitwise inclusive or, i.e., @('a | b'), for signed 64-bit integers."
+  :short "64-bit integer bitwise inclusive or, i.e., @('a | b')."
+  :long "<p>Note that this produces the same answer whether @('a') and @('b')
+         are interpreted as signed or unsigned.</p>"
   :logic (logior a b)
   :exec (logior a b))
 
 (def-i64-arith2 i64bitxor
-  :short "Bitwise exclusive or, i.e., @('a ^ b'), for signed 64-bit integers."
+  :short "64-bit integer bitwise exclusive or, i.e., @('a ^ b')."
+  :long "<p>Note that this produces the same answer whether @('a') and @('b')
+         are interpreted as signed or unsigned.</p>"
   :logic (logxor a b)
   :exec (logxor a b))
 
-
 (def-i64-arith2 i64plus
-  :short "Addition of @('a + b') for signed 64-bit integers."
+  :short "64-bit integer addition, i.e., @('a + b')."
+  :long "<p>Note that this produces the same answer whether @('a') and @('b')
+         are interpreted as signed or unsigned.</p>"
   :inline nil
   :logic (logext 64 (+ a b))
   :exec (fast-logext 64 (+ a b)))
 
 (def-i64-arith2 i64minus
-  :short "Subtraction of @('a - b') for signed 64-bit integers."
+  :short "64-bit integer subtraction, i.e., @('a - b')."
+  :long "<p>Note that this produces the same answer whether @('a') and @('b')
+         are interpreted as signed or unsigned.</p>"
   :inline nil
   :logic (logext 64 (- a b))
   :exec (fast-logext 64 (- a b)))
 
 (def-i64-arith2 i64times
-  :short "Multiplication of @('a * b') for signed 64-bit integers."
+  :short "64-bit integer multiplication, i.e., @('a * b')."
+  :long "<p>Note that this produces the same answer whether @('a') and @('b')
+         are interpreted as signed or unsigned.  To verify this, consider for
+         instance the following theorem:</p>
+           @(def i64times-signedness-irrelevant)"
   :inline nil
   :logic (logext 64 (* a b))
-  :exec (fast-logext 64 (* a b)))
+  :exec (fast-logext 64 (* a b))
+  :rest
+  ((defthm i64times-signedness-irrelevant
+     (implies (and (signed-byte-p 64 a)
+                   (signed-byte-p 64 b))
+              (let ((signed-ans   (logext 64 (* a b)))
+                    (unsigned-ans (loghead 64 (* (loghead 64 a)
+                                                 (loghead 64 b)))))
+                (equal signed-ans
+                       (logext 64 unsigned-ans))))
+     :rule-classes nil)))
 
+(def-i64-arith2 i64sdiv
+  :short "64-bit signed integer division, i.e., @('a / b'), with truncation
+toward zero.  Well, almost&mdash;there are some subtle corner cases."
 
+  :long "<p>Our ACL2 specification is based on the @(see truncate) function,
+which per the ACL2 documentation rounds towards zero.</p>
 
-(def-i64-arith2 i64div
-  :short "Almost: division of @('a / b'), truncating toward 0, for signed
-64-bit integers, but note there are subtle corner cases."
-
-  :long "<p>There are two tricky cases here.</p>
+<p>There are two tricky cases here.</p>
 
 <p>First is the obvious possibility of division by 0.  In our semantics,
 division by 0 returns 0.</p>
@@ -204,18 +275,26 @@ division by 0 returns 0.</p>
 negative'') integer and @('b') is -1.  Normally we think of division as
 reducing the magnitude of the answer, but of course this doesn't happen when
 dividing by 1 or -1.  Unfortunately, this means that @($-2^{63} / -1$) is
-@($2^{63}$), which is not a valid 64-bit signed!  In our semantics, we
-explicitly define @($-2^{63} / -1$) as @($-2^{63}$), which is arguably the most
-correct thing to do.</p>
+@($2^{63}$), which is not a valid 64-bit signed!  We explicitly define
+@($-2^{63} / -1$) as @($-2^{63}$), which is arguably the most correct thing to
+do.</p>
 
-<p>C compatibility notes.  C99 and C11 both say that dividing by 0 is
+<p>Some illustrative examples:</p>
+
+@(def i64sdiv-examples)
+
+<p><b>C compatibility notes</b>.  C99 and C11 both say that dividing by 0 is
 undefined.  The C99 standard doesn't address the second boundary case, but the
 C11 standard clarifies that it is also undefined: ``if the quotient @('a/b') is
 representable ...; otherwise the behavior of both @('a/b') and @('a%b') is
 undefined.''  So, to safely implement @('i64div') in C, you will need to
 explicitly check that @('b') is nonzero and that either @('b') is not -1 or
-@('a') is not @($-2^{63}$).</p>"
+@('a') is not @($-2^{63}$).</p>
 
+<p><b>LLVM compatibility notes</b>.  The LLVM language reference manual (at
+least for LLVM 3.8) explains that division by zero is undefined and that
+overflow is also undefined.  A proper LLVM implementation therefore requires
+explicit checking that we are not dividing @($-2^{63}$) by @($-1$).</p>"
   :inline nil
   :logic (logext 64 (truncate a b))
   :exec (cond ((eql b 0)
@@ -245,28 +324,75 @@ explicitly check that @('b') is nonzero and that either @('b') is not -1 or
                             (if (equal a (- (expt 2 63)))
                                 (- (expt 2 63))
                               (- a))))
-            :hints(("Goal" :in-theory (enable signed-byte-p)))))))
+            :hints(("Goal" :in-theory (enable signed-byte-p))))))
+  :rest
+  ((defthm i64sdiv-examples
+     (and
+      ;; To show that it rounds towards zero
+      (equal (i64sdiv 5 3) 1)
+      (equal (i64sdiv -5 3) -1)
+      (equal (i64sdiv 0 0) 0)
+      (equal (i64sdiv 5 0) 0)
+      (equal (i64sdiv -5 0) 0)
+      (equal (i64sdiv (- (expt 2 63)) -1)
+             (- (expt 2 63))))
+     :rule-classes nil)))
 
 
-(def-i64-arith2 i64rem
-  :short "Almost: remainder of @('a / b'), truncating toward 0, for signed
-64-bit integers, but note there are subtle corner cases."
+(def-i64-arith2 i64udiv
+  :short "64-bit unsigned integer division, i.e., @('a / b'), truncating any
+fractional part.  Division by zero returns zero."
 
-  :long "<p>The C standard defines </p>"
-
+  :long "<p>This is much simpler than @(see i64sdiv) because there is no way
+for unsigned division to overflow.  Division by zero is still a problem: in our
+semantics it explicitly returns 0.</p>"
   :inline nil
-  :logic (logext 64 (rem a b))
+  :fix loghead
+  :logic (logext 64 (truncate a b))
   :exec (cond ((eql b 0)
-               a)
+               0)
               (t
-               (the (signed-byte 64) (rem a b))))
+               (logext 64 (truncate (logand (the (signed-byte 64) a) (uint64-max))
+                                    (logand (the (signed-byte 64) b) (uint64-max))))))
   :prepwork
-  ((local (in-theory (disable rem)))
+  ((local (include-book "arithmetic/top" :dir :system))
+   (local (in-theory (disable truncate signed-byte-p unsigned-byte-p)))
 
-   (local (defthm rem-of-zero
-            (implies (integerp a)
-                     (equal (rem a 0) (ifix a)))
-            :hints(("Goal" :in-theory (enable rem)))))))
+   (local (defthm truncate-of-zero
+            (equal (truncate a 0) 0)
+            :hints(("Goal" :in-theory (enable truncate)))))
+
+   (local (defthm equal-of-loghead-and-zero-when-signed-byte-p
+            (implies (signed-byte-p n b)
+                     (equal (equal (loghead n b) 0)
+                            (equal b 0)))
+            :hints(("Goal"
+                    :induct (signed-byte-p n b)
+                    :in-theory (e/d* (bitops::ihsext-inductions
+                                      bitops::ihsext-recursive-redefs)
+                                     (signed-byte-p loghead))))))))
+
+
+
+;; (def-i64-arith2 i64rem
+;;   :short "Almost: remainder of @('a / b'), truncating toward 0, for signed
+;; 64-bit integers, but note there are subtle corner cases."
+
+;;   :long "<p>The C standard defines </p>"
+
+;;   :inline nil
+;;   :logic (logext 64 (rem a b))
+;;   :exec (cond ((eql b 0)
+;;                a)
+;;               (t
+;;                (the (signed-byte 64) (rem a b))))
+;;   :prepwork
+;;   ((local (in-theory (disable rem)))
+
+;;    (local (defthm rem-of-zero
+;;             (implies (integerp a)
+;;                      (equal (rem a 0) (ifix a)))
+;;             :hints(("Goal" :in-theory (enable rem)))))))
 
 
 
