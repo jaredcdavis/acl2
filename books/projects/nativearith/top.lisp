@@ -33,22 +33,27 @@
 (in-package "NATIVEARITH")
 (include-book "ops")
 (include-book "llvm/ops")
+(include-book "llvm/opstest")
 
 (defxdoc nativearith
   :short "A library of ``native'' machine-like arithmetic expressions with a
 strong connection to <a href='http://llvm.org/'>LLVM</a> assembly code."
 
-  :long "<h2>WORK IN PROGRESS, NOT READY FOR USE</h2>
+  :long "<h3>Overview</h3>
 
-<h3>Overview</h3>
+<p>This work is exploratory prototyping.  Our short-term goal is to develop a
+very fast way to execute @(see sv::svex) expressions.</p>
 
 <p>We define a simple <a
 href='https://en.wikipedia.org/wiki/S-expression'>S-expression</a> style
-language.  Our expressions may be constants, variables, and applications of
-certain, pre-defined functions.  Our particular functions are styled after
-``native'' machine arithmetic operations; we have operations such as 64-bit
-bitwise AND/OR/XOR, comparisons, adds, multiplies, etc.  We call these
-expressions ``native expressions,'' or ``nexprs'' for short.</p>
+language.  We call our expressions ``native expressions,'' or ``nexprs'' for
+short.  They consist of constants, variables, and applications of certain,
+pre-defined @(see operations) which are styled after ``native'' machine
+arithmetic operations&mdash;bitwise AND/OR/XOR, comparisons, adds, multiplies,
+etc.  For now all of these operations just take and return 64-bit
+integers.  (We may some day want to implement operations of other sizes, but
+keeping everything the same size seems like a good way to start, since it makes
+guard proofs and type theorems very easy.)</p>
 
 <p>We define the meaning of native expressions by way of a simple <a
 href='http://www-formal.stanford.edu/jmc/recursive.ps'>McCarthy</a>-style
@@ -60,8 +65,9 @@ produce.</p>
 <a href='http://llvm.org/'>LLVM</a> assembly code.  Our intention is for these
 LLVM definitions to exactly implement our ACL2 semantics.  Of course, we cannot
 prove that this code is correct since LLVM is defined outside of ACL2.  But
-these functions are small, we have been careful when writing them, and we can
-at least implement a test suite to gain some confidence in them.</p>
+these functions are small, we have been careful when writing them, and we at
+least have a basic test suite that runs them against their ACL2
+counterparts; see @(see llvm-operations).</p>
 
 <p>Building on top of these LLVM definitions, we implement a compiler to
 convert our expressions into corresponding LLVM assembly code fragments.  This
@@ -71,19 +77,12 @@ a way to execute expressions ``on the metal'' without the overhead of an
 interpreter.  It also makes it straightforward to evaluate these expressions
 from languages like C.</p>
 
-<p>Our immediate purpose for writing all of this is to develop a very fast way
-to execute @(see sv::svex) expressions.  After we implement nexprs, we hope to
-implement (and prove correct) a translator from svexes into nexprs.  We then
-hope to combine this svex-to-nexpr translator with our nexpr-to-llvm compiler
-to obtain a very fast way to execute our hardware models and to integrate them
-into external programs.</p>
+<p>After we implement nexprs, we hope to implement (and prove correct) a
+translator from svexes into nexprs.  We then hope to combine this svex-to-nexpr
+translator with our nexpr-to-llvm compiler to obtain a very fast way to execute
+our hardware models and to integrate them into external programs.</p>
 
-<h3>Status, Scope and Limitations</h3>
-
-<p>This work is exploratory prototyping.  To keep things simpler, for now all
-of our operations involve only 64-bit operations.  We imagine that we may some
-day want to develop a successor that provides mixed-width arithmetic
-operations.</p>")
+")
 
 (local (xdoc::set-default-parents nativearith))
 
@@ -133,14 +132,4 @@ better defined in these areas, and that it seemed to be not really any harder
 to target than C would be&mdash;we can still have as many variables as we like,
 and let it deal with issues like register allocation, calling conventions,
 etc.</p>")
-
-
-
-
-
-
-
-
-
-
 

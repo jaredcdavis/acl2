@@ -37,15 +37,38 @@
 ; (depends-on "ops-raw.lsp")
 ; (depends-on "libnarith_ops.so")
 
-(defxdoc narith-ops-llvm
+(defxdoc llvm-operations
   :parents (nativearith)
-  :short "ACL2 foreign function interface to the narith_ops library."
-  :long "<p>To try to ensure the correspondence between our LLVM definitions
-and the logical definitions of our @(see i64ops), we arrange so that we can
-call the LLVM functions from within ACL2 and at least run basic tests on
-them.</p>")
+  :short "The LLVM counterparts of our ACL2 @(see operations), and a basic way
+to test them."
 
-(local (xdoc::set-default-parents narith-ops-llvm))
+  :long "<p>Each of our @(see operations) has a corresponding definition in
+LLVM assembly code.  To try to ensure the correspondence of these definitions,
+we arrange so that we can call the LLVM functions from within ACL2 and at least
+run basic tests on them.</p>
+
+<p>In brief, the basic mechanism is:</p>
+
+<ul>
+
+<li>We compile the LLVM definitions into a standalone shared library,
+@('libnarith_ops').</li>
+
+<li>We load this library into ACL2 using the <a
+href='https://common-lisp.net/project/cffi/'>CFFI</a> foreign function
+interfacing library.</li>
+
+<li>For each operation @('foo'), the corresponding LLVM definition gets named
+@('narith-foo').  For instance, for @(see i64eql) we have @(see
+narith-i64eql).</li>
+
+<li>We run some basic tests to ensure that each of these LLVM definitions
+corresponds to its ACL2 definition; see the file
+@('nativearith/llvm/opstest').</li>
+
+</ul>")
+
+(local (xdoc::set-default-parents llvm-operations))
 
 (defconsts *narith-llvm-directory* (cbd))
 
@@ -66,7 +89,12 @@ them.</p>")
 
 (defmacro def-narith-op (name args)
   `(define ,(intern$ (str::cat "NARITH-" (symbol-name name)) "NATIVEARITH") ,args
-     :short ,(cat "Native LLVM counterpart to @(see " (xdoc::full-escape-symbol name) ")")
+     :parents (,name llvm-operations)
+     :returns (ans)
+     :short ,(cat "Native LLVM counterpart to @(see " (xdoc::full-escape-symbol name) ").")
+     :long "<p>This function should be redefined ``under the hood'' when the
+            @('libnarith_ops') library is loaded.  We cause an error in the
+            logical definition only in case this somehow doesn't occur.</p>"
      :enabled t
      (progn$ (raise "LLVM definition not installed?")
              (,name . ,(strip-cars args)))))

@@ -83,28 +83,28 @@ define i64 @narith_i64sgt (i64 %a, i64 %b)
 
 define i64 @narith_i64ule (i64 %a, i64 %b)
 {
-	%ans = icmp sle i64 %a, %b
+	%ans = icmp ule i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
 
 define i64 @narith_i64ult (i64 %a, i64 %b)
 {
-	%ans = icmp slt i64 %a, %b
+	%ans = icmp ult i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
 
 define i64 @narith_i64uge (i64 %a, i64 %b)
 {
-	%ans = icmp sge i64 %a, %b
+	%ans = icmp uge i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }
 
 define i64 @narith_i64ugt (i64 %a, i64 %b)
 {
-	%ans = icmp sgt i64 %a, %b
+	%ans = icmp ugt i64 %a, %b
 	%ext = zext i1 %ans to i64
 	ret i64 %ext
 }

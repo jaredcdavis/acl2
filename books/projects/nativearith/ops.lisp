@@ -42,7 +42,7 @@
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 
-(defxdoc ops
+(defxdoc operations
   :parents (nativearith)
   :short "Operations on 64-bit signed integers."
 
@@ -62,25 +62,11 @@ return 64-bit signed integer results, with overflow being truncated using 2's
 complement arithmetic as you would expect.</p>
 
 <p>For comparison operators (equality, less than, ...) we return a @(see bitp),
-i.e., 1 for true or 0 for false.  This is fine and reasonable, but it is not
-clear that it is ideal.  For instance, we might instead use -1 for true and 0
+i.e., 1 for true or 0 for false.  We considered instead using -1 for true and 0
 for false, which in some cases might work more nicely with bitwise arithmetic
-operations.</p>
+operations, but so far we haven't had a good reason to do it that way.</p>")
 
-<p>I considered using -1 and 0 instead.  Consider for instance:</p>
-
-@({
-     long eql_bit (long a, long b) { return (a == b) ? 1 : 0; }
-     long eql_signext (long a, long b) { return (a == b) ? -1 : 0; }
-})
-
-<p>In isolation, it looks like @('eql_bit') produces slightly shorter/nicer
-assembly than @('eql_signext') on X86-64 with GCC 4.8.4 and CLANG 3.5.0.  Of
-course that doesn't mean much.  At any rate, if this ever seems important, we
-could add alternate versions of these operations that follow the -1 convention,
-but for now just using @(see bitp)s seems easy and possibly good.</p>")
-
-(local (xdoc::set-default-parents ops))
+(local (xdoc::set-default-parents operations))
 
 (defmacro def-i64-cmp2 (name &key short long logic exec (fix 'logext) rest)
   `(define ,name ((a integerp :type (signed-byte 64))
@@ -104,14 +90,14 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
      ,@rest))
 
 (def-i64-cmp2 i64eql
-  :short "64-bit integer equality, i.e., @('a == b')."
+  :short "64-bit integer equality, i.e., @('a == b').  Returns 1 or 0."
   :long "<p>Note that this produces the same answer whether @('a') and @('b')
          are interpreted as signed or unsigned.</p>"
   :logic (bool->bit (eql a b))
   :exec (if (eql a b) 1 0))
 
 (def-i64-cmp2 i64neq
-  :short "64-bit integer inequality, i.e., @('a != b')."
+  :short "64-bit integer inequality, i.e., @('a != b').  Returns 1 or 0."
   :long "<p>Note that this produces the same answer whether @('a') and @('b')
          are interpreted as signed or unsigned.</p>"
   :logic (bool->bit (not (eql a b)))
@@ -119,22 +105,22 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
 
 
 (def-i64-cmp2 i64slt
-  :short "64-bit signed integer less than, i.e., @('a < b')."
+  :short "64-bit signed integer less than, i.e., @('a < b').  Returns 1 or 0."
   :logic (bool->bit (< a b))
   :exec (if (< a b) 1 0))
 
 (def-i64-cmp2 i64sle
-  :short "64-bit signed integer less than or equal, i.e., @('a <= b')."
+  :short "64-bit signed integer less than or equal, i.e., @('a <= b').  Returns 1 or 0."
   :logic (bool->bit (<= a b))
   :exec (if (<= a b) 1 0))
 
 (def-i64-cmp2 i64sgt
-  :short "64-bit signed integer greater than, i.e., @('a > b')."
+  :short "64-bit signed integer greater than, i.e., @('a > b').  Returns 1 or 0."
   :logic (bool->bit (> a b))
   :exec (if (> a b) 1 0))
 
 (def-i64-cmp2 i64sge
-  :short "64-bit signed integer greater than or equal, i.e., @('a >= b')."
+  :short "64-bit signed integer greater than or equal, i.e., @('a >= b').  Returns 1 or 0."
   :logic (bool->bit (>= a b))
   :exec (if (>= a b) 1 0))
 
@@ -144,7 +130,7 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
 
 
 (def-i64-cmp2 i64ult
-  :short "64-bit unsigned integer less than, i.e., @('a < b')."
+  :short "64-bit unsigned integer less than, i.e., @('a < b').  Returns 1 or 0."
   :fix loghead
   :logic (bool->bit (< a b))
   :exec (if (< (the (unsigned-byte 64) (logand a (uint64-max)))
@@ -153,7 +139,7 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
           0))
 
 (def-i64-cmp2 i64ule
-  :short "64-bit unsigned integer less than or equal, i.e., @('a <= b')."
+  :short "64-bit unsigned integer less than or equal, i.e., @('a <= b').  Returns 1 or 0."
   :fix loghead
   :logic (bool->bit (<= a b))
   :exec (if (<= (the (unsigned-byte 64) (logand a (uint64-max)))
@@ -162,7 +148,7 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
           0))
 
 (def-i64-cmp2 i64ugt
-  :short "64-bit unsigned integer greater than, i.e., @('a > b')."
+  :short "64-bit unsigned integer greater than, i.e., @('a > b').  Returns 1 or 0."
   :fix loghead
   :logic (bool->bit (> a b))
   :exec (if (> (the (unsigned-byte 64) (logand a (uint64-max)))
@@ -171,7 +157,7 @@ but for now just using @(see bitp)s seems easy and possibly good.</p>")
           0))
 
 (def-i64-cmp2 i64uge
-  :short "64-bit unsigned integer greater than or equal, @('a >= b')."
+  :short "64-bit unsigned integer greater than or equal, @('a >= b').  Returns 1 or 0."
   :fix loghead
   :logic (bool->bit (>= a b))
   :exec (if (>= (the (unsigned-byte 64) (logand a (uint64-max)))
@@ -352,8 +338,8 @@ semantics it explicitly returns 0.</p>"
   :exec (cond ((eql b 0)
                0)
               (t
-               (logext 64 (truncate (logand (the (signed-byte 64) a) (uint64-max))
-                                    (logand (the (signed-byte 64) b) (uint64-max))))))
+               (fast-logext 64 (truncate (logand (the (signed-byte 64) a) (uint64-max))
+                                         (logand (the (signed-byte 64) b) (uint64-max))))))
   :prepwork
   ((local (include-book "arithmetic/top" :dir :system))
    (local (in-theory (disable truncate signed-byte-p unsigned-byte-p)))
