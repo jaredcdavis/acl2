@@ -112,6 +112,18 @@ define i64 @narith_i64ugt (i64 %a, i64 %b)
 
 ; Basic arithmetic ------------------------------------------------------------
 
+define i64 @narith_i64bitnot (i64 %a)
+{
+	%ans = xor i64 %a, -1
+	ret i64 %ans
+}
+
+define i64 @narith_i64sminus (i64 %a)
+{
+	%ans = sub i64 0, %a
+	ret i64 %ans
+}
+
 define i64 @narith_i64bitand (i64 %a, i64 %b)
 {
 	%ans = and i64 %a, %b

@@ -100,6 +100,56 @@
         (+ -5 (expt 2 63))
         ))
 
+(defmacro test-unaryop (op)
+  (let ((narith-op (intern$ (cat "NARITH-" (symbol-name op)) "NATIVEARITH"))
+        (test-op (intern$ (cat "TEST-" (symbol-name op)) "NATIVEARITH"))
+        (test-op-crafted (intern$ (cat "TEST-" (symbol-name op) "-CRAFTED") "NATIVEARITH"))
+        (test-op-random (intern$ (cat "TEST-" (symbol-name op) "-RANDOM") "NATIVEARITH")))
+    `(with-output
+       :off :all
+       :gag-mode t
+       :on (error)
+       (progn
+         (local (xdoc::set-default-parents ,narith-op))
+         (local (in-theory (enable i64p)))
+         (define ,test-op ((a i64p :type (signed-byte 64)))
+           :split-types t
+           (b* ((spec (,op a))
+                (impl (,narith-op a)))
+             (or (equal spec impl)
+                 (raise "Mismatch for (~s0 ~x1): spec is ~x2 but impl got ~x3."
+                        ',op a spec impl))))
+
+         (define ,test-op-crafted ((as i64list-p))
+           (or (atom as)
+               (and (,test-op (car as))
+                    (,test-op-crafted (cdr as)))))
+
+         (define ,test-op-random ((n natp) state)
+           (b* (((when (zp n))
+                 (mv t state))
+                ((mv rnd state) (random$ (expt 2 64) state))
+                ((unless (,test-op (fast-logext 64 rnd)))
+                 (mv nil state)))
+             (,test-op-random (- n 1) state)))
+
+         (make-event
+          (b* ((okp (time$ (,test-op-crafted *interesting-numbers*)
+                           :msg "Crafted tests of ~s0: ~st sec, ~sa bytes~%"
+                           :args (list ',op)))
+               ((unless okp)
+                (er soft 'test-unaryop "Test failed"))
+               ((mv okp state) (time$ (,test-op-random 100000 state)
+                                      :msg "Random tests of ~s0: ~st sec, ~sa bytes~%"
+                                      :args (list ',op)))
+               ((unless okp)
+                (er soft 'test-unaryop "Test failed")))
+            (value '(value-triple :success))))))))
+
+(test-unaryop i64bitnot)
+(test-unaryop i64sminus)
+
+
 (defmacro test-binop (op)
   (let ((narith-op (intern$ (cat "NARITH-" (symbol-name op)) "NATIVEARITH"))
         (test-op (intern$ (cat "TEST-" (symbol-name op)) "NATIVEARITH"))
@@ -115,28 +165,30 @@
        :on (error)
        (progn
          (local (xdoc::set-default-parents ,narith-op))
+         (local (in-theory (enable i64p)))
 
-         (define ,test-op ((a :type (signed-byte 64))
-                           (b :type (signed-byte 64)))
+         (define ,test-op ((a i64p :type (signed-byte 64))
+                           (b i64p :type (signed-byte 64)))
+           :split-types t
            (b* ((spec (,op a b))
                 (impl (,narith-op a b)))
              (or (equal spec impl)
                  (raise "Mismatch for (~s0 ~x1 ~x2): spec is ~x3 but impl got ~x4."
                         ',op a b spec impl))))
 
-         (define ,test-op-crafted1 ((a :type (signed-byte 64))
-                                    (bs (signed-byte-listp 64 bs)))
+         (define ,test-op-crafted1 ((a i64p)
+                                    (bs i64list-p))
            (or (atom bs)
                (and (,test-op a (car bs))
                     (,test-op-crafted1 a (cdr bs)))))
 
-         (define ,test-op-crafted2 ((as (signed-byte-listp 64 as))
-                                    (bs (signed-byte-listp 64 bs)))
+         (define ,test-op-crafted2 ((as i64list-p)
+                                    (bs i64list-p))
            (or (atom as)
                (and (,test-op-crafted1 (car as) bs)
                     (,test-op-crafted2 (cdr as) bs))))
 
-         (define ,test-op-crafted ((x (signed-byte-listp 64 x)))
+         (define ,test-op-crafted ((x i64list-p))
            (,test-op-crafted2 x x))
 
          (define ,test-op-random ((n natp) state)

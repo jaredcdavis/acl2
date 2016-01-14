@@ -35,10 +35,11 @@
 
 (include-book "std/portcullis" :dir :system)
 (include-book "centaur/bitops/portcullis" :dir :system)
+(include-book "centaur/fty/portcullis" :dir :system)
 
 (defpkg "NATIVEARITH"
   (union-eq *standard-acl2-imports*
-            std::*std-exports*
+            (set-difference-equal std::*std-exports* '(std::deflist))
             bitops::*bitops-exports*
             '(enable*
               disable*
@@ -61,6 +62,14 @@
 
               signed-byte-listp
               unsigned-byte-listp
+
+              fty::deflist
+              fty::defprod
+              fty::deftypes
+              fty::deftagsum
+              fty::defflexsum
+              fty::deffixtype
+              fty::deffixequiv
               )))
 
 (assign acl2::verbose-theory-warning nil)

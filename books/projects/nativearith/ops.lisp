@@ -31,27 +31,27 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "std/util/define" :dir :system)
-(include-book "ihs/basic-definitions" :dir :system)
-(include-book "centaur/misc/arith-equivs" :dir :system)
+(include-book "i64")
 (include-book "centaur/bitops/fast-logext" :dir :system)
-(include-book "centaur/fty/basetypes" :dir :system)
-(include-book "centaur/fty/fixequiv" :dir :system)
 (include-book "std/strings/cat" :dir :system)
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (std::add-default-post-define-hook :fix))
+(local (in-theory (enable i64p i64fix)))
+
+(defmacro uint64-max ()
+  (1- (expt 2 64)))
 
 (defxdoc operations
   :parents (nativearith)
   :short "Operations on 64-bit signed integers."
 
   :long "<p>These operations model 64-bit signed integer instructions, i.e.,
-they operate on objects that satisfy @('(signed-byte-p 64 x)').</p>
+they operate on @(see i64) objects.</p>
 
-<p>In the logic, each operation fixes its inputs with @(see logext).  Note that
+<p>In the logic, each operation fixes its inputs with @(see i64fix).  Note that
 this means all of these operations follows the @(see fty::fty-discipline) for
-integers.  For execution performance, each operation is an inlined,
+64-bit integers.  For execution performance, each operation is an inlined,
 guard-verified function that avoids this fixing with @(see mbe).  But most
 Common Lisp systems don't provide full 64-bit fixnums, so these operations may
 still not be especially efficient: they may create bignums and may require
@@ -68,13 +68,58 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
 
 (local (xdoc::set-default-parents operations))
 
-(defmacro def-i64-cmp2 (name &key short long logic exec (fix 'logext) rest)
-  `(define ,name ((a integerp :type (signed-byte 64))
-                  (b integerp :type (signed-byte 64)))
+(defmacro def-i64-arith1 (name &key short long logic exec prepwork
+                               guard-hints (inline 't) (fix 'logext) rest)
+  `(define ,name ((a i64p :type (signed-byte 64)))
+     :short ,short
+     :long ,long
+     :returns (ans integerp :rule-classes :type-prescription)
+     :inline ,inline
+     :prepwork ,prepwork
+     :split-types t
+     :guard-hints ,guard-hints
+     (mbe :logic
+          (b* ((a (,fix 64 a)))
+            ,logic)
+          :exec
+          ,exec)
+     ///
+     (defret ,(intern-in-package-of-symbol
+               (cat "I64P-OF-" (symbol-name name))
+               name)
+       (i64p ans))
+     ,@rest))
+
+(def-i64-arith1 i64bitnot
+  :short "64-bit integer bitwise complement, i.e., @('~a')."
+  :long "<p>Note that this produces the same answer whether @('a') is
+         interpreted as signed or unsigned.</p>"
+  :logic (lognot a)
+  :exec (the (signed-byte 64) (lognot a)))
+
+(def-i64-arith1 i64sminus
+  :short "64-bit signed integer negation, i.e., @('-a')."
+  :long "<p>Note that the special case of @($-2^{63}$) is @($2^{63}$), which
+does not fit as a 64-bit 2's complement integer.  We wrap using the usual
+semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
+  :logic (logext 64 (- a))
+  :exec (if (eql a (i64-min))
+            a
+          (the (signed-byte 64) (- a))))
+
+
+
+(defmacro def-i64-cmp2 (name &key short long logic exec prepwork
+                             guard-hints (fix 'logext) rest)
+  `(define ,name ((a i64p :type (signed-byte 64))
+                  (b i64p :type (signed-byte 64)))
      :short ,short
      :long ,long
      :returns (ans bitp)
      :inline t
+     :split-types t
+     :prepwork ,prepwork
+     :guard-hints ,guard-hints
      (mbe :logic
           (b* ((a (,fix 64 a))
                (b (,fix 64 b)))
@@ -84,9 +129,9 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
      ///
      (more-returns (ans integerp :rule-classes :type-prescription))
      (defret ,(intern-in-package-of-symbol
-               (cat "SIGNED-BYTE-P-64-OF-" (symbol-name name))
+               (cat "I64P-OF-" (symbol-name name))
                name)
-       (signed-byte-p 64 ans))
+       (i64p ans))
      ,@rest))
 
 (def-i64-cmp2 i64eql
@@ -102,7 +147,6 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
          are interpreted as signed or unsigned.</p>"
   :logic (bool->bit (not (eql a b)))
   :exec (if (eql a b) 0 1))
-
 
 (def-i64-cmp2 i64slt
   :short "64-bit signed integer less than, i.e., @('a < b').  Returns 1 or 0."
@@ -123,11 +167,6 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
   :short "64-bit signed integer greater than or equal, i.e., @('a >= b').  Returns 1 or 0."
   :logic (bool->bit (>= a b))
   :exec (if (>= a b) 1 0))
-
-
-(defmacro uint64-max ()
-  (1- (expt 2 64)))
-
 
 (def-i64-cmp2 i64ult
   :short "64-bit unsigned integer less than, i.e., @('a < b').  Returns 1 or 0."
@@ -167,14 +206,17 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
 
 
 
-(defmacro def-i64-arith2 (name &key short long logic exec prepwork (inline 't) (fix 'logext) rest)
-  `(define ,name ((a integerp :type (signed-byte 64))
-                  (b integerp :type (signed-byte 64)))
+(defmacro def-i64-arith2 (name &key short long logic exec prepwork
+                               guard-hints (inline 't) (fix 'logext) rest)
+  `(define ,name ((a i64p :type (signed-byte 64))
+                  (b i64p :type (signed-byte 64)))
      :short ,short
      :long ,long
      :returns (ans integerp :rule-classes :type-prescription)
      :inline ,inline
      :prepwork ,prepwork
+     :guard-hints ,guard-hints
+     :split-types t
      (mbe :logic
           (b* ((a (,fix 64 a))
                (b (,fix 64 b)))
@@ -183,9 +225,9 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
           ,exec)
      ///
      (defret ,(intern-in-package-of-symbol
-               (cat "SIGNED-BYTE-P-64-OF-" (symbol-name name))
+               (cat "I64P-OF-" (symbol-name name))
                name)
-       (signed-byte-p 64 ans))
+       (i64p ans))
      ,@rest))
 
 (def-i64-arith2 i64bitand
@@ -236,8 +278,8 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
   :exec (fast-logext 64 (* a b))
   :rest
   ((defthm i64times-signedness-irrelevant
-     (implies (and (signed-byte-p 64 a)
-                   (signed-byte-p 64 b))
+     (implies (and (i64p a)
+                   (i64p b))
               (let ((signed-ans   (logext 64 (* a b)))
                     (unsigned-ans (loghead 64 (* (loghead 64 a)
                                                  (loghead 64 b)))))

@@ -35,6 +35,7 @@
 
 #include <stdint.h>
 
+
 extern int64_t narith_i64eql(int64_t a, int64_t b);
 extern int64_t narith_i64neq(int64_t a, int64_t b);
 
@@ -47,6 +48,9 @@ extern int64_t narith_i64ule(int64_t a, int64_t b);
 extern int64_t narith_i64ult(int64_t a, int64_t b);
 extern int64_t narith_i64uge(int64_t a, int64_t b);
 extern int64_t narith_i64ugt(int64_t a, int64_t b);
+
+extern int64_t narith_i64bitnot(int64_t a);
+extern int64_t narith_i64sminus(int64_t a);
 
 extern int64_t narith_i64bitand(int64_t a, int64_t b);
 extern int64_t narith_i64bitor(int64_t a, int64_t b);

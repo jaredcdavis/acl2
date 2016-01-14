@@ -96,32 +96,36 @@ corresponds to its ACL2 definition; see the file
             @('libnarith_ops') library is loaded.  We cause an error in the
             logical definition only in case this somehow doesn't occur.</p>"
      :enabled t
+     :split-types t
      (progn$ (raise "LLVM definition not installed?")
              (,name . ,(strip-cars args)))))
 
 
-(def-narith-op i64eql    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64neq    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64bitnot ((a i64p :type (signed-byte 64))))
+(def-narith-op i64sminus ((a i64p :type (signed-byte 64))))
 
-(def-narith-op i64sle    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64slt    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64sge    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64sgt    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64eql    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64neq    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
 
-(def-narith-op i64ule    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64ult    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64uge    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64ugt    ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64sle    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64slt    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64sge    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64sgt    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
 
-(def-narith-op i64bitand ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64bitor  ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64bitxor ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64plus   ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64minus  ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64times  ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64ule    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64ult    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64uge    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64ugt    ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
 
-(def-narith-op i64sdiv   ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
-(def-narith-op i64udiv   ((a :type (signed-byte 64)) (b :type (signed-byte 64))))
+(def-narith-op i64bitand ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64bitor  ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64bitxor ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64plus   ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64minus  ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64times  ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+
+(def-narith-op i64sdiv   ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
+(def-narith-op i64udiv   ((a i64p :type (signed-byte 64)) (b i64p :type (signed-byte 64))))
 
 (defttag :nativearith.llvm)
 
