@@ -111,8 +111,8 @@
        :on (error)
        (progn
          (local (xdoc::set-default-parents ,narith-op))
-         (local (in-theory (enable i64p)))
-         (define ,test-op ((a i64p :type (signed-byte 64)))
+         (local (in-theory (enable i64-p)))
+         (define ,test-op ((a i64-p :type (signed-byte 64)))
            :split-types t
            (b* ((spec (,op a))
                 (impl (,narith-op a)))
@@ -165,10 +165,10 @@
        :on (error)
        (progn
          (local (xdoc::set-default-parents ,narith-op))
-         (local (in-theory (enable i64p)))
+         (local (in-theory (enable i64-p)))
 
-         (define ,test-op ((a i64p :type (signed-byte 64))
-                           (b i64p :type (signed-byte 64)))
+         (define ,test-op ((a i64-p :type (signed-byte 64))
+                           (b i64-p :type (signed-byte 64)))
            :split-types t
            (b* ((spec (,op a b))
                 (impl (,narith-op a b)))
@@ -176,7 +176,7 @@
                  (raise "Mismatch for (~s0 ~x1 ~x2): spec is ~x3 but impl got ~x4."
                         ',op a b spec impl))))
 
-         (define ,test-op-crafted1 ((a i64p)
+         (define ,test-op-crafted1 ((a i64-p)
                                     (bs i64list-p))
            (or (atom bs)
                (and (,test-op a (car bs))

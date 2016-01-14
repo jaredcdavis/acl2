@@ -32,6 +32,8 @@
 
 (in-package "NATIVEARITH")
 (include-book "ops")
+(include-book "expr")
+(include-book "eval")
 (include-book "llvm/ops")
 (include-book "llvm/opstest")
 
@@ -44,22 +46,19 @@ strong connection to <a href='http://llvm.org/'>LLVM</a> assembly code."
 <p>This work is exploratory prototyping.  Our short-term goal is to develop a
 very fast way to execute @(see sv::svex) expressions.</p>
 
-<p>We define a simple <a
-href='https://en.wikipedia.org/wiki/S-expression'>S-expression</a> style
-language.  We call our expressions ``native expressions,'' or ``nexprs'' for
-short.  They consist of constants, variables, and applications of certain,
-pre-defined @(see operations) which are styled after ``native'' machine
-arithmetic operations&mdash;bitwise AND/OR/XOR, comparisons, adds, multiplies,
-etc.  For now all of these operations just take and return 64-bit
-integers.  (We may some day want to implement operations of other sizes, but
-keeping everything the same size seems like a good way to start, since it makes
-guard proofs and type theorems very easy.)</p>
+<p>We define a simple expression format; see @(see expr).  Our expressions
+consist of constants, variables, and applications of certain, pre-defined @(see
+operations) which are styled after ``native'' machine arithmetic
+operations&mdash;bitwise AND/OR/XOR, comparisons, adds, multiplies, etc.  For
+now all of these operations just take and return 64-bit integers.  (We may some
+day want to implement operations of other sizes, but keeping everything the
+same size seems like a good way to start, since it makes guard proofs and type
+theorems very easy.)</p>
 
-<p>We define the meaning of native expressions by way of a simple <a
-href='http://www-formal.stanford.edu/jmc/recursive.ps'>McCarthy</a>-style
-evaluator.  We can then write ACL2 functions that construct nexprs, and use
-ACL2 to reason about the meaning of the expressions that these functions
-produce.</p>
+<p>We define the meaning of native expressions by way of a simple evaluator;
+see @(see eval).  We can then write ACL2 functions that construct expressions
+and use ACL2 to reason about the meaning of the expressions that these
+functions produce.</p>
 
 <p>For each primitive operation, there is a small, corresponding definition in
 <a href='http://llvm.org/'>LLVM</a> assembly code.  Our intention is for these
@@ -77,10 +76,10 @@ a way to execute expressions ``on the metal'' without the overhead of an
 interpreter.  It also makes it straightforward to evaluate these expressions
 from languages like C.</p>
 
-<p>After we implement nexprs, we hope to implement (and prove correct) a
-translator from svexes into nexprs.  We then hope to combine this svex-to-nexpr
-translator with our nexpr-to-llvm compiler to obtain a very fast way to execute
-our hardware models and to integrate them into external programs.</p>
+<p>We hope to implement (and prove correct) a translator from svexes into
+nexprs.  We then hope to combine this translator with our compiler to LLVM to
+obtain a very fast way to execute our hardware models and to integrate them
+into external programs.</p>
 
 ")
 

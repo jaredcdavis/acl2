@@ -38,8 +38,10 @@
 (include-book "centaur/fty/portcullis" :dir :system)
 
 (defpkg "NATIVEARITH"
-  (union-eq *standard-acl2-imports*
-            (set-difference-equal std::*std-exports* '(std::deflist))
+  (union-eq (set-difference-equal *standard-acl2-imports*
+                                  '(apply eval))
+            (set-difference-equal std::*std-exports*
+                                  '(std::deflist std::defalist))
             bitops::*bitops-exports*
             '(enable*
               disable*
@@ -66,10 +68,12 @@
               fty::deflist
               fty::defprod
               fty::deftypes
+              fty::defalist
               fty::deftagsum
               fty::defflexsum
               fty::deffixtype
               fty::deffixequiv
+              fty::deffixequiv-mutual
               )))
 
 (assign acl2::verbose-theory-warning nil)

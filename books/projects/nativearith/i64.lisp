@@ -37,6 +37,7 @@
 (include-book "centaur/fty/deftypes" :dir :system)
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
+(local (std::add-default-post-define-hook :fix))
 (local (in-theory (disable signed-byte-p)))
 
 (defxdoc i64
@@ -60,52 +61,52 @@ own type.</p>")
   (defmacro i64-max ()
     (+ -1 (expt 2 63))))
 
-(define i64p (x)
+(define i64-p (x)
   :short "Recognizer for signed, 64-bit integers."
   (signed-byte-p 64 x)
   ///
-  (defthm i64p-compound-recognizer
-    (implies (i64p x)
+  (defthm i64-p-compound-recognizer
+    (implies (i64-p x)
              (integerp x)))
-  (defthm signed-byte-p-64-when-i64p
-    (implies (i64p x)
+  (defthm signed-byte-p-64-when-i64-p
+    (implies (i64-p x)
              (signed-byte-p 64 x))))
 
-(define i64fix ((x i64p))
+(define i64-fix ((x i64-p))
   :short "Fixing function for signed, 64-bit integers."
-  :returns (x-fix i64p)
+  :returns (x-fix i64-p)
   :inline t
   (mbe :logic (logext 64 x)
        :exec x)
-  :prepwork ((local (in-theory (enable i64p))))
+  :prepwork ((local (in-theory (enable i64-p))))
   ///
-  (defthm i64fix-when-i64p
-    (implies (i64p x)
-             (equal (i64fix x)
+  (defthm i64-fix-when-i64-p
+    (implies (i64-p x)
+             (equal (i64-fix x)
                     x))))
 
-(defsection i64equiv
+(defsection i64-equiv
   :short "Equivalence relation for signed, 64-bit integers."
   (deffixtype i64
-    :pred i64p
-    :fix i64fix
-    :equiv i64equiv
+    :pred i64-p
+    :fix i64-fix
+    :equiv i64-equiv
     :define t
     :forward t
     :equal eql)
 
-  (defrefinement int-equiv i64equiv
-    :hints(("Goal" :in-theory (enable i64fix logext logapp loghead logbitp)))))
+  (defrefinement int-equiv i64-equiv
+    :hints(("Goal" :in-theory (enable i64-fix logext logapp loghead logbitp)))))
 
 
 (deflist i64list
-  :elt-type i64p
+  :elt-type i64-p
   :true-listp t)
 
 (define i64list-nth ((n natp)
                      (x i64list-p))
-  :returns (nth i64p)
-  (mbe :logic (i64fix (nth n x))
+  :returns (nth i64-p)
+  (mbe :logic (i64-fix (nth n x))
        :exec
        (or (case n
              (0 (first x))
@@ -127,14 +128,14 @@ own type.</p>")
                     :in-theory (disable l0)
                     :use ((:instance l0 (a (+ -1 a)) (b b) (c 1)))))))
 
-   (local (defthm i64p-of-nth-when-i64list-p
+   (local (defthm i64-p-of-nth-when-i64list-p
             (implies (i64list-p x)
-                     (equal (i64p (nth n x))
+                     (equal (i64-p (nth n x))
                             (< (nfix n) (len x))))))
 
-   (local (defthm i64fix-of-nth-when-i64list-p
+   (local (defthm i64-fix-of-nth-when-i64list-p
             (implies (i64list-p x)
-                     (equal (i64fix (nth n x))
+                     (equal (i64-fix (nth n x))
                             (if (< (nfix n) (len x))
                                 (nth n x)
                               0)))))))

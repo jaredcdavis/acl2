@@ -37,7 +37,7 @@
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (std::add-default-post-define-hook :fix))
-(local (in-theory (enable i64p i64fix)))
+(local (in-theory (enable i64-p i64-fix)))
 
 (defmacro uint64-max ()
   (1- (expt 2 64)))
@@ -49,9 +49,9 @@
   :long "<p>These operations model 64-bit signed integer instructions, i.e.,
 they operate on @(see i64) objects.</p>
 
-<p>In the logic, each operation fixes its inputs with @(see i64fix).  Note that
-this means all of these operations follows the @(see fty::fty-discipline) for
-64-bit integers.  For execution performance, each operation is an inlined,
+<p>In the logic, each operation fixes its inputs with @(see i64-fix).  Note
+that this means all of these operations follows the @(see fty::fty-discipline)
+for 64-bit integers.  For execution performance, each operation is an inlined,
 guard-verified function that avoids this fixing with @(see mbe).  But most
 Common Lisp systems don't provide full 64-bit fixnums, so these operations may
 still not be especially efficient: they may create bignums and may require
@@ -70,7 +70,7 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
 
 (defmacro def-i64-arith1 (name &key short long logic exec prepwork
                                guard-hints (inline 't) (fix 'logext) rest)
-  `(define ,name ((a i64p :type (signed-byte 64)))
+  `(define ,name ((a i64-p :type (signed-byte 64)))
      :short ,short
      :long ,long
      :returns (ans integerp :rule-classes :type-prescription)
@@ -85,9 +85,9 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
           ,exec)
      ///
      (defret ,(intern-in-package-of-symbol
-               (cat "I64P-OF-" (symbol-name name))
+               (cat "I64-P-OF-" (symbol-name name))
                name)
-       (i64p ans))
+       (i64-p ans))
      ,@rest))
 
 (def-i64-arith1 i64bitnot
@@ -111,8 +111,8 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
 
 (defmacro def-i64-cmp2 (name &key short long logic exec prepwork
                              guard-hints (fix 'logext) rest)
-  `(define ,name ((a i64p :type (signed-byte 64))
-                  (b i64p :type (signed-byte 64)))
+  `(define ,name ((a i64-p :type (signed-byte 64))
+                  (b i64-p :type (signed-byte 64)))
      :short ,short
      :long ,long
      :returns (ans bitp)
@@ -129,9 +129,9 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
      ///
      (more-returns (ans integerp :rule-classes :type-prescription))
      (defret ,(intern-in-package-of-symbol
-               (cat "I64P-OF-" (symbol-name name))
+               (cat "I64-P-OF-" (symbol-name name))
                name)
-       (i64p ans))
+       (i64-p ans))
      ,@rest))
 
 (def-i64-cmp2 i64eql
@@ -208,8 +208,8 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
 
 (defmacro def-i64-arith2 (name &key short long logic exec prepwork
                                guard-hints (inline 't) (fix 'logext) rest)
-  `(define ,name ((a i64p :type (signed-byte 64))
-                  (b i64p :type (signed-byte 64)))
+  `(define ,name ((a i64-p :type (signed-byte 64))
+                  (b i64-p :type (signed-byte 64)))
      :short ,short
      :long ,long
      :returns (ans integerp :rule-classes :type-prescription)
@@ -225,9 +225,9 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
           ,exec)
      ///
      (defret ,(intern-in-package-of-symbol
-               (cat "I64P-OF-" (symbol-name name))
+               (cat "I64-P-OF-" (symbol-name name))
                name)
-       (i64p ans))
+       (i64-p ans))
      ,@rest))
 
 (def-i64-arith2 i64bitand
@@ -278,8 +278,8 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
   :exec (fast-logext 64 (* a b))
   :rest
   ((defthm i64times-signedness-irrelevant
-     (implies (and (i64p a)
-                   (i64p b))
+     (implies (and (i64-p a)
+                   (i64-p b))
               (let ((signed-ans   (logext 64 (* a b)))
                     (unsigned-ans (loghead 64 (* (loghead 64 a)
                                                  (loghead 64 b)))))
