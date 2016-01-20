@@ -155,10 +155,39 @@
         nil
       (cons (eval (car x) env)
             (eval-list (cdr x) env))))
-
   ///
   (verify-guards eval)
-  (deffixequiv-mutual eval))
+  (deffixequiv-mutual eval)
+
+  (defthm eval-of-make-expr-var
+    (equal (eval (make-expr-var :name name) env)
+           (env-lookup-fast name env))
+    :hints(("Goal" :expand ((eval (make-expr-var :name name) env)))))
+
+  (defthm eval-of-make-expr-const
+    (equal (eval (make-expr-const :val val) env)
+           (i64-fix val))
+    :hints(("Goal" :expand ((eval (make-expr-const :val val) env)))))
+
+  (defthm eval-of-make-expr-call
+    (equal (eval (make-expr-call :fn fn :args args) env)
+           (apply fn (eval-list args env)))
+    :hints(("Goal" :expand ((eval (make-expr-call :fn fn :args args) env)))))
+
+  (defthm eval-list-when-atom
+    (implies (atom x)
+             (equal (eval-list x env)
+                    nil))
+    :hints(("Goal" :expand ((eval-list x env)))))
+
+  (defthm eval-list-of-cons
+    (equal (eval-list (cons a x) env)
+           (cons (eval a env)
+                 (eval-list x env)))
+    :hints(("Goal" :expand ((eval-list (cons a x) env))))))
+
+
+
 
 
 

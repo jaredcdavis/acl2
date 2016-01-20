@@ -39,7 +39,7 @@
 
 (defpkg "NATIVEARITH"
   (union-eq (set-difference-equal *standard-acl2-imports*
-                                  '(apply eval))
+                                  '(apply eval bignum))
             (set-difference-equal std::*std-exports*
                                   '(std::deflist std::defalist))
             bitops::*bitops-exports*

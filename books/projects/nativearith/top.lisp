@@ -34,6 +34,7 @@
 (include-book "ops")
 (include-book "expr")
 (include-book "eval")
+(include-book "bignum")
 (include-book "llvm/ops")
 (include-book "llvm/opstest")
 
