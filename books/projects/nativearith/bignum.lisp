@@ -43,6 +43,7 @@
 ;; (local (include-book "acl2s/cgen/top" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 (local (acl2::do-not generalize fertilize))
+(local (in-theory (disable signed-byte-p unsigned-byte-p)))
 
 (local (defrule i64-p-forward
          (implies (i64-p x)
@@ -522,13 +523,71 @@ answer says whether @('a') and @('b') have the same @(see bignum-val).</p>"
            (if (equal (bignum-val a) (bignum-val b))
                1
              0))
-    :hints(("Goal"
-            :induct (two-bignums-induct a b)
-            :expand ((bignum-val a)
-                     (bignum-val b))))))
+    :induct (two-bignums-induct a b)
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-not-equal ((a bignum-p)
+                          (b bignum-p))
+  :short "Semantic inequality of two @(see bignum)s, returning @(see bignum-1)
+or @(see bignum-0) for true or false, respectively."
+  :long "<p>This is a semantic (not structural) equality check.  That is, the
+answer says whether @('a') and @('b') have a different @(see bignum-val).</p>"
+  :returns (ans bignum-p)
+  :measure (+ (bignum-count a) (bignum-count b))
+  (b* (((bignum a))
+       ((bignum b))
+       ((unless (eql a.first b.first))
+        (bignum-1))
+       ((when (and a.endp b.endp))
+        (bignum-0)))
+    (bignum-not-equal a.rest b.rest))
+  ///
+  (defrule bignum-not-equal-correct
+    (equal (bignum-val (bignum-not-equal a b))
+           (if (equal (bignum-val a) (bignum-val b))
+               0
+             1))
+    :induct (two-bignums-induct a b)
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-lognot ((a bignum-p))
+  :short "Analogue of @(see lognot) for @(see bignum)s."
+  :returns (ans bignum-p)
+  :measure (bignum-count a)
+  :verify-guards nil
+  (b* (((bignum a))
+       ((bignum b))
+       (first (lognot a.first))
+       ((when a.endp)
+        (bignum-singleton first)))
+    (bignum-cons first (bignum-lognot a.rest)))
+  ///
+  (verify-guards bignum-lognot)
+
+  (local (defun my-induct (n a)
+           (if (zp n)
+               (list a)
+             (my-induct (- n 1) (logcdr a)))))
+
+  (local (defrule loghead-of-lognot-of-logapp
+           ;; BOZO may be a fine rule for ihsext-basics
+           (equal (loghead n (lognot (logapp n a b)))
+                  (loghead n (lognot a)))
+           :induct (my-induct n a)
+           :enable (ihsext-inductions
+                    ihsext-recursive-redefs)))
+
+  (defrule bignum-lognot-correct
+    (equal (bignum-val (bignum-lognot a))
+           (lognot (bignum-val a)))
+    :induct (bignum-lognot a)
+    :expand (bignum-val a)))
 
 (define bignum-logand ((a bignum-p)
                        (b bignum-p))
+  :short "Analogue of @(see logand) for @(see bignum)s."
   :returns (ans bignum-p)
   :measure (+ (bignum-count a) (bignum-count b))
   :verify-guards nil
@@ -546,8 +605,55 @@ answer says whether @('a') and @('b') have the same @(see bignum-val).</p>"
     (equal (bignum-val (bignum-logand a b))
            (logand (bignum-val a)
                    (bignum-val b)))
-    :hints(("Goal"
-            :induct (two-bignums-induct a b)
-            :expand ((bignum-val a)
-                     (bignum-val b))))))
+    :induct (two-bignums-induct a b)
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-logior ((a bignum-p)
+                       (b bignum-p))
+  :short "Analogue of @(see logior) for @(see bignum)s."
+  :returns (ans bignum-p)
+  :measure (+ (bignum-count a) (bignum-count b))
+  :verify-guards nil
+  (b* (((bignum a))
+       ((bignum b))
+       (first (logior a.first b.first))
+       ((when (and a.endp b.endp))
+        (bignum-singleton first)))
+    (bignum-cons first
+                 (bignum-logior a.rest b.rest)))
+  ///
+  (verify-guards bignum-logior)
+
+  (defrule bignum-logior-correct
+    (equal (bignum-val (bignum-logior a b))
+           (logior (bignum-val a)
+                   (bignum-val b)))
+    :induct (two-bignums-induct a b)
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-logxor ((a bignum-p)
+                       (b bignum-p))
+  :short "Analogue of @(see logxor) for @(see bignum)s."
+  :returns (ans bignum-p)
+  :measure (+ (bignum-count a) (bignum-count b))
+  :verify-guards nil
+  (b* (((bignum a))
+       ((bignum b))
+       (first (logxor a.first b.first))
+       ((when (and a.endp b.endp))
+        (bignum-singleton first)))
+    (bignum-cons first
+                 (bignum-logxor a.rest b.rest)))
+  ///
+  (verify-guards bignum-logxor)
+
+  (defrule bignum-logxor-correct
+    (equal (bignum-val (bignum-logxor a b))
+           (logxor (bignum-val a)
+                   (bignum-val b)))
+    :induct (two-bignums-induct a b)
+    :expand ((bignum-val a)
+             (bignum-val b))))
 
