@@ -59,8 +59,8 @@
          (equal (logapp n a b)
                 (logior (ash b (nfix n))
                         (loghead n a)))
-         :enable (bitops::ihsext-recursive-redefs
-                  bitops::ihsext-inductions)))
+         :enable (ihsext-recursive-redefs
+                  ihsext-inductions)))
 
 (local (defrule equal-of-logapp-split
          (implies (integerp x)
@@ -84,8 +84,8 @@
          (implies (signed-byte-p n x)
                   (equal (equal (loghead n x) 0)
                          (equal x 0)))
-         :enable (bitops::ihsext-recursive-redefs
-                  bitops::ihsext-inductions)
+         :enable (ihsext-recursive-redefs
+                  ihsext-inductions)
          :disable (signed-byte-p)))
 
 (local (encapsulate
@@ -96,8 +96,8 @@
                            (equal (equal (loghead n x) (loghead n -1))
                                   (equal x -1)))
                   :induct (signed-byte-p n x)
-                  :enable (bitops::ihsext-recursive-redefs
-                           bitops::ihsext-inductions)))
+                  :enable (ihsext-recursive-redefs
+                           ihsext-inductions)))
 
          (make-event
           ;; Special case for 64-bits
@@ -128,8 +128,8 @@
                                      (loghead n a2))
                               (equal (ifix b1)
                                      (ifix b2)))))
-         :enable (bitops::ihsext-recursive-redefs
-                  bitops::ihsext-inductions)))
+         :enable (ihsext-recursive-redefs
+                  ihsext-inductions)))
 
 (local (defrule equal-of-same-size-logapps
          (equal (equal (logapp 64 a1 b1)
@@ -143,8 +143,8 @@
          (implies (natp n)
                   (equal (equal (ash b n) 0)
                          (equal (ifix b) 0)))
-         :enable (bitops::ihsext-recursive-redefs
-                  bitops::ihsext-inductions)))
+         :enable (ihsext-recursive-redefs
+                  ihsext-inductions)))
 
 (local (defrule equal-of-logapp-and-zero
          (equal (equal (logapp n a b) 0)
@@ -156,8 +156,56 @@
          (equal (equal (logapp n a b) -1)
                 (and (equal (ifix b) -1)
                      (equal (loghead n a) (loghead n -1))))
-         :enable (bitops::ihsext-recursive-redefs
-                  bitops::ihsext-inductions)))
+         :enable (ihsext-recursive-redefs
+                  ihsext-inductions)))
+
+(local (defrule logapp-of-loghead-and-logtail
+         (equal (logapp n (loghead n x) (logtail n x))
+                (ifix x))
+         :enable (ihsext-inductions
+                  ihsext-recursive-redefs)))
+
+(local (defrule <-of-logapps
+         (equal (< (logapp n a1 b1)
+                   (logapp n a2 b2))
+                (if (< (ifix b1) (ifix b2))
+                    t
+                  (and (equal (ifix b1) (ifix b2))
+                       (< (loghead n a1)
+                          (loghead n a2)))))
+         :enable (ihsext-recursive-redefs
+                  ihsext-inductions)))
+
+(local (defrule <-of-logapp-split
+         (implies (integerp x)
+                  (equal (< (logapp n a b) x)
+                         (if (< (ifix b) (logtail n x))
+                             t
+                           (and (equal (ifix b) (logtail n x))
+                                (< (loghead n a)
+                                   (loghead n x))))))
+         :disable (<-of-logapps)
+         :use ((:instance <-of-logapps
+                (a1 a)
+                (b1 b)
+                (a2 (loghead n x))
+                (b2 (logtail n x))))))
+
+(local (defrule <-of-logapp-split-right
+         (implies (integerp x)
+                  (equal (< x (logapp n a b))
+                         (if (< (logtail n x) (ifix b))
+                             t
+                           (and (equal (ifix b) (logtail n x))
+                                (< (loghead n x)
+                                   (loghead n a))))))
+         :disable (<-of-logapps)
+         :use ((:instance <-of-logapps
+                (a1 (loghead n x))
+                (b1 (logtail n x))
+                (a2 a)
+                (b2 b)))))
+
 
 
 (defxdoc bignum
@@ -502,56 +550,6 @@ very low-level wrappers for accessing and iterating through bignums:</p>
         nil
       (two-bignums-induct a.rest b.rest))))
 
-(define bignum-equal ((a bignum-p)
-                      (b bignum-p))
-  :short "Semantic equality of two @(see bignum)s, returning @(see bignum-1) or
-@(see bignum-0) for true or false, respectively."
-  :long "<p>This is a semantic (not structural) equality check.  That is, the
-answer says whether @('a') and @('b') have the same @(see bignum-val).</p>"
-  :returns (ans bignum-p)
-  :measure (+ (bignum-count a) (bignum-count b))
-  (b* (((bignum a))
-       ((bignum b))
-       ((unless (eql a.first b.first))
-        (bignum-0))
-       ((when (and a.endp b.endp))
-        (bignum-1)))
-    (bignum-equal a.rest b.rest))
-  ///
-  (defrule bignum-equal-correct
-    (equal (bignum-val (bignum-equal a b))
-           (if (equal (bignum-val a) (bignum-val b))
-               1
-             0))
-    :induct (two-bignums-induct a b)
-    :expand ((bignum-val a)
-             (bignum-val b))))
-
-(define bignum-not-equal ((a bignum-p)
-                          (b bignum-p))
-  :short "Semantic inequality of two @(see bignum)s, returning @(see bignum-1)
-or @(see bignum-0) for true or false, respectively."
-  :long "<p>This is a semantic (not structural) equality check.  That is, the
-answer says whether @('a') and @('b') have a different @(see bignum-val).</p>"
-  :returns (ans bignum-p)
-  :measure (+ (bignum-count a) (bignum-count b))
-  (b* (((bignum a))
-       ((bignum b))
-       ((unless (eql a.first b.first))
-        (bignum-1))
-       ((when (and a.endp b.endp))
-        (bignum-0)))
-    (bignum-not-equal a.rest b.rest))
-  ///
-  (defrule bignum-not-equal-correct
-    (equal (bignum-val (bignum-not-equal a b))
-           (if (equal (bignum-val a) (bignum-val b))
-               0
-             1))
-    :induct (two-bignums-induct a b)
-    :expand ((bignum-val a)
-             (bignum-val b))))
-
 (define bignum-lognot ((a bignum-p))
   :short "Analogue of @(see lognot) for @(see bignum)s."
   :returns (ans bignum-p)
@@ -657,3 +655,172 @@ answer says whether @('a') and @('b') have a different @(see bignum-val).</p>"
     :expand ((bignum-val a)
              (bignum-val b))))
 
+(define bignum-equalp ((a bignum-p)
+                       (b bignum-p))
+  :short "Semantic equality of two @(see bignum)s, returning @(see bignum-1) or
+@(see bignum-0) for true or false, respectively."
+  :long "<p>This is a semantic (not structural) equality check.  That is, the
+answer says whether @('a') and @('b') have the same @(see bignum-val)s.</p>"
+  :returns (bool booleanp :rule-classes :type-prescription)
+  :measure (+ (bignum-count a) (bignum-count b))
+  (b* (((bignum a))
+       ((bignum b))
+       ((unless (eql a.first b.first))
+        nil)
+       ((when (and a.endp b.endp))
+        t))
+    (bignum-equalp a.rest b.rest))
+  ///
+  (defrule bignum-equalp-correct
+    (equal (bignum-equalp a b)
+           (equal (bignum-val a) (bignum-val b)))
+    :induct (two-bignums-induct a b)
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-not-equalp ((a bignum-p)
+                           (b bignum-p))
+  :short "Semantic inequality of two @(see bignum)s, returning @(see bignum-1)
+or @(see bignum-0) for true or false, respectively."
+  :long "<p>This is a semantic (not structural) equality check.  That is, the
+answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
+  :returns (bool booleanp :rule-classes :type-prescription)
+  :measure (+ (bignum-count a) (bignum-count b))
+  (b* (((bignum a))
+       ((bignum b))
+       ((unless (eql a.first b.first))
+        t)
+       ((when (and a.endp b.endp))
+        nil))
+    (bignum-not-equalp a.rest b.rest))
+  ///
+  (defrule bignum-not-equalp-correct
+    (equal (bignum-not-equalp a b)
+           (not (equal (bignum-val a) (bignum-val b))))
+    :induct (two-bignums-induct a b)
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-scmp ((a bignum-p)
+                     (b bignum-p))
+  :short "Helper for implementing signed comparisons."
+  :measure (+ (bignum-count a) (bignum-count b))
+  :returns (ans "Says whether @('a') is :equal, :less, or :greater than @('b').")
+  (b* (((bignum a))
+       ((bignum b))
+       ((when (and a.endp b.endp))
+        (cond ((eql a.first b.first) :equal)
+              ((< a.first b.first)   :less)
+              (t                     :greater)))
+       (rest-scmp (bignum-scmp a.rest b.rest))
+       ((unless (eql rest-scmp :equal))
+        rest-scmp)
+       ((when (eql a.first b.first))
+        :equal)
+       ((when (< (loghead 64 a.first)
+                 (loghead 64 b.first)))
+        :less))
+    :greater)
+  ///
+  (defrule bignum-scmp-correct
+    (equal (bignum-scmp a b)
+           (let ((av (bignum-val a))
+                 (bv (bignum-val b)))
+             (cond ((equal av bv) :equal)
+                   ((< av bv)     :less)
+                   (t             :greater))))
+    :induct (two-bignums-induct a b)
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-sltp ((a bignum-p)
+                     (b bignum-p))
+  :short "Signed @(see <) for @(see bignum)s."
+  :returns (ans booleanp :rule-classes :type-prescription)
+  :measure (+ (bignum-count a) (bignum-count b))
+  :verify-guards nil
+  (b* (((bignum a))
+       ((bignum b))
+       ((when (and a.endp b.endp))
+        (< a.first b.first))
+       (rest-cmp (bignum-scmp a.rest b.rest)))
+    (or (eq rest-cmp :less)
+        (and (eq rest-cmp :equal)
+             (< (loghead 64 a.first)
+                (loghead 64 b.first)))))
+  ///
+  (defrule bignum-sltp-correct
+    (equal (bignum-sltp a b)
+           (< (bignum-val a) (bignum-val b)))
+    :do-not-induct t
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-slep ((a bignum-p)
+                     (b bignum-p))
+  :short "Signed @(see <=) for @(see bignum)s."
+  :returns (ans booleanp :rule-classes :type-prescription)
+  :measure (+ (bignum-count a) (bignum-count b))
+  :verify-guards nil
+  (b* (((bignum a))
+       ((bignum b))
+       ((when (and a.endp b.endp))
+        (<= a.first b.first))
+       (rest-cmp (bignum-scmp a.rest b.rest)))
+    (or (eq rest-cmp :less)
+        (and (eq rest-cmp :equal)
+             (<= (loghead 64 a.first)
+                 (loghead 64 b.first)))))
+  ///
+  (defrule bignum-slep-correct
+    (equal (bignum-slep a b)
+           (<= (bignum-val a) (bignum-val b)))
+    :do-not-induct t
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-sgtp ((a bignum-p)
+                     (b bignum-p))
+  :short "Signed @(see >) for @(see bignum)s."
+  :returns (ans booleanp :rule-classes :type-prescription)
+  :measure (+ (bignum-count a) (bignum-count b))
+  :verify-guards nil
+  (b* (((bignum a))
+       ((bignum b))
+       ((when (and a.endp b.endp))
+        (> a.first b.first))
+       (rest-cmp (bignum-scmp a.rest b.rest)))
+    (or (eq rest-cmp :greater)
+        (and (eq rest-cmp :equal)
+             (> (loghead 64 a.first)
+                (loghead 64 b.first)))))
+  ///
+  (defrule bignum-sgtp-correct
+    (equal (bignum-sgtp a b)
+           (> (bignum-val a) (bignum-val b)))
+    :do-not-induct t
+    :expand ((bignum-val a)
+             (bignum-val b))))
+
+(define bignum-sgep ((a bignum-p)
+                     (b bignum-p))
+  :short "Signed @(see >=) for @(see bignum)s."
+  :returns (ans booleanp :rule-classes :type-prescription)
+  :measure (+ (bignum-count a) (bignum-count b))
+  :verify-guards nil
+  (b* (((bignum a))
+       ((bignum b))
+       ((when (and a.endp b.endp))
+        (>= a.first b.first))
+       (rest-cmp (bignum-scmp a.rest b.rest)))
+    (or (eq rest-cmp :greater)
+        (and (eq rest-cmp :equal)
+             (>= (loghead 64 a.first)
+                 (loghead 64 b.first)))))
+  ///
+  (defrule bignum-sgep-correct
+    (equal (bignum-sgep a b)
+           (>= (bignum-val a) (bignum-val b)))
+    :do-not-induct t
+    :expand ((bignum-val a)
+             (bignum-val b))))
