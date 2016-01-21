@@ -34,7 +34,7 @@
 (include-book "ops")
 (include-book "expr")
 (include-book "eval")
-(include-book "bignum")
+(include-book "bigint")
 (include-book "bigops")
 (include-book "bigexpr")
 (include-book "bigeval")
@@ -85,21 +85,21 @@ a way to execute expressions ``on the metal'' without the overhead of an
 interpreter.  It also makes it straightforward to evaluate these expressions
 from languages like C.</p>
 
-<h5>Bignum Representation and Expressions</h5>
+<h5>Bigint Representation and Expressions</h5>
 
 
 
 <h5>SV Connection</h5>
 
 
-<p>(LIES) We implement (and prove correct) a translator from svexes into bignum
+<p>(LIES) We implement (and prove correct) a translator from svexes into bigint
 expressions.  We then hope to combine this translator with our compiler to LLVM
 to obtain a very fast way to execute our hardware models and to integrate them
 into external programs.</p>")
 
 (xdoc::order-subtopics nativearith
                        (i64 operations llvm-operations expr eval
-                            bignum bigops bigexpr bigeval))
+                            bigint bigops bigexpr bigeval))
 
 (local (xdoc::set-default-parents nativearith))
 

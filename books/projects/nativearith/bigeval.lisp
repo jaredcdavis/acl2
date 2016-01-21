@@ -37,10 +37,10 @@
 
 (defalist bigenv
   :key-type var-p
-  :val-type bignum-p
+  :val-type bigint-p
   :true-listp t
   :parents (bigeval)
-  :short "An alist mapping @(see var)s to @(see bignum)s, often used as an
+  :short "An alist mapping @(see var)s to @(see bigint)s, often used as an
           environment to @(see bigeval).")
 
 (define bigenv-lookup ((var var-p) (env bigenv-p))
@@ -48,14 +48,14 @@
   :short "Look up a variable's value in an @(see bigenv). (Slow, logically nice)"
   :long "<p>This is our preferred normal form for environment lookups.  Any
             unbound variables are treated as 0.</p>"
-  :returns (val bignum-p)
+  :returns (val bigint-p)
   (mbe :logic
-       (bignum-fix (cdr (hons-assoc-equal (var-fix var) (bigenv-fix env))))
+       (bigint-fix (cdr (hons-assoc-equal (var-fix var) (bigenv-fix env))))
        :exec
        (let ((look (hons-assoc-equal var env)))
          (if look
              (cdr look)
-           (bignum-0)))))
+           (bigint-0)))))
 
 (define bigenv-lookup-fast ((var var-p) (env bigenv-p))
   :parents (bigenv)
@@ -67,21 +67,21 @@
        :exec  (let ((look (hons-get var env)))
                 (if look
                     (cdr look)
-                  (bignum-0)))))
+                  (bigint-0)))))
 
 (defsection bigapply
 
   (defconst *bigoptable*
-    '((bignum-lognot (a))
-      (bignum-logior (a b))
-      (bignum-logand (a b))
-      (bignum-logxor (a b))
-      (bignum-equal (a b))
-      (bignum-not-equal (a b))
-      (bignum-slt (a b))
-      (bignum-sle (a b))
-      (bignum-sgt (a b))
-      (bignum-sge (a b))))
+    '((bigint-lognot (a))
+      (bigint-logior (a b))
+      (bigint-logand (a b))
+      (bigint-logxor (a b))
+      (bigint-equal (a b))
+      (bigint-not-equal (a b))
+      (bigint-slt (a b))
+      (bigint-sle (a b))
+      (bigint-sgt (a b))
+      (bigint-sge (a b))))
 
   (defun bigapply-collect-args (n max)
     (declare (xargs :measure (nfix (- (nfix max) (nfix n)))))
@@ -89,14 +89,14 @@
            (max (nfix max)))
       (if (zp (- max n))
           nil
-        (cons `(bignumlist-nth ,n args)
+        (cons `(bigintlist-nth ,n args)
               (bigapply-collect-args (+ 1 n) max)))))
 
   (defun bigapply-cases (optable)
     (b* (((when (atom optable))
           '((otherwise
              (or (raise "Attempting to apply unknown function ~x0~%" fn)
-                 (bignum-0)))))
+                 (bigint-0)))))
          ((list fn args) (car optable))
          ;; Note: could add arity checking as in svex-bigapply-cases-fn
          (call `(,fn . ,(bigapply-collect-args 0 (len args)))))
@@ -104,17 +104,18 @@
             (bigapply-cases (cdr optable)))))
 
   (make-event
-   `(define bigapply ((fn fn-p) (args bignumlist-p))
+   `(define bigapply ((fn fn-p) (args bigintlist-p))
       :parents (bigeval)
-      :returns (ans bignum-p)
-      :short "Apply an arbitrary, known bignum function to a list of
+      :returns (ans bigint-p)
+      :short "Apply an arbitrary, known @(see bigops) function to a list of
               arguments."
       :long "<p>This is basically just a big case statement that lets us apply
-             any ``known'' function to its arguments.</p>
+             any ``known'' function to its arguments.  For the list of known
+             functions, see @(see bigops).</p>
 
-             <p>Note that we extract the arguments using @(see bignumlist-nth),
+             <p>Note that we extract the arguments using @(see bigintlist-nth),
              which effectively coerces any missing arguments to @(see
-             bignum-0).</p>"
+             bigint-0).</p>"
       :verbosep t
       (case (fn-fix fn) . ,(bigapply-cases *bigoptable*))
       ///
@@ -127,8 +128,10 @@
 
   (define bigeval ((x bigexpr-p) (env bigenv-p))
     :parents (nativearith)
-    :short "Semantics of @(see bigexpr)s."
-    :returns (val bignum-p)
+    :short "Semantics of @(see bigexpr)s.  Evaluates an expression under an
+            environment that gives @(see bigint) values to its variables,
+            producing a bigint."
+    :returns (val bigint-p)
     :measure (bigexpr-count x)
     :verify-guards nil
     ;; This is really nice, but eventually we will probably want to complicate
@@ -139,7 +142,7 @@
       :call (bigapply x.fn (bigeval-list x.args env))))
 
   (define bigeval-list ((x bigexprlist-p) (env bigenv-p))
-    :returns (vals bignumlist-p)
+    :returns (vals bigintlist-p)
     :measure (bigexprlist-count x)
     (if (atom x)
         nil
@@ -156,7 +159,7 @@
 
   (defthm bigeval-of-make-bigexpr-const
     (equal (bigeval (make-bigexpr-const :val val) env)
-           (bignum-fix val))
+           (bigint-fix val))
     :hints(("Goal" :expand ((bigeval (make-bigexpr-const :val val) env)))))
 
   (defthm bigeval-of-make-bigexpr-call

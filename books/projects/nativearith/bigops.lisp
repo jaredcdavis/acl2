@@ -31,7 +31,7 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "bignum")
+(include-book "bigint")
 (include-book "i64")
 (include-book "ops")
 (include-book "std/util/defrule" :dir :system)
@@ -49,30 +49,30 @@
 
 (defsection bigops
   :parents (nativearith)
-  :short "High-level operations on @(see bignum)s."
-  :long "<p>We now implement verified routines for bignum operations such as
+  :short "High-level operations on @(see bigint)s."
+  :long "<p>We now implement verified routines for bigint operations such as
 comparisons, bitwise operations, arithmetic operations, etc.</p>
 
 <p>This might seem like a silly thing to do since ACL2 and Lisp already provide
-bignum arithmetic.  Our motivation is to have clear models of how these
+bigint arithmetic.  Our motivation is to have clear models of how these
 operations can be implemented, which we can then use in our @(see bigexpr) to
 @(see expr) compiler.</p>")
 
 (local (xdoc::set-default-parents bigops))
 
-(define bignum-lognot ((a bignum-p))
-  :short "Analogue of @(see lognot) for @(see bignum)s."
-  :returns (ans bignum-p)
-  :measure (bignum-count a)
+(define bigint-lognot ((a bigint-p))
+  :short "Analogue of @(see lognot) for @(see bigint)s."
+  :returns (ans bigint-p)
+  :measure (bigint-count a)
   :verify-guards nil
-  (b* (((bignum a))
-       ((bignum b))
+  (b* (((bigint a))
+       ((bigint b))
        (first (lognot a.first))
        ((when a.endp)
-        (bignum-singleton first)))
-    (bignum-cons first (bignum-lognot a.rest)))
+        (bigint-singleton first)))
+    (bigint-cons first (bigint-lognot a.rest)))
   ///
-  (verify-guards bignum-lognot)
+  (verify-guards bigint-lognot)
 
   (local (defun my-induct (n a)
            (if (zp n)
@@ -87,166 +87,167 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
            :enable (ihsext-inductions
                     ihsext-recursive-redefs)))
 
-  (defrule bignum-lognot-correct
-    (equal (bignum-val (bignum-lognot a))
-           (lognot (bignum-val a)))
-    :induct (bignum-lognot a)
-    :expand (bignum-val a)))
+  (defrule bigint-lognot-correct
+    (equal (bigint-val (bigint-lognot a))
+           (lognot (bigint-val a)))
+    :induct (bigint-lognot a)
+    :expand (bigint-val a)))
 
-(define bignum-logand ((a bignum-p)
-                       (b bignum-p))
-  :short "Analogue of @(see logand) for @(see bignum)s."
-  :returns (ans bignum-p)
-  :measure (+ (bignum-count a) (bignum-count b))
+(define bigint-logand ((a bigint-p)
+                       (b bigint-p))
+  :short "Analogue of @(see logand) for @(see bigint)s."
+  :returns (ans bigint-p)
+  :measure (+ (bigint-count a) (bigint-count b))
   :verify-guards nil
-  (b* (((bignum a))
-       ((bignum b))
+  (b* (((bigint a))
+       ((bigint b))
        (first (logand a.first b.first))
        ((when (and a.endp b.endp))
-        (bignum-singleton first)))
-    (bignum-cons first
-                 (bignum-logand a.rest b.rest)))
+        (bigint-singleton first)))
+    (bigint-cons first
+                 (bigint-logand a.rest b.rest)))
   ///
-  (verify-guards bignum-logand)
+  (verify-guards bigint-logand)
 
-  (defrule bignum-logand-correct
-    (equal (bignum-val (bignum-logand a b))
-           (logand (bignum-val a)
-                   (bignum-val b)))
-    :induct (two-bignums-induct a b)
-    :expand ((bignum-val a)
-             (bignum-val b))))
+  (defrule bigint-logand-correct
+    (equal (bigint-val (bigint-logand a b))
+           (logand (bigint-val a)
+                   (bigint-val b)))
+    :induct (two-bigints-induct a b)
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-logior ((a bignum-p)
-                       (b bignum-p))
-  :short "Analogue of @(see logior) for @(see bignum)s."
-  :returns (ans bignum-p)
-  :measure (+ (bignum-count a) (bignum-count b))
+(define bigint-logior ((a bigint-p)
+                       (b bigint-p))
+  :short "Analogue of @(see logior) for @(see bigint)s."
+  :returns (ans bigint-p)
+  :measure (+ (bigint-count a) (bigint-count b))
   :verify-guards nil
-  (b* (((bignum a))
-       ((bignum b))
+  (b* (((bigint a))
+       ((bigint b))
        (first (logior a.first b.first))
        ((when (and a.endp b.endp))
-        (bignum-singleton first)))
-    (bignum-cons first
-                 (bignum-logior a.rest b.rest)))
+        (bigint-singleton first)))
+    (bigint-cons first
+                 (bigint-logior a.rest b.rest)))
   ///
-  (verify-guards bignum-logior)
+  (verify-guards bigint-logior)
 
-  (defrule bignum-logior-correct
-    (equal (bignum-val (bignum-logior a b))
-           (logior (bignum-val a)
-                   (bignum-val b)))
-    :induct (two-bignums-induct a b)
-    :expand ((bignum-val a)
-             (bignum-val b))))
+  (defrule bigint-logior-correct
+    (equal (bigint-val (bigint-logior a b))
+           (logior (bigint-val a)
+                   (bigint-val b)))
+    :induct (two-bigints-induct a b)
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-logxor ((a bignum-p)
-                       (b bignum-p))
-  :short "Analogue of @(see logxor) for @(see bignum)s."
-  :returns (ans bignum-p)
-  :measure (+ (bignum-count a) (bignum-count b))
+(define bigint-logxor ((a bigint-p)
+                       (b bigint-p))
+  :short "Analogue of @(see logxor) for @(see bigint)s."
+  :returns (ans bigint-p)
+  :measure (+ (bigint-count a) (bigint-count b))
   :verify-guards nil
-  (b* (((bignum a))
-       ((bignum b))
+  (b* (((bigint a))
+       ((bigint b))
        (first (logxor a.first b.first))
        ((when (and a.endp b.endp))
-        (bignum-singleton first)))
-    (bignum-cons first
-                 (bignum-logxor a.rest b.rest)))
+        (bigint-singleton first)))
+    (bigint-cons first
+                 (bigint-logxor a.rest b.rest)))
   ///
-  (verify-guards bignum-logxor)
+  (verify-guards bigint-logxor)
 
-  (defrule bignum-logxor-correct
-    (equal (bignum-val (bignum-logxor a b))
-           (logxor (bignum-val a)
-                   (bignum-val b)))
-    :induct (two-bignums-induct a b)
-    :expand ((bignum-val a)
-             (bignum-val b))))
+  (defrule bigint-logxor-correct
+    (equal (bigint-val (bigint-logxor a b))
+           (logxor (bigint-val a)
+                   (bigint-val b)))
+    :induct (two-bigints-induct a b)
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-equalp ((a bignum-p)
-                       (b bignum-p))
-  :parents (bignum-equal)
-  :short "Boolean-valued version of @(see bignum-equal)."
+(define bigint-equalp ((a bigint-p)
+                       (b bigint-p))
+  :parents (bigint-equal)
+  :short "Boolean-valued version of @(see bigint-equal)."
   :returns (bool booleanp :rule-classes :type-prescription)
-  :measure (+ (bignum-count a) (bignum-count b))
-  (b* (((bignum a))
-       ((bignum b))
+  :measure (+ (bigint-count a) (bigint-count b))
+  (b* (((bigint a))
+       ((bigint b))
        ((unless (eql a.first b.first))
         nil)
        ((when (and a.endp b.endp))
         t))
-    (bignum-equalp a.rest b.rest))
+    (bigint-equalp a.rest b.rest))
   ///
-  (defrule bignum-equalp-correct
-    (equal (bignum-equalp a b)
-           (equal (bignum-val a) (bignum-val b)))
-    :induct (two-bignums-induct a b)
-    :expand ((bignum-val a)
-             (bignum-val b))))
+  (defrule bigint-equalp-correct
+    (equal (bigint-equalp a b)
+           (equal (bigint-val a) (bigint-val b)))
+    :induct (two-bigints-induct a b)
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-equal ((a bignum-p)
-                      (b bignum-p))
-  :returns (ans bignum-p)
-  :short "Analogue of @('(equal a b)') for @(see bignum)s."
+(define bigint-equal ((a bigint-p)
+                      (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Analogue of @('(equal a b)') for @(see bigint)s."
   :long "<p>This is a semantic (not structural) equality check.  That is, the
-answer says whether @('a') and @('b') have the same @(see bignum-val)s.</p>"
+answer says whether @('a') and @('b') have the same @(see bigint-val)s.</p>"
   :inline t
-  (bool->bignum (bignum-equalp a b))
+  (bool->bigint (bigint-equalp a b))
   ///
-  (defrule bignum-equal-correct
-    (equal (bignum-equal a b)
-           (bool->bignum (equal (bignum-val a) (bignum-val b))))))
+  (defrule bigint-equal-correct
+    (equal (bigint-equal a b)
+           (bool->bigint (equal (bigint-val a) (bigint-val b))))))
 
 
-(define bignum-not-equalp ((a bignum-p)
-                           (b bignum-p))
-  :parents (bignum-not-equal)
-  :short "Boolean-valued version of @(see bignum-not-equal)."
+(define bigint-not-equalp ((a bigint-p)
+                           (b bigint-p))
+  :parents (bigint-not-equal)
+  :short "Boolean-valued version of @(see bigint-not-equal)."
   :returns (bool booleanp :rule-classes :type-prescription)
-  :measure (+ (bignum-count a) (bignum-count b))
-  (b* (((bignum a))
-       ((bignum b))
+  :measure (+ (bigint-count a) (bigint-count b))
+  (b* (((bigint a))
+       ((bigint b))
        ((unless (eql a.first b.first))
         t)
        ((when (and a.endp b.endp))
         nil))
-    (bignum-not-equalp a.rest b.rest))
+    (bigint-not-equalp a.rest b.rest))
   ///
-  (defrule bignum-not-equalp-correct
-    (equal (bignum-not-equalp a b)
-           (not (equal (bignum-val a) (bignum-val b))))
-    :induct (two-bignums-induct a b)
-    :expand ((bignum-val a)
-             (bignum-val b))))
+  (defrule bigint-not-equalp-correct
+    (equal (bigint-not-equalp a b)
+           (not (equal (bigint-val a) (bigint-val b))))
+    :induct (two-bigints-induct a b)
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-not-equal ((a bignum-p)
-                          (b bignum-p))
-  :returns (ans bignum-p)
-  :short "Analogue of @('(not (equal a b))') for @(see bignum)s."
+(define bigint-not-equal ((a bigint-p)
+                          (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Analogue of @('(not (equal a b))') for @(see bigint)s."
   :long "<p>This is a semantic (not structural) equality check.  That is, the
-answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
+answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   :inline t
-  (bool->bignum (bignum-not-equalp a b))
+  (bool->bigint (bigint-not-equalp a b))
   ///
-  (defrule bignum-not-equal-correct
-    (equal (bignum-not-equal a b)
-           (bool->bignum (not (equal (bignum-val a) (bignum-val b)))))))
+  (defrule bigint-not-equal-correct
+    (equal (bigint-not-equal a b)
+           (bool->bigint (not (equal (bigint-val a) (bigint-val b)))))))
 
 
-(define bignum-scmp ((a bignum-p)
-                     (b bignum-p))
+(define bigint-scmp ((a bigint-p)
+                     (b bigint-p))
+  :parents (bigint-sltp bigint-slep bigint-sgtp bigint-sgep)
   :short "Helper for implementing signed comparisons."
-  :measure (+ (bignum-count a) (bignum-count b))
+  :measure (+ (bigint-count a) (bigint-count b))
   :returns (ans "Says whether @('a') is :equal, :less, or :greater than @('b').")
-  (b* (((bignum a))
-       ((bignum b))
+  (b* (((bigint a))
+       ((bigint b))
        ((when (and a.endp b.endp))
         (cond ((eql a.first b.first) :equal)
               ((< a.first b.first)   :less)
               (t                     :greater)))
-       (rest-scmp (bignum-scmp a.rest b.rest))
+       (rest-scmp (bigint-scmp a.rest b.rest))
        ((unless (eql rest-scmp :equal))
         rest-scmp)
        ((when (eql a.first b.first))
@@ -256,148 +257,149 @@ answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
         :less))
     :greater)
   ///
-  (defrule bignum-scmp-correct
-    (equal (bignum-scmp a b)
-           (let ((av (bignum-val a))
-                 (bv (bignum-val b)))
+  (defrule bigint-scmp-correct
+    (equal (bigint-scmp a b)
+           (let ((av (bigint-val a))
+                 (bv (bigint-val b)))
              (cond ((equal av bv) :equal)
                    ((< av bv)     :less)
                    (t             :greater))))
-    :induct (two-bignums-induct a b)
-    :expand ((bignum-val a)
-             (bignum-val b))))
+    :induct (two-bigints-induct a b)
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-sltp ((a bignum-p)
-                     (b bignum-p))
+(define bigint-sltp ((a bigint-p)
+                     (b bigint-p))
   :returns (ans booleanp :rule-classes :type-prescription)
-  :parents (bignum-slt)
-  :short "Boolean-valued version of @(see bignum-slt)."
-  :measure (+ (bignum-count a) (bignum-count b))
-  (b* (((bignum a))
-       ((bignum b))
+  :parents (bigint-slt)
+  :short "Boolean-valued version of @(see bigint-slt)."
+  :measure (+ (bigint-count a) (bigint-count b))
+  (b* (((bigint a))
+       ((bigint b))
        ((when (and a.endp b.endp))
         (< a.first b.first))
-       (rest-cmp (bignum-scmp a.rest b.rest)))
+       (rest-cmp (bigint-scmp a.rest b.rest)))
     (or (eq rest-cmp :less)
         (and (eq rest-cmp :equal)
              (< (loghead 64 a.first)
                 (loghead 64 b.first)))))
   ///
-  (defrule bignum-sltp-correct
-    (equal (bignum-sltp a b)
-           (< (bignum-val a) (bignum-val b)))
+  (defrule bigint-sltp-correct
+    (equal (bigint-sltp a b)
+           (< (bigint-val a) (bigint-val b)))
     :do-not-induct t
-    :expand ((bignum-val a)
-             (bignum-val b))))
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-slt ((a bignum-p)
-                    (b bignum-p))
-  :returns (ans bignum-p)
-  :short "Signed @(see <) for @(see bignum)s."
+(define bigint-slt ((a bigint-p)
+                    (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Signed @(see <) for @(see bigint)s."
   :inline t
-  (bool->bignum (bignum-sltp a b))
+  (bool->bigint (bigint-sltp a b))
   ///
-  (defrule bignum-slt-correct
-    (equal (bignum-slt a b)
-           (bool->bignum (< (bignum-val a) (bignum-val b))))))
+  (defrule bigint-slt-correct
+    (equal (bigint-slt a b)
+           (bool->bigint (< (bigint-val a) (bigint-val b))))))
 
-(define bignum-slep ((a bignum-p)
-                     (b bignum-p))
-  :short "Boolean-valued version of @(see bignum-sle)."
+(define bigint-slep ((a bigint-p)
+                     (b bigint-p))
+  :parents (bigint-sle)
+  :short "Boolean-valued version of @(see bigint-sle)."
   :returns (ans booleanp :rule-classes :type-prescription)
-  :measure (+ (bignum-count a) (bignum-count b))
-  (b* (((bignum a))
-       ((bignum b))
+  :measure (+ (bigint-count a) (bigint-count b))
+  (b* (((bigint a))
+       ((bigint b))
        ((when (and a.endp b.endp))
         (<= a.first b.first))
-       (rest-cmp (bignum-scmp a.rest b.rest)))
+       (rest-cmp (bigint-scmp a.rest b.rest)))
     (or (eq rest-cmp :less)
         (and (eq rest-cmp :equal)
              (<= (loghead 64 a.first)
                  (loghead 64 b.first)))))
   ///
-  (defrule bignum-slep-correct
-    (equal (bignum-slep a b)
-           (<= (bignum-val a) (bignum-val b)))
+  (defrule bigint-slep-correct
+    (equal (bigint-slep a b)
+           (<= (bigint-val a) (bigint-val b)))
     :do-not-induct t
-    :expand ((bignum-val a)
-             (bignum-val b))))
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-sle ((a bignum-p)
-                    (b bignum-p))
-  :returns (ans bignum-p)
-  :short "Signed @(see <=) for @(see bignum)s."
+(define bigint-sle ((a bigint-p)
+                    (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Signed @(see <=) for @(see bigint)s."
   :inline t
-  (bool->bignum (bignum-slep a b))
+  (bool->bigint (bigint-slep a b))
   ///
-  (defrule bignum-sle-correct
-    (equal (bignum-sle a b)
-           (bool->bignum (<= (bignum-val a) (bignum-val b))))))
+  (defrule bigint-sle-correct
+    (equal (bigint-sle a b)
+           (bool->bigint (<= (bigint-val a) (bigint-val b))))))
 
-(define bignum-sgtp ((a bignum-p)
-                     (b bignum-p))
-  :parents (bignum-sgt)
-  :short "Boolean-valued version of @(see bignum-sgt)."
+(define bigint-sgtp ((a bigint-p)
+                     (b bigint-p))
+  :parents (bigint-sgt)
+  :short "Boolean-valued version of @(see bigint-sgt)."
   :returns (ans booleanp :rule-classes :type-prescription)
-  :measure (+ (bignum-count a) (bignum-count b))
-  (b* (((bignum a))
-       ((bignum b))
+  :measure (+ (bigint-count a) (bigint-count b))
+  (b* (((bigint a))
+       ((bigint b))
        ((when (and a.endp b.endp))
         (> a.first b.first))
-       (rest-cmp (bignum-scmp a.rest b.rest)))
+       (rest-cmp (bigint-scmp a.rest b.rest)))
     (or (eq rest-cmp :greater)
         (and (eq rest-cmp :equal)
              (> (loghead 64 a.first)
                 (loghead 64 b.first)))))
   ///
-  (defrule bignum-sgtp-correct
-    (equal (bignum-sgtp a b)
-           (> (bignum-val a) (bignum-val b)))
+  (defrule bigint-sgtp-correct
+    (equal (bigint-sgtp a b)
+           (> (bigint-val a) (bigint-val b)))
     :do-not-induct t
-    :expand ((bignum-val a)
-             (bignum-val b))))
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-sgt ((a bignum-p)
-                    (b bignum-p))
-  :returns (ans bignum-p)
-  :short "Signed @(see >) for @(see bignum)s."
+(define bigint-sgt ((a bigint-p)
+                    (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Signed @(see >) for @(see bigint)s."
   :inline t
-  (bool->bignum (bignum-sgtp a b))
+  (bool->bigint (bigint-sgtp a b))
   ///
-  (defrule bignum-sgt-correct
-    (equal (bignum-sgt a b)
-           (bool->bignum (> (bignum-val a) (bignum-val b))))))
+  (defrule bigint-sgt-correct
+    (equal (bigint-sgt a b)
+           (bool->bigint (> (bigint-val a) (bigint-val b))))))
 
-(define bignum-sgep ((a bignum-p)
-                     (b bignum-p))
-  :parents (bignum-sge)
-  :short "Boolean-valued version of @(see bignum-sge)."
+(define bigint-sgep ((a bigint-p)
+                     (b bigint-p))
+  :parents (bigint-sge)
+  :short "Boolean-valued version of @(see bigint-sge)."
   :returns (ans booleanp :rule-classes :type-prescription)
-  :measure (+ (bignum-count a) (bignum-count b))
-  (b* (((bignum a))
-       ((bignum b))
+  :measure (+ (bigint-count a) (bigint-count b))
+  (b* (((bigint a))
+       ((bigint b))
        ((when (and a.endp b.endp))
         (>= a.first b.first))
-       (rest-cmp (bignum-scmp a.rest b.rest)))
+       (rest-cmp (bigint-scmp a.rest b.rest)))
     (or (eq rest-cmp :greater)
         (and (eq rest-cmp :equal)
              (>= (loghead 64 a.first)
                  (loghead 64 b.first)))))
   ///
-  (defrule bignum-sgep-correct
-    (equal (bignum-sgep a b)
-           (>= (bignum-val a) (bignum-val b)))
+  (defrule bigint-sgep-correct
+    (equal (bigint-sgep a b)
+           (>= (bigint-val a) (bigint-val b)))
     :do-not-induct t
-    :expand ((bignum-val a)
-             (bignum-val b))))
+    :expand ((bigint-val a)
+             (bigint-val b))))
 
-(define bignum-sge ((a bignum-p)
-                    (b bignum-p))
-  :returns (ans bignum-p)
-  :short "Signed @(see >=) for @(see bignum)s."
+(define bigint-sge ((a bigint-p)
+                    (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Signed @(see >=) for @(see bigint)s."
   :inline t
-  (bool->bignum (bignum-sgep a b))
+  (bool->bigint (bigint-sgep a b))
   ///
-  (defrule bignum-sge-correct
-    (equal (bignum-sge a b)
-           (bool->bignum (>= (bignum-val a) (bignum-val b))))))
+  (defrule bigint-sge-correct
+    (equal (bigint-sge a b)
+           (bool->bigint (>= (bigint-val a) (bigint-val b))))))

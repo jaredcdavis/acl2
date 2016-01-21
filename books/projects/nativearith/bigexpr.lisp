@@ -31,7 +31,7 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "bignum")
+(include-book "bigint")
 (include-book "expr")
 
 (deftypes bigexpr
@@ -48,7 +48,7 @@
 
   (defflexsum bigexpr
     :parents (nativearith)
-    :short "A @(see bignum) arithmetic expression."
+    :short "A @(see bigint) arithmetic expression."
     (:var
      :short "A variable."
      :cond (or (atom x)
@@ -64,9 +64,9 @@
      :short "A quoted constant."
      :cond (eq (car x) 'quote)
      :shape (and (consp (cdr x))
-                 (bignum-p (second x))
+                 (bigint-p (second x))
                  (not (cddr x)))
-     :fields ((val :acc-body (second x) :type bignum-p))
+     :fields ((val :acc-body (second x) :type bigint-p))
      :ctor-body (hons 'quote (hons val nil)))
     (:call
      :short "A function applied to some expressions."
