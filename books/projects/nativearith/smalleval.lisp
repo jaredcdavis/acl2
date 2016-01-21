@@ -33,6 +33,7 @@
 (in-package "NATIVEARITH")
 (include-book "smallops")
 (include-book "smallexpr")
+(include-book "std/util/defrule" :dir :system)
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 
@@ -127,7 +128,7 @@
       :verbosep t
       (case (fn-fix fn) . ,(smallapply-cases *smalloptable*))
       ///
-      (defthm open-smallapply-when-known
+      (defrule open-smallapply-when-known
         (implies (syntaxp (quotep fn))
                  (equal (smallapply fn args)
                         (case (fn-fix fn) . ,(smallapply-cases *smalloptable*))))))))
@@ -161,32 +162,43 @@
   (verify-guards smalleval)
   (deffixequiv-mutual smalleval)
 
-  (defthm smalleval-of-make-smallexpr-var
+  (defrule smalleval-of-make-smallexpr-var
     (equal (smalleval (make-smallexpr-var :name name) env)
            (smallenv-lookup-fast name env))
-    :hints(("Goal" :expand ((smalleval (make-smallexpr-var :name name) env)))))
+    :expand ((smalleval (make-smallexpr-var :name name) env)))
 
-  (defthm smalleval-of-make-smallexpr-const
+  (defrule smalleval-of-make-smallexpr-const
     (equal (smalleval (make-smallexpr-const :val val) env)
            (i64-fix val))
-    :hints(("Goal" :expand ((smalleval (make-smallexpr-const :val val) env)))))
+    :expand ((smalleval (make-smallexpr-const :val val) env)))
 
-  (defthm smalleval-of-make-smallexpr-call
+  (defrule smalleval-of-make-smallexpr-call
     (equal (smalleval (make-smallexpr-call :fn fn :args args) env)
            (smallapply fn (smalleval-list args env)))
-    :hints(("Goal" :expand ((smalleval (make-smallexpr-call :fn fn :args args) env)))))
+    :expand ((smalleval (make-smallexpr-call :fn fn :args args) env)))
 
-  (defthm smalleval-list-when-atom
+  (defrule smalleval-list-when-atom
     (implies (atom x)
              (equal (smalleval-list x env)
                     nil))
-    :hints(("Goal" :expand ((smalleval-list x env)))))
+    :expand ((smalleval-list x env)))
 
-  (defthm smalleval-list-of-cons
+  (defrule smalleval-list-of-cons
     (equal (smalleval-list (cons a x) env)
            (cons (smalleval a env)
                  (smalleval-list x env)))
-    :hints(("Goal" :expand ((smalleval-list (cons a x) env))))))
+    :expand ((smalleval-list (cons a x) env)))
+
+  (defrule consp-of-smalleval-list
+    (equal (consp (smalleval-list x env))
+           (consp x))
+    :induct (len x))
+
+  (defrule len-of-smalleval-list
+    (equal (len (smalleval-list x env))
+           (len x))
+    :induct (len x)))
+
 
 
 

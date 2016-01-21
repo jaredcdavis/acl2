@@ -119,7 +119,7 @@
       :verbosep t
       (case (fn-fix fn) . ,(bigapply-cases *bigoptable*))
       ///
-      (defthm open-bigapply-when-known
+      (defrule open-bigapply-when-known
         (implies (syntaxp (quotep fn))
                  (equal (bigapply fn args)
                         (case (fn-fix fn) . ,(bigapply-cases *bigoptable*))))))))
@@ -152,33 +152,42 @@
   (verify-guards bigeval)
   (deffixequiv-mutual bigeval)
 
-  (defthm bigeval-of-make-bigexpr-var
+  (defrule bigeval-of-make-bigexpr-var
     (equal (bigeval (make-bigexpr-var :name name) env)
            (bigenv-lookup-fast name env))
-    :hints(("Goal" :expand ((bigeval (make-bigexpr-var :name name) env)))))
+    :expand ((bigeval (make-bigexpr-var :name name) env)))
 
-  (defthm bigeval-of-make-bigexpr-const
+  (defrule bigeval-of-make-bigexpr-const
     (equal (bigeval (make-bigexpr-const :val val) env)
            (bigint-fix val))
-    :hints(("Goal" :expand ((bigeval (make-bigexpr-const :val val) env)))))
+    :expand ((bigeval (make-bigexpr-const :val val) env)))
 
-  (defthm bigeval-of-make-bigexpr-call
+  (defrule bigeval-of-make-bigexpr-call
     (equal (bigeval (make-bigexpr-call :fn fn :args args) env)
            (bigapply fn (bigeval-list args env)))
-    :hints(("Goal" :expand ((bigeval (make-bigexpr-call :fn fn :args args) env)))))
+    :expand ((bigeval (make-bigexpr-call :fn fn :args args) env)))
 
-  (defthm bigeval-list-when-atom
+  (defrule bigeval-list-when-atom
     (implies (atom x)
              (equal (bigeval-list x env)
                     nil))
-    :hints(("Goal" :expand ((bigeval-list x env)))))
+    :expand ((bigeval-list x env)))
 
-  (defthm bigeval-list-of-cons
+  (defrule bigeval-list-of-cons
     (equal (bigeval-list (cons a x) env)
            (cons (bigeval a env)
                  (bigeval-list x env)))
-    :hints(("Goal" :expand ((bigeval-list (cons a x) env))))))
+    :expand ((bigeval-list (cons a x) env)))
 
+  (defrule consp-of-bigeval-list
+    (equal (consp (bigeval-list x env))
+           (consp x))
+    :induct (len x))
+
+  (defrule len-of-bigeval-list
+    (equal (len (bigeval-list x env))
+           (len x))
+    :induct (len x)))
 
 
 
