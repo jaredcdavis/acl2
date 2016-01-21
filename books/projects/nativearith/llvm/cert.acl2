@@ -1,5 +1,5 @@
 ; Native Arithmetic Library
-; Copyright (C) 2015 Kookamara LLC
+; Copyright (C) 2015-2016 Kookamara LLC
 ;
 ; Contact:
 ;
