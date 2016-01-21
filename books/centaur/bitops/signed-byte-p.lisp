@@ -1,5 +1,5 @@
 ; Centaur Bitops Library
-; Copyright (C) 2010-2011 Centaur Technology
+; Copyright (C) 2010-2016 Centaur Technology
 ;
 ; Contact:
 ;   Centaur Technology Formal Verification Group
@@ -28,12 +28,11 @@
 
 ; signed-byte-p.lisp
 ; Original author: Jared Davis <jared@centtech.com>
-;
-; BOZO properly integrate this with ihsext-basics.lisp.
 
 (in-package "BITOPS")
 (include-book "xdoc/top" :dir :system)
 (include-book "ihs/basic-definitions" :dir :system)
+(include-book "std/util/defrule" :dir :system)
 (local (include-book "arithmetic/top-with-meta" :dir :system))
 (local (include-book "tools/do-not" :dir :system))
 (local (in-theory (disable signed-byte-p floor truncate mod rem)))
@@ -57,55 +56,187 @@
   :parents (bitops signed-byte-p unsigned-byte-p)
   :short "Lemmas about @(see signed-byte-p) and @(see unsigned-byte-p) that are
 often useful when optimizing definitions with @(see acl2::type-spec)
-declarations."
-  :long "<p>BOZO document me.</p>")
+declarations.")
 
-(defthm basic-unsigned-byte-p-of-+
-  ;; ACL2's fancy unification stuff means this works fine in the common case
-  ;; that you're dealing with quoted constants.
+(local (xdoc::set-default-parents bitops/signed-byte-p))
+
+(defrule basic-unsigned-byte-p-of-+
   (implies (and (unsigned-byte-p n a)
                 (unsigned-byte-p n b))
            (unsigned-byte-p (+ 1 n) (+ a b)))
-  :hints(("Goal" :in-theory (enable unsigned-byte-p))))
+  :enable unsigned-byte-p
+  :short "Adding N-bit unsigneds creates an N+1 bit unsigned."
+  :long "<p>ACL2's fancy unification stuff means this works fine in the common
+  case that you're dealing with quoted constants for N and N+1.  See also @(see
+  basic-unsigned-byte-p-of-+-with-cin).</p>")
 
-(defthm basic-signed-byte-p-of-+
-  ;; ACL2's fancy unification stuff means this works fine in the common case
-  ;; that you're dealing with quoted constants.
+(defrule basic-unsigned-byte-p-of-+-with-cin
+  (implies (and (bitp cin)
+                (unsigned-byte-p n a)
+                (unsigned-byte-p n b))
+           (unsigned-byte-p (+ 1 n) (+ cin a b)))
+  :rule-classes ((:rewrite)
+                 (:rewrite :corollary
+                  (implies (and (bitp cin)
+                                (unsigned-byte-p n a)
+                                (unsigned-byte-p n b))
+                           (unsigned-byte-p (+ 1 n) (+ a b cin)))))
+  :enable unsigned-byte-p
+  :short "Adding N-bit unsigneds with a carry bit creates an N+1 bit unsigned."
+  :long "<p>ACL2's fancy unification stuff means this works fine in the common
+  case that you're dealing with quoted constants for N and N+1.  See also @(see
+  basic-unsigned-byte-p-of-+).</p>")
+
+(defrule basic-signed-byte-p-of-+
   (implies (and (signed-byte-p n a)
                 (signed-byte-p n b))
            (signed-byte-p (+ 1 n) (+ a b)))
-  :hints(("Goal" :in-theory (enable signed-byte-p))))
+  :enable signed-byte-p
+  :short "Adding N-bit signeds creates an N+1 bit signed."
+  :long "<p>ACL2's fancy unification stuff means this works fine in the common
+  case that you're dealing with quoted constants for N and N+1.  See also @(see
+  basic-signed-byte-p-of-+-with-cin).</p>")
 
-(defthm basic-signed-byte-p-of-unary-minus
-  ;; ACL2's fancy unification stuff means this works fine in the common case
-  ;; that you're dealing with quoted constants.
+(defrule basic-signed-byte-p-of-+-with-cin
+  (implies (and (bitp cin)
+                (signed-byte-p n a)
+                (signed-byte-p n b))
+           (signed-byte-p (+ 1 n) (+ cin a b)))
+  :rule-classes ((:rewrite)
+                 (:rewrite :corollary
+                  (implies (and (bitp cin)
+                                (signed-byte-p n a)
+                                (signed-byte-p n b))
+                           (signed-byte-p (+ 1 n) (+ cin a b)))))
+  :enable signed-byte-p
+  :short "Adding N+1 bit signeds with a carry bit creates an N+1 bit signed."
+  :long "<p>ACL2's fancy unification stuff means this works fine in the common
+  case that you're dealing with quoted constants for N and N+1.  See also @(see
+  basic-signed-byte-p-of-+).</p>")
+
+(defrule basic-signed-byte-p-of-unary-minus
   (implies (signed-byte-p n x)
            (signed-byte-p (+ 1 n) (- x)))
-  :hints(("Goal" :in-theory (enable signed-byte-p))))
+  :enable signed-byte-p
+  :short "Negative N-bit signed is an N+1 bit signed."
+  :long "<p>The N+1 is needed in case of the minimum integer.</p>
 
-(defthm basic-signed-byte-p-of-unary-minus-2
-  ;; ACL2's fancy unification stuff means this works fine in the common case
-  ;; that you're dealing with quoted constants.
+  <p>ACL2's fancy unification stuff means this works fine in the common case
+  that you're dealing with quoted constants for N and N+1.  See also @(see
+  basic-signed-byte-p-of-unary-minus-2) and @(see
+  basic-signed-byte-p-of-binary-minus).</p>")
+
+(defrule basic-signed-byte-p-of-unary-minus-2
   (implies (unsigned-byte-p n x)
            (signed-byte-p (+ 1 n) (- x)))
-  :hints(("Goal" :in-theory (enable signed-byte-p unsigned-byte-p))))
+  :enable (signed-byte-p unsigned-byte-p)
+  :short "Negative N-bit unsigned is an N+1 bit signed."
+  :long "<p>ACL2's fancy unification stuff means this works fine in the common
+  case that you're dealing with quoted constants for N and N+1.  See also @(see
+  basic-signed-byte-p-of-unary-minus) and @(see
+  basic-signed-byte-p-of-binary-minus).</p>")
 
-(defthm basic-signed-byte-p-of-binary-minus
-  ;; ACL2's fancy unification stuff means this works fine in the common case
-  ;; that you're dealing with quoted constants.
-  ;;
-  ;; You might ask, why have this rule when we have the rule about PLUS, since
-  ;; (- A B) is just the same as (+ a (unary-- b)).  The answer is: the rule
-  ;; about (signed-byte-p (unary-- x)) isn't very nice, and doesn't really give
-  ;; us an indirect way to get here.
+(defrule basic-signed-byte-p-of-binary-minus
   (implies (and (signed-byte-p n a)
                 (signed-byte-p n b))
            (signed-byte-p (+ 1 n) (- a b)))
-  :hints(("Goal" :in-theory (enable signed-byte-p))))
+  :enable signed-byte-p
+  :short "Subtracting N-bit signeds creates an N+1 bit signed."
+  :long "<p>ACL2's fancy unification stuff means this works fine in the common
+  case that you're dealing with quoted constants.</p>
+
+  <p>You might ask, why have this rule when we have rules like @(see
+  basic-signed-byte-p-of-+)?  After all, @('(- a b)') is just the same as @('(+
+  a (unary-- b))').  The answer is: the rule about @('(signed-byte-p (unary--
+  x))'), @(see basic-signed-byte-p-of-unary-minus), isn't very nice because of
+  , and doesn't give us doesn't really give us an indirect way to get here.</p>
+
+  <p>See also @(see basic-signed-byte-p-of-unary-minus) and @(see
+  basic-signed-byte-p-of-unary-minus-2).</p>")
+
+(defsection unsigned-byte-p-of-minus-when-signed-byte-p
+  :short "Negating an N-bit signed creates an N-bit unsigned exactly when it
+          was negative."
+  (local (defthmd l1
+           (implies (and (< x 0)
+                         (<= (- (expt 2 (+ -1 n))) x)
+                         (integerp x)
+                         (natp n))
+                    (<= (- x) (expt 2 (+ -1 n))))))
+
+  (local (defthmd l2
+           (implies (natp n)
+                    (< (expt 2 (+ -1 n))
+                       (expt 2 n)))))
+
+  (local (defthmd l3
+           (implies (and (< x 0)
+                         (<= (- (expt 2 (+ -1 n))) x)
+                         (integerp x)
+                         (natp n))
+                    (< (- x) (expt 2 n)))
+           :hints(("Goal"
+                   :in-theory (disable acl2::expt-is-increasing-for-base>1)
+                   :use ((:instance l1)
+                         (:instance l2))))))
+
+  (local (in-theory (enable signed-byte-p unsigned-byte-p)))
+
+  (local (defthmd l4
+           (implies (and (signed-byte-p n x)
+                         (< x 0))
+                    (unsigned-byte-p n (- x)))
+           :hints(("Goal" :in-theory (enable l3)))))
+
+  (defthm unsigned-byte-p-of-minus-when-signed-byte-p
+    (implies (signed-byte-p n x)
+             (equal (unsigned-byte-p n (- x))
+                    (<= x 0)))
+    :hints(("Goal" :in-theory (enable l4)
+            :cases ((< x 0) (= x 0))))))
+
+(defsection unsigned-byte-p-of-abs-when-signed-byte-p
+  :short "Absolute value of an N-bit signed is an N-bit unsigned."
+
+  (local (defthmd l0
+           (implies (and (signed-byte-p n x)
+                         (< x 0))
+                    (unsigned-byte-p n (abs x)))))
+
+  (local (defthmd l1
+           (implies (natp n)
+                    (< (expt 2 (+ -1 n))
+                       (expt 2 n)))
+           :rule-classes ((:rewrite) (:linear))))
+
+  (local (defthmd l2
+           (implies (and (signed-byte-p n x)
+                         (<= 0 x))
+                    (unsigned-byte-p n (abs x)))
+           :hints(("Goal"
+                   :in-theory (enable unsigned-byte-p
+                                      signed-byte-p
+                                      l1)))))
+
+  (defthm unsigned-byte-p-of-abs-when-signed-byte-p
+    (implies (signed-byte-p n x)
+             (unsigned-byte-p n (abs x)))
+    :hints(("Goal"
+            :use ((:instance l0)
+                  (:instance l2))))))
+
+(defrule signed-byte-p-of-decrement-when-natural-signed-byte-p
+  (implies (and (signed-byte-p n x)
+                (<= 0 x))
+           (signed-byte-p n (1- x)))
+  :enable (signed-byte-p)
+  :short "Decrementing a positive N-bit signed creates an N-bit signed.")
+
 
 
 
 (defsection basic-unsigned-byte-p-of-*
+  :autodoc nil
 
   (local (defthmd lem-multiply-bound
            (implies (and (natp a1)
@@ -145,40 +276,51 @@ declarations."
            :rule-classes ((:rewrite) (:linear))
            :hints(("Goal" :use ((:instance step1))))))
 
-  (defthm lousy-unsigned-byte-p-of-*-mixed
-    ;; Probably won't ever unify with anything.
+  (defrule lousy-unsigned-byte-p-of-*-mixed
     (implies (and (unsigned-byte-p n1 a)
                   (unsigned-byte-p n2 b))
              (unsigned-byte-p (+ n1 n2) (* a b)))
-    :hints(("Goal" :use ((:instance upper-bound)))))
+    :use ((:instance upper-bound))
+    :short "Multiplying N1 * N2 bit unsigneds creates an N1+N2 bit unsigned."
+    :long "<p>This is a powerful theorem with a nice statement, but it rarely
+           unifies with anything.  See also @(see lousy-unsigned-byte-p-of-*)
+           and also @(see basic-unsigned-byte-p-of-*).</p>")
 
-  (defthm lousy-unsigned-byte-p-of-*
-    ;; Probably won't ever unify with anything.
+  (defrule lousy-unsigned-byte-p-of-*
     (implies (and (unsigned-byte-p n a)
                   (unsigned-byte-p n b))
-             (unsigned-byte-p (+ n n) (* a b))))
+             (unsigned-byte-p (+ n n) (* a b)))
+    :short "Multiplying N * N bit unsigneds creates an N+N bit unsigned."
+    :long "<p>This is a common case of @(see lousy-unsigned-byte-p-of-*-mixed),
+           but it also rarely unifies with anything.  See also @(see
+           basic-unsigned-byte-p-of-*).</p>")
 
   (local (defthm crock
            (equal (+ (/ n 2) (/ n 2))
                   (fix n))))
 
-  (defthm basic-unsigned-byte-p-of-*
-    ;; This use of division looks awful, but note the syntaxp hyp:
-    ;; This'll get us things like
-    ;;
-    ;;   (unsigned-byte-p 32 (* a b))
-    ;;
-    ;; When we can prove (unsigned-byte-p 16 a) and (unsigned-byte-p 16 b).
+  (defrule basic-unsigned-byte-p-of-*
     (implies (and (syntaxp (quotep n))
                   (natp n)
+                  ;; BOZO shouldn't we be using floor instead?
                   (unsigned-byte-p (/ n 2) a)
                   (unsigned-byte-p (/ n 2) b))
              (unsigned-byte-p n (* a b)))
-    :hints(("Goal" :use ((:instance lousy-unsigned-byte-p-of-*
-                                    (n (/ n 2))))))))
+    :use ((:instance lousy-unsigned-byte-p-of-* (n (/ n 2))))
+    :short "Multiplying constant N * N bit unsigneds creates an N+N bit unsigned."
+    :long "<p>This is a less general but more automatic @(see
+            lousy-unsigned-byte-p-of-*) for reasoning about constant widths.
+            The use of division here looks awful, but note the @(see syntaxp)
+            hyp.  This will let us get us things like:</p>
+
+            @({ (unsigned-byte-p 32 (* a b)) })
+
+            <p>When we know that @('(unsigned-byte-p 16 a)') and
+            @('(unsigned-byte-p 16 b)').</p>"))
 
 
 (defsection basic-signed-byte-p-of-*
+  :autodoc nil
 
 ; Blah, this proof is horribly long and ugly.
 ;
@@ -449,29 +591,43 @@ declarations."
                     (signed-byte-p (+ n n) (* a b)))
            :hints(("Goal" :use ((:instance neg-case-unwinding))))))
 
-  (defthm lousy-signed-byte-p-of-*
+  (defrule lousy-signed-byte-p-of-*
     (implies (and (signed-byte-p n a)
                   (signed-byte-p n b))
              (signed-byte-p (+ n n) (* a b)))
-    :hints(("Goal"
-            :in-theory (disable signed-byte-p)
-            :use ((:instance pos-case)
-                  (:instance mix-case)
-                  (:instance mix-case (a b) (b a))
-                  (:instance neg-case)))))
+    :in-theory (disable signed-byte-p)
+    :use ((:instance pos-case)
+          (:instance mix-case)
+          (:instance mix-case (a b) (b a))
+          (:instance neg-case))
+    :short "Multiplying N * N bit signeds creates an N+N bit signed."
+    :long "<p>This is a powerful rule with a nice statement, but it rarely
+            unifies with anything automatically.  See also @(see
+            basic-signed-byte-p-of-*) and also see @(see
+            lousy-signed-byte-p-of-mixed-*).</p>")
 
   (local (defthm crock
            (equal (+ (/ n 2) (/ n 2))
                   (fix n))))
 
-  (defthm basic-signed-byte-p-of-*
+  (defrule basic-signed-byte-p-of-*
     (implies (and (syntaxp (quotep n))
                   (natp n)
+                  ;; BOZO shouldn't we be using floor instead?
                   (signed-byte-p (/ n 2) a)
                   (signed-byte-p (/ n 2) b))
              (signed-byte-p n (* a b)))
-    :hints(("Goal" :use ((:instance lousy-signed-byte-p-of-*
-                                    (n (/ n 2)))))))
+    :use ((:instance lousy-signed-byte-p-of-* (n (/ n 2))))
+    :short "Multiplying constant N * N bit signeds creates an N+N bit signed."
+    :long "<p>This is a less general but more automatic version of @(see
+           lousy-signed-byte-p-of-*).  It's good for constant widths.</p>
+
+           <p>The use of division here looks awful, but note the @(see syntaxp)
+           hyp: we'll only do these divisions when we know @('n') is a
+           constant, e.g., this will let us know that 16-bit multiplication
+           gives us a 32-bit result.</p>
+
+           <p>See also @(see basic-signed-byte-p-of-mixed-*).</p>")
 
 
 ; A*B is also a signed 2N-bit number when A is signed N-bit and B is an
@@ -603,16 +759,19 @@ declarations."
            :hints(("Goal" :use ((:instance su-neg-crux))))))
 
 
-  (defthm lousy-signed-byte-p-of-mixed-*
+  (defrule lousy-signed-byte-p-of-mixed-*
     (implies (and (signed-byte-p n a)
                   (unsigned-byte-p n b))
              (signed-byte-p (+ n n) (* a b)))
-    :hints(("Goal"
-            :in-theory (disable unsigned-byte-p signed-byte-p)
-            :use ((:instance su-neg-case)
-                  (:instance su-pos-case)))))
+    :in-theory (disable unsigned-byte-p signed-byte-p)
+    :use ((:instance su-neg-case)
+          (:instance su-pos-case))
+    :short "Multiplying N-bit signed * N-bit unsigned creates an N+N bit signed."
+    :long "<p>This is a nice and general theorem but it rarely unifies
+           automatically.  See also @(see basic-signed-byte-p-of-mixed-*).
+           Also see @(see lousy-signed-byte-p-of-*).</p>")
 
-  (defthm basic-signed-byte-p-of-mixed-*
+  (defrule basic-signed-byte-p-of-mixed-*
     (implies (and (syntaxp (quotep n))
                   (natp n)
                   (or (and (signed-byte-p (/ n 2) a)
@@ -620,17 +779,19 @@ declarations."
                       (and (unsigned-byte-p (/ n 2) a)
                            (signed-byte-p (/ n 2) b))))
              (signed-byte-p n (* a b)))
-    :hints(("Goal"
-            :in-theory (disable signed-byte-p
-                                unsigned-byte-p
-                                lousy-signed-byte-p-of-mixed-*)
-            :use ((:instance lousy-signed-byte-p-of-mixed-*
-                             (n (/ n 2)))
-                  (:instance lousy-signed-byte-p-of-mixed-*
-                             (n (/ n 2))
-                             (a b)
-                             (b a)))))))
-
+    :in-theory (disable signed-byte-p
+                        unsigned-byte-p
+                        lousy-signed-byte-p-of-mixed-*)
+    :use ((:instance lousy-signed-byte-p-of-mixed-*
+           (n (/ n 2)))
+          (:instance lousy-signed-byte-p-of-mixed-*
+           (n (/ n 2))
+           (a b)
+           (b a)))
+    :short "Multiplying constant N-bit signed * N-bit unsigned creates an N+N bit signed."
+    :long "<p>This is a more automatic @(see lousy-signed-byte-p-of-mixed-*)
+           for reasoning about constant widths.  The use of division here looks
+           awful, but note the @(see syntaxp) hyp.</p>"))
 
 
 (local (include-book "ihsext-basics"))
@@ -652,9 +813,8 @@ declarations."
                   (signed-byte-p b x))
          :hints(("Goal" :in-theory (enable signed-byte-p**)))))
 
-
-
 (defsection signed-byte-p-of-logcdr
+  :short "Case-splitting, unconditional."
 
   (local (defthm l0
            (implies (signed-byte-p width x)
@@ -677,15 +837,15 @@ declarations."
                                 (signed-byte-p (+ 1 width) x))))
            :hints(("Goal" :in-theory (enable signed-byte-p**)))))
 
-  (defthm signed-byte-p-of-logcdr
+  (defrule signed-byte-p-of-logcdr
     (equal (signed-byte-p width (logcdr x))
            (and (posp width)
                 (or (not (integerp x))
                     (signed-byte-p (+ 1 width) x))))))
 
 
-
 (defsection signed-byte-p-of-logtail
+  :short "Case-splitting, unconditional."
 
   (local (defun my-induct (width x n)
            (if (zp n)
@@ -775,105 +935,24 @@ declarations."
             :use ((:instance main (n (nfix n))))))))
 
 
-
-(defsection unsigned-byte-p-of-minus-when-signed-byte-p
-
-  (local (defthmd l1
-           (implies (and (< x 0)
-                         (<= (- (expt 2 (+ -1 n))) x)
-                         (integerp x)
-                         (natp n))
-                    (<= (- x) (expt 2 (+ -1 n))))))
-
-  (local (defthmd l2
-           (implies (natp n)
-                    (< (expt 2 (+ -1 n))
-                       (expt 2 n)))))
-
-  (local (defthmd l3
-           (implies (and (< x 0)
-                         (<= (- (expt 2 (+ -1 n))) x)
-                         (integerp x)
-                         (natp n))
-                    (< (- x) (expt 2 n)))
-           :hints(("Goal"
-                   :in-theory (disable acl2::expt-is-increasing-for-base>1)
-                   :use ((:instance l1)
-                         (:instance l2))))))
-
-  (local (in-theory (enable signed-byte-p unsigned-byte-p)))
-
-  (local (defthmd l4
-           (implies (and (signed-byte-p n x)
-                         (< x 0))
-                    (unsigned-byte-p n (- x)))
-           :hints(("Goal" :in-theory (enable l3)))))
-
-  (defthm unsigned-byte-p-of-minus-when-signed-byte-p
-    (implies (signed-byte-p n x)
-             (equal (unsigned-byte-p n (- x))
-                    (<= x 0)))
-    :hints(("Goal" :in-theory (enable l4)
-            :cases ((< x 0) (= x 0))))))
-
-
-
-(defsection unsigned-byte-p-of-abs-when-signed-byte-p
-
-  (local (defthmd l0
-           (implies (and (signed-byte-p n x)
-                         (< x 0))
-                    (unsigned-byte-p n (abs x)))))
-
-  (local (defthmd l1
-           (implies (natp n)
-                    (< (expt 2 (+ -1 n))
-                       (expt 2 n)))
-           :rule-classes ((:rewrite) (:linear))))
-
-  (local (defthmd l2
-           (implies (and (signed-byte-p n x)
-                         (<= 0 x))
-                    (unsigned-byte-p n (abs x)))
-           :hints(("Goal"
-                   :in-theory (enable unsigned-byte-p
-                                      signed-byte-p
-                                      l1)))))
-
-  (defthm unsigned-byte-p-of-abs-when-signed-byte-p
-    (implies (signed-byte-p n x)
-             (unsigned-byte-p n (abs x)))
-    :hints(("Goal"
-            :use ((:instance l0)
-                  (:instance l2))))))
-
-
-(defthm basic-signed-byte-p-of-lognot
+(defrule basic-signed-byte-p-of-lognot
   (implies (unsigned-byte-p n x)
            (signed-byte-p (+ 1 n) (lognot x)))
-  :hints(("Goal" :in-theory (enable lognot
-                                    unsigned-byte-p
-                                    signed-byte-p))))
+  :enable (lognot unsigned-byte-p signed-byte-p)
+  :short "Lognot of an N-bit unsigned is an N+1 bit signed.")
 
-(defthm basic-signed-byte-p-of-1+lognot
+(defrule basic-signed-byte-p-of-1+lognot
   (implies (unsigned-byte-p n x)
            (signed-byte-p (+ 1 n) (+ 1 (lognot x))))
-  :hints(("Goal" :in-theory (enable lognot
-                                    unsigned-byte-p
-                                    signed-byte-p))))
+  :enable (lognot unsigned-byte-p signed-byte-p)
+  :short "Lognot+1 (two's complement) of an N-bit unsigned is an N+1 bit signed.")
 
-(defthm signed-byte-p-of-decrement-when-natural-signed-byte-p
-  (implies (and (signed-byte-p n x)
-                (<= 0 x))
-           (signed-byte-p n (1- x)))
-  :hints(("Goal" :in-theory (enable signed-byte-p))))
-
-(defthm signed-byte-p-when-signed-byte-p-smaller
+(defrule signed-byte-p-when-signed-byte-p-smaller
   (implies (and (signed-byte-p size1 x)
                 (<= size1 (nfix size2)))
            (signed-byte-p size2 x))
-   :hints(("Goal" :in-theory (enable signed-byte-p))))
-
+  :enable signed-byte-p
+  :short "An N-bit signed is an M-bit signed for any @('M >= N').")
 
 (encapsulate
   ()
@@ -885,17 +964,17 @@ declarations."
                         (- size2 1)
                         (logcdr x)))))
 
-  (defthm signed-byte-p-when-unsigned-byte-p-smaller
+  (defrule signed-byte-p-when-unsigned-byte-p-smaller
     (implies (and (unsigned-byte-p size1 x)
                   (< size1 (nfix size2)))
              (signed-byte-p size2 x))
-    :hints(("Goal"
-            :induct (my-induct size1 size2 x)
-            :in-theory (enable* ihsext-recursive-redefs
-                                ihsext-inductions)))))
+    :induct (my-induct size1 size2 x)
+    :enable (ihsext-recursive-redefs ihsext-inductions)
+    :short "An N-bit unsigned is an M-big signed for any @('M < N')."))
 
 
 (defsection signed-byte-p-of-ash-split
+  :short "Case splitting, unconditional."
 
   (local (in-theory (enable* arith-equiv-forwarding)))
 
@@ -1034,8 +1113,8 @@ declarations."
                     (< n width))))))
 
 
-
 (defsection signed-byte-p-of-loghead
+  :short "An N-bit loghead is an M-bit signed for any @('M > N')."
 
   (local (defthm l0
            (implies (and (natp n)
@@ -1252,47 +1331,46 @@ declarations."
      :hints(("Goal" :in-theory (enable rem-is-mod-when-naturals))))))
 
 
-(defthm basic-unsigned-byte-p-of-floor
+(defrule basic-unsigned-byte-p-of-floor
   (implies (and (unsigned-byte-p n a)
                 (natp b))
            (unsigned-byte-p n (floor a b)))
-  :hints(("Goal"
-          :in-theory (e/d (unsigned-byte-p)
-                          (floor-weak-self-upper-bound-when-naturals))
-          :use ((:instance floor-weak-self-upper-bound-when-naturals)))))
+  :enable (unsigned-byte-p)
+  :disable (floor-weak-self-upper-bound-when-naturals)
+  :use ((:instance floor-weak-self-upper-bound-when-naturals))
+  :short "Floor an N-bit unsigned by a natural creates an N-bit unsigned.")
 
-(defthm basic-unsigned-byte-p-of-truncate
+(defrule basic-unsigned-byte-p-of-truncate
   (implies (and (unsigned-byte-p n a)
                 (natp b))
            (unsigned-byte-p n (truncate a b)))
-  :hints(("Goal"
-          :in-theory (e/d (truncate-is-floor-when-naturals)
-                          (floor truncate unsigned-byte-p)))))
+  :enable (truncate-is-floor-when-naturals)
+  :disable (floor truncate unsigned-byte-p)
+  :short "Truncate an N-bit unsigned by a natural creates an N-bit unsigned.")
 
-(defthm basic-unsigned-byte-p-of-mod
+(defrule basic-unsigned-byte-p-of-mod
   (implies (and (unsigned-byte-p n a)
                 (natp b))
            (unsigned-byte-p n (mod a b)))
-  :hints(("Goal"
-          :do-not-induct t
-          :use ((:instance mod-weak-left-upper-bound-when-naturals))
-          :in-theory (e/d (unsigned-byte-p)
-                          (mod-weak-left-upper-bound-when-naturals
-                           mod-weak-global-upper-bound-when-naturals)))))
+  :do-not-induct t
+  :use ((:instance mod-weak-left-upper-bound-when-naturals))
+  :enable (unsigned-byte-p)
+  :disable (mod-weak-left-upper-bound-when-naturals
+            mod-weak-global-upper-bound-when-naturals)
+  :short "Mod an N-bit unsigned by a natural creates an N-bit unsigned.")
 
-(defthm basic-unsigned-byte-p-of-rem
+(defrule basic-unsigned-byte-p-of-rem
   (implies (and (unsigned-byte-p n a)
                 (natp b))
            (unsigned-byte-p n (rem a b)))
-  :hints(("Goal"
-          :in-theory (e/d (rem-is-mod-when-naturals)
-                          (rem mod unsigned-byte-p)))))
-
-
+  :enable (rem-is-mod-when-naturals)
+  :disable (rem mod unsigned-byte-p)
+  :short "Remainder of an N-bit unsigned by a natural creates an N-bit unsigned.")
 
 
 
 (defsection basic-signed-byte-p-of-truncate
+  :autodoc nil
 
 ; Unfortunately the asymmetry of signed-byte-p makes the signed-byte-p
 ; lemmas for truncate and floor ugly.
@@ -1509,8 +1587,7 @@ declarations."
 
   ;; Wrapping it all up into a coherent top-level theorem:
 
-  (defthmd basic-signed-byte-p-of-truncate-split
-    ;; Stronger form.  We leave this disabled since it can case split.
+  (defruled basic-signed-byte-p-of-truncate-split
     (implies (and (signed-byte-p n a)
                   (integerp b))
              (equal (signed-byte-p n (truncate a b))
@@ -1521,20 +1598,24 @@ declarations."
             :do-not '(generalize fertilize eliminate-destructors)
             :do-not-induct t)
            (and stable-under-simplificationp
-                '(:in-theory (enable signed-byte-p)))))
+                '(:in-theory (enable signed-byte-p))))
+    :short "Truncate of an N-bit signed by an integer is <b>usually</b> an
+            N-bit signed.  (Strong form, case splitting, disabled by default)."
+    :long "<p>See also @(see basic-signed-byte-p-of-truncate), which we leave
+           enabled.</p>")
 
-  (defthm basic-signed-byte-p-of-truncate
-    ;; Weaker form.  Won't case split so it's probably safe enough to leave
-    ;; enabled, even though it's a bit unsatisfying.
+  (defrule basic-signed-byte-p-of-truncate
     (implies (and (signed-byte-p n a)
                   (integerp b)
                   (not (and (equal a (- (expt 2 (- n 1))))
                             (equal b -1))))
              (signed-byte-p n (truncate a b)))
-    :hints(("Goal" :in-theory (enable basic-signed-byte-p-of-truncate-split))))
+    :enable basic-signed-byte-p-of-truncate-split
+    :short "Truncating an N-bit signed by an integer is <b>usually</b> an N-bit
+            signed.  (Weak form, enabled by default)."
+    :long "<p>See also @(see basic-signed-byte-p-of-truncate-split).</p>")
 
-  (defthmd basic-signed-byte-p-of-floor-split
-    ;; Stronger form.  We leave this disabled since it can case split.
+  (defrule basic-signed-byte-p-of-floor-split
     (implies (and (signed-byte-p n a)
                   (integerp b))
              (equal (signed-byte-p n (floor a b))
@@ -1545,20 +1626,24 @@ declarations."
             :do-not '(generalize fertilize eliminate-destructors)
             :do-not-induct t)
            (and stable-under-simplificationp
-                '(:in-theory (enable signed-byte-p)))))
+                '(:in-theory (enable signed-byte-p))))
+    :short "Floor of an N-bit signed by an integer is <b>usually</b> an N-bit
+            signed.  (Strong form, case splitting, disabled by default)."
+    :long "<p>See also @(see basic-signed-byte-p-of-floor).</p>")
 
-  (defthm basic-signed-byte-p-of-floor
-    ;; Weaker form.  Won't case split so it's probably safe enough to leave
-    ;; enabled, even though it's a bit unsatisfying.
+  (defrule basic-signed-byte-p-of-floor
     (implies (and (signed-byte-p n a)
                   (integerp b)
                   (not (and (equal a (- (expt 2 (- n 1))))
                             (equal b -1))))
              (signed-byte-p n (floor a b)))
-    :hints(("Goal" :in-theory (enable basic-signed-byte-p-of-floor-split)))))
-
+    :enable basic-signed-byte-p-of-floor-split
+    :short "Floor of an N-bit signed by an integer is <b>usually</b> an N-bit
+            signed.  (Weak form, enabled by default)."
+    :long "<p>See also @(see basic-signed-byte-p-of-floor-split).</p>"))
 
 (defsection basic-signed-byte-p-of-mod
+  :autodoc nil
 
   (local (include-book "ihs/quotient-remainder-lemmas" :dir :system))
 
@@ -1595,11 +1680,11 @@ declarations."
   ;; That leaves only the case where B is zero.  In that case MOD-OF-ZERO shows
   ;; us that the mod is A.  So in this case we need that A is a signed-byte-p.
 
-  (defthm basic-signed-byte-p-of-mod
+  (defrule basic-signed-byte-p-of-mod
     (implies (and (signed-byte-p n a)
                   (signed-byte-p n b))
-             (signed-byte-p n (mod a b))))
-
+             (signed-byte-p n (mod a b)))
+    :short "Mod of N-bit signed by N-bit signed creates an N-bit signed.")
 
   ;; Same argument now for REM.
 
@@ -1627,8 +1712,9 @@ declarations."
                                    (rem truncate))
                    ))))
 
-  (defthm basic-signed-byte-p-of-rem
+  (defrule basic-signed-byte-p-of-rem
     (implies (and (signed-byte-p n a)
                   (signed-byte-p n b))
-             (signed-byte-p n (rem a b)))))
+             (signed-byte-p n (rem a b)))
+    :short "Rem of N-bit signed by N-bit signed creates an N-bit signed."))
 
