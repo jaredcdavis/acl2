@@ -35,8 +35,11 @@
 (include-book "expr")
 (include-book "eval")
 (include-book "bignum")
+(include-book "bigops")
+(include-book "bigexpr")
 (include-book "llvm/ops")
 (include-book "llvm/opstest")
+
 
 (defxdoc nativearith
   :short "A library of ``native'' machine-like arithmetic expressions with a
@@ -46,6 +49,8 @@ strong connection to <a href='http://llvm.org/'>LLVM</a> assembly code."
 
 <p>This work is exploratory prototyping.  Our short-term goal is to develop a
 very fast way to execute @(see sv::svex) expressions.</p>
+
+<h5>Native Arithmetic Operations and Expressions</h5>
 
 <p>We define a simple expression format; see @(see expr).  Our expressions
 consist of constants, variables, and applications of certain, pre-defined @(see
@@ -61,6 +66,8 @@ see @(see eval).  We can then write ACL2 functions that construct expressions
 and use ACL2 to reason about the meaning of the expressions that these
 functions produce.</p>
 
+<h5>Native Arithmetic Compiler</h5>
+
 <p>For each primitive operation, there is a small, corresponding definition in
 <a href='http://llvm.org/'>LLVM</a> assembly code.  Our intention is for these
 LLVM definitions to exactly implement our ACL2 semantics.  Of course, we cannot
@@ -69,7 +76,7 @@ these functions are small, we have been careful when writing them, and we at
 least have a basic test suite that runs them against their ACL2
 counterparts; see @(see llvm-operations).</p>
 
-<p>Building on top of these LLVM definitions, we implement a compiler to
+<p>(LIES) Building on top of these LLVM definitions, we implement a compiler to
 convert our expressions into corresponding LLVM assembly code fragments.  This
 compiler is also unverified, but it is relatively simple.  The resulting
 assembly code can be given to LLVM to compile into machine code, which gives us
@@ -77,16 +84,29 @@ a way to execute expressions ``on the metal'' without the overhead of an
 interpreter.  It also makes it straightforward to evaluate these expressions
 from languages like C.</p>
 
-<p>We hope to implement (and prove correct) a translator from svexes into
-nexprs.  We then hope to combine this translator with our compiler to LLVM to
-obtain a very fast way to execute our hardware models and to integrate them
-into external programs.</p>
+<h5>Bignum Representation and Expressions</h5>
 
-")
+
+
+<h5>SV Connection</h5>
+
+
+<p>(LIES) We implement (and prove correct) a translator from svexes into bignum
+expressions.  We then hope to combine this translator with our compiler to LLVM
+to obtain a very fast way to execute our hardware models and to integrate them
+into external programs.</p>")
+
+(xdoc::order-subtopics nativearith
+                       (i64 operations llvm-operations expr eval
+                            bignum bigops bigexpr))
 
 (local (xdoc::set-default-parents nativearith))
 
+
+
+
 (defxdoc why-llvm
+  :parents (llvm-operations)
   :short "Some comments about our choice of LLVM as a backend and comments
 about other alternatives that we considered."
 

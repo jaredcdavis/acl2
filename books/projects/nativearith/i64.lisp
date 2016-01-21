@@ -70,7 +70,11 @@ own type.</p>")
              (integerp x)))
   (defthm signed-byte-p-64-when-i64-p
     (implies (i64-p x)
-             (signed-byte-p 64 x))))
+             (signed-byte-p 64 x))
+    :rule-classes ((:rewrite) (:forward-chaining)))
+  (defthm i64-p-when-signed-byte-p-64
+    (implies (signed-byte-p 64 x)
+             (i64-p x))))
 
 (define i64-fix ((x i64-p))
   :short "Fixing function for signed, 64-bit integers."
