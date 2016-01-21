@@ -33,7 +33,7 @@
 (in-package "NATIVEARITH")
 (include-book "bigint")
 (include-book "i64")
-(include-book "ops")
+(include-book "smallops")
 (include-book "std/util/defrule" :dir :system)
 (local (include-book "tools/do-not" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))

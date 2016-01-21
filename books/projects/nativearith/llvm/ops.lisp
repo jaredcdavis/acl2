@@ -31,20 +31,20 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "../ops")
+(include-book "../smallops")
 (include-book "centaur/quicklisp/cffi" :dir :system)
 (include-book "std/util/defconsts" :dir :system)
 ; (depends-on "ops-raw.lsp")
 ; (depends-on "libnarith_ops.so")
 
-(defxdoc llvm-operations
+(defxdoc llvm-smallops
   :parents (nativearith)
-  :short "The LLVM counterparts of our ACL2 @(see operations), and a basic way
+  :short "The LLVM counterparts of our ACL2 @(see smallops), and a basic way
 to test them."
 
-  :long "<p>Each of our @(see operations) has a corresponding definition in
-LLVM assembly code.  To try to ensure the correspondence of these definitions,
-we arrange so that we can call the LLVM functions from within ACL2 and at least
+  :long "<p>Each of our @(see smallops) has a corresponding definition in LLVM
+assembly code.  To try to ensure the correspondence of these definitions, we
+arrange so that we can call the LLVM functions from within ACL2 and at least
 run basic tests on them.</p>
 
 <p>In brief, the basic mechanism is:</p>
@@ -68,7 +68,7 @@ corresponds to its ACL2 definition; see the file
 
 </ul>")
 
-(local (xdoc::set-default-parents llvm-operations))
+(local (xdoc::set-default-parents llvm-smallops))
 
 (defconsts *narith-llvm-directory* (cbd))
 
@@ -77,7 +77,7 @@ corresponds to its ACL2 definition; see the file
   :returns (mv (errmsg "NIL on success or an error message on failure.")
                state)
   :short "Load a shared library with the LLVM versions of the nativearith
-          operations."
+          @(see smallops)."
   :long "<p>Logically this is just an oracle read.  Normally there should be no
          reason to call this explicitly because we automatically run it
          whenever the @('ops.lisp') book is loaded.</p>"
@@ -89,7 +89,7 @@ corresponds to its ACL2 definition; see the file
 
 (defmacro def-narith-op (name args)
   `(define ,(intern$ (str::cat "NARITH-" (symbol-name name)) "NATIVEARITH") ,args
-     :parents (,name llvm-operations)
+     :parents (,name llvm-smallops)
      :returns (ans)
      :short ,(cat "Native LLVM counterpart to @(see " (xdoc::full-escape-symbol name) ").")
      :long "<p>This function should be redefined ``under the hood'' when the

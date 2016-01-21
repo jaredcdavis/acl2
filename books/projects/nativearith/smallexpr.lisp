@@ -31,12 +31,12 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "ops")
+(include-book "smallops")
 (include-book "centaur/fty/deftypes" :dir :system)
 (local (std::add-default-post-define-hook :fix))
 
 (defflexsum var
-  :parents (expr)
+  :parents (smallexpr)
   :kind nil
   (:var
    :short "Represents a single variable."
@@ -85,11 +85,11 @@ with more complex names or positive indices are represented essentially as
 
 
 (defsection fn
-  :parents (expr)
+  :parents (smallexpr)
   :short "Represents a valid function name."
   :long "<p>Syntactically, we allow most symbols to be used as function names.
-However, our expression language is fixed: only a few certain pre-defined @(see
-operations) are actually understood.</p>"
+         However, our expression language is fixed: only a few certain
+         pre-defined @(see smallops) are actually understood.</p>"
   :autodoc nil
   (local (xdoc::set-default-parents fn))
 
@@ -126,7 +126,7 @@ operations) are actually understood.</p>"
       :equal eq)))
 
 
-(deftypes expr
+(deftypes smallexpr
   :prepwork
   ((local (defthm var-p-of-quote
             (equal (var-p (cons 'quote x))
@@ -138,9 +138,9 @@ operations) are actually understood.</p>"
                             nil))
             :hints(("Goal" :in-theory (enable fn-p var-p))))))
 
-  (defflexsum expr
+  (defflexsum smallexpr
     :parents (nativearith)
-    :short "Represents a single expression."
+    :short "Represents a single, ``small'' (64-bit) inteeger expression."
     (:var
      :short "A variable."
      :cond (or (atom x)
@@ -158,12 +158,12 @@ operations) are actually understood.</p>"
     (:call
      :short "A function applied to some expressions."
      :fields ((fn   :acc-body (car x) :type fn)
-              (args :acc-body (cdr x) :type exprlist))
+              (args :acc-body (cdr x) :type smallexprlist))
      :ctor-body (hons fn args))
-    :long "<p>This is our basic expression type.  Our expressions are either
-           variables, constants, or functions applied to some arguments.  They
-           are always honsed.</p>")
+    :long "<p>This is our basic expression type for ``native'' machine-like
+           arithmetic.  Our expressions are either variables, constants, or
+           functions applied to some arguments.  They are always honsed.</p>")
 
-  (deflist exprlist
-    :elt-type expr
+  (deflist smallexprlist
+    :elt-type smallexpr
     :true-listp t))

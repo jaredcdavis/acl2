@@ -31,49 +31,49 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "ops")
-(include-book "expr")
+(include-book "smallops")
+(include-book "smallexpr")
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 
-(defalist env
+(defalist smallenv
   :key-type var-p
   :val-type i64-p
   :true-listp t
   :parents (eval)
   :short "An alist mapping @(see var)s to @(see i64)s, often used as an
-          environment to @(see eval).")
+          environment to @(see smalleval).")
 
-(define env-lookup ((var var-p) (env env-p))
-  :parents (env)
-  :short "Look up a variable's value in an @(see env). (Slow, logically nice)"
+(define smallenv-lookup ((var var-p) (env smallenv-p))
+  :parents (smallenv)
+  :short "Look up a variable's value in an @(see smallenv). (Slow, logically nice)"
   :long "<p>This is our preferred normal form for environment lookups.  Any
             unbound variables are treated as 0.</p>"
   :returns (val i64-p)
   (mbe :logic
-       (i64-fix (cdr (hons-assoc-equal (var-fix var) (env-fix env))))
+       (i64-fix (cdr (hons-assoc-equal (var-fix var) (smallenv-fix env))))
        :exec
        (let ((look (hons-assoc-equal var env)))
          (if look
              (cdr look)
            0))))
 
-(define env-lookup-fast ((var var-p) (env env-p))
-  :parents (env)
-  :short "Fast version of @(see env-lookup) for environments that are @(see
+(define smallenv-lookup-fast ((var var-p) (env smallenv-p))
+  :parents (smallenv)
+  :short "Fast version of @(see smallenv-lookup) for environments that are @(see
           acl2::fast-alists)."
   :enabled t
-  :prepwork ((local (in-theory (enable env-lookup))))
-  (mbe :logic (env-lookup var env)
+  :prepwork ((local (in-theory (enable smallenv-lookup))))
+  (mbe :logic (smallenv-lookup var env)
        :exec  (let ((look (hons-get var env)))
                 (if look
                     (cdr look)
                   0))))
 
 
-(defsection apply
+(defsection smallapply
 
-  (defconst *optable*
+  (defconst *smalloptable*
     '((i64bitnot (a))
       (i64sminus (a))
       (i64eql    (a b))
@@ -94,29 +94,29 @@
       (i64sdiv   (a b))
       (i64udiv   (a b))))
 
-  (defun apply-collect-args (n max)
+  (defun smallapply-collect-args (n max)
     (declare (xargs :measure (nfix (- (nfix max) (nfix n)))))
     (let* ((n   (nfix n))
            (max (nfix max)))
       (if (zp (- max n))
           nil
         (cons `(i64list-nth ,n args)
-              (apply-collect-args (+ 1 n) max)))))
+              (smallapply-collect-args (+ 1 n) max)))))
 
-  (defun apply-cases (optable)
+  (defun smallapply-cases (optable)
     (b* (((when (atom optable))
           '((otherwise
              (or (raise "Attempting to apply unknown function ~x0~%" fn)
                  0))))
          ((list fn args) (car optable))
          ;; Note: could add arity checking as in svex-apply-cases-fn
-         (call `(,fn . ,(apply-collect-args 0 (len args)))))
+         (call `(,fn . ,(smallapply-collect-args 0 (len args)))))
       (cons `(,fn ,call)
-            (apply-cases (cdr optable)))))
+            (smallapply-cases (cdr optable)))))
 
   (make-event
-   `(define apply ((fn fn-p) (args i64list-p))
-      :parents (eval)
+   `(define smallapply ((fn fn-p) (args i64list-p))
+      :parents (smalleval)
       :returns (ans i64-p)
       :short "Apply an arbitrary, known function to a list of arguments."
       :long "<p>This is basically just a big case statement that lets us
@@ -125,66 +125,68 @@
              <p>Note that we extract the arguments using @(see i64list-nth),
              which effectively coerces any missing arguments to 0.</p>"
       :verbosep t
-      (case (fn-fix fn) . ,(apply-cases *optable*))
+      (case (fn-fix fn) . ,(smallapply-cases *smalloptable*))
       ///
-      (defthm open-apply-when-known
+      (defthm open-smallapply-when-known
         (implies (syntaxp (quotep fn))
-                 (equal (apply fn args)
-                        (case (fn-fix fn) . ,(apply-cases *optable*))))))))
+                 (equal (smallapply fn args)
+                        (case (fn-fix fn) . ,(smallapply-cases *smalloptable*))))))))
 
 
-(defines eval
+(defines smalleval
 
-  (define eval ((x expr-p) (env env-p))
+  (define smalleval ((x smallexpr-p) (env smallenv-p))
     :parents (nativearith)
-    :short "Semantics of expressions."
+    :short "Semantics @(see smallexpr)s.  Evaluates an expression under an
+            environment that gives @(see i64) values to its variables,
+            producing an @(see i64)."
     :returns (val i64-p)
-    :measure (expr-count x)
+    :measure (smallexpr-count x)
     :verify-guards nil
     ;; This is really nice, but eventually we will probably want to complicate
     ;; it so that we can have short-circuit evaluation of IF, etc.
-    (expr-case x
-      :var (env-lookup-fast x.name env)
+    (smallexpr-case x
+      :var (smallenv-lookup-fast x.name env)
       :const x.val
-      :call (apply x.fn (eval-list x.args env))))
+      :call (smallapply x.fn (smalleval-list x.args env))))
 
-  (define eval-list ((x exprlist-p) (env env-p))
+  (define smalleval-list ((x smallexprlist-p) (env smallenv-p))
     :returns (vals i64list-p)
-    :measure (exprlist-count x)
+    :measure (smallexprlist-count x)
     (if (atom x)
         nil
-      (cons (eval (car x) env)
-            (eval-list (cdr x) env))))
+      (cons (smalleval (car x) env)
+            (smalleval-list (cdr x) env))))
   ///
-  (verify-guards eval)
-  (deffixequiv-mutual eval)
+  (verify-guards smalleval)
+  (deffixequiv-mutual smalleval)
 
-  (defthm eval-of-make-expr-var
-    (equal (eval (make-expr-var :name name) env)
-           (env-lookup-fast name env))
-    :hints(("Goal" :expand ((eval (make-expr-var :name name) env)))))
+  (defthm smalleval-of-make-smallexpr-var
+    (equal (smalleval (make-smallexpr-var :name name) env)
+           (smallenv-lookup-fast name env))
+    :hints(("Goal" :expand ((smalleval (make-smallexpr-var :name name) env)))))
 
-  (defthm eval-of-make-expr-const
-    (equal (eval (make-expr-const :val val) env)
+  (defthm smalleval-of-make-smallexpr-const
+    (equal (smalleval (make-smallexpr-const :val val) env)
            (i64-fix val))
-    :hints(("Goal" :expand ((eval (make-expr-const :val val) env)))))
+    :hints(("Goal" :expand ((smalleval (make-smallexpr-const :val val) env)))))
 
-  (defthm eval-of-make-expr-call
-    (equal (eval (make-expr-call :fn fn :args args) env)
-           (apply fn (eval-list args env)))
-    :hints(("Goal" :expand ((eval (make-expr-call :fn fn :args args) env)))))
+  (defthm smalleval-of-make-smallexpr-call
+    (equal (smalleval (make-smallexpr-call :fn fn :args args) env)
+           (smallapply fn (smalleval-list args env)))
+    :hints(("Goal" :expand ((smalleval (make-smallexpr-call :fn fn :args args) env)))))
 
-  (defthm eval-list-when-atom
+  (defthm smalleval-list-when-atom
     (implies (atom x)
-             (equal (eval-list x env)
+             (equal (smalleval-list x env)
                     nil))
-    :hints(("Goal" :expand ((eval-list x env)))))
+    :hints(("Goal" :expand ((smalleval-list x env)))))
 
-  (defthm eval-list-of-cons
-    (equal (eval-list (cons a x) env)
-           (cons (eval a env)
-                 (eval-list x env)))
-    :hints(("Goal" :expand ((eval-list (cons a x) env))))))
+  (defthm smalleval-list-of-cons
+    (equal (smalleval-list (cons a x) env)
+           (cons (smalleval a env)
+                 (smalleval-list x env)))
+    :hints(("Goal" :expand ((smalleval-list (cons a x) env))))))
 
 
 

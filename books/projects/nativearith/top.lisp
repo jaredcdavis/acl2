@@ -31,9 +31,9 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "ops")
-(include-book "expr")
-(include-book "eval")
+(include-book "smallops")
+(include-book "smallexpr")
+(include-book "smalleval")
 (include-book "bigint")
 (include-book "bigops")
 (include-book "bigexpr")
@@ -51,23 +51,23 @@ strong connection to <a href='http://llvm.org/'>LLVM</a> assembly code."
 <p>This work is exploratory prototyping.  Our short-term goal is to develop a
 very fast way to execute @(see sv::svex) expressions.</p>
 
-<h5>Native Arithmetic Operations and Expressions</h5>
+<h5>Small Operations and Expressions</h5>
 
-<p>We define a simple expression format; see @(see expr).  Our expressions
-consist of constants, variables, and applications of certain, pre-defined @(see
-operations) which are styled after ``native'' machine arithmetic
-operations&mdash;bitwise AND/OR/XOR, comparisons, adds, multiplies, etc.  For
-now all of these operations just take and return 64-bit integers.  (We may some
-day want to implement operations of other sizes, but keeping everything the
-same size seems like a good way to start, since it makes guard proofs and type
-theorems very easy.)</p>
+<p>We define a simple expression format; see @(see smallexpr).  These
+expressions consist of constants, variables, and applications of certain,
+pre-defined @(see operations) which are styled after ``native'' machine
+arithmetic operations&mdash;bitwise AND/OR/XOR, comparisons, adds, multiplies,
+etc.  For now all of these @(see smallops) just take and return 64-bit
+integers.  (We may some day want to implement operations of other sizes, but
+keeping everything the same size seems like a good way to start, since it makes
+guard proofs and type theorems very easy.)</p>
 
 <p>We define the meaning of native expressions by way of a simple evaluator;
-see @(see eval).  We can then write ACL2 functions that construct expressions
-and use ACL2 to reason about the meaning of the expressions that these
-functions produce.</p>
+see @(see smalleval).  We can then write ACL2 functions that construct
+expressions and use ACL2 to reason about the meaning of the expressions that
+these functions produce.</p>
 
-<h5>Native Arithmetic Compiler</h5>
+<h5>Compiling Small Expressions to LLVM</h5>
 
 <p>For each primitive operation, there is a small, corresponding definition in
 <a href='http://llvm.org/'>LLVM</a> assembly code.  Our intention is for these
@@ -75,7 +75,7 @@ LLVM definitions to exactly implement our ACL2 semantics.  Of course, we cannot
 prove that this code is correct since LLVM is defined outside of ACL2.  But
 these functions are small, we have been careful when writing them, and we at
 least have a basic test suite that runs them against their ACL2
-counterparts; see @(see llvm-operations).</p>
+counterparts; see @(see llvm-smallops).</p>
 
 <p>(LIES) Building on top of these LLVM definitions, we implement a compiler to
 convert our expressions into corresponding LLVM assembly code fragments.  This
@@ -85,12 +85,17 @@ a way to execute expressions ``on the metal'' without the overhead of an
 interpreter.  It also makes it straightforward to evaluate these expressions
 from languages like C.</p>
 
-<h5>Bigint Representation and Expressions</h5>
+<h5>Big Integers, Operations, and Expressions</h5>
 
+<p>We define a basic @(see bigint) representation and implement various
+arithmetic operations on bigints as @(see bigops).  Using this representation,
+we define another expression languagefor representing arbitrary-precision
+bignum computations; see @(see bigexpr) and @(see bigeval).</p>
 
+<p>(LIES) We implement (and prove correct) a compiler from bigexprs into
+smallexprs.</p>
 
 <h5>SV Connection</h5>
-
 
 <p>(LIES) We implement (and prove correct) a translator from svexes into bigint
 expressions.  We then hope to combine this translator with our compiler to LLVM
@@ -98,7 +103,7 @@ to obtain a very fast way to execute our hardware models and to integrate them
 into external programs.</p>")
 
 (xdoc::order-subtopics nativearith
-                       (i64 operations llvm-operations expr eval
+                       (i64 smallops llvm-smallops smallexpr smalleval
                             bigint bigops bigexpr bigeval))
 
 (local (xdoc::set-default-parents nativearith))

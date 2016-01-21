@@ -32,7 +32,7 @@
 
 (in-package "NATIVEARITH")
 (include-book "bigint")
-(include-book "expr")
+(include-book "smallexpr")
 
 (deftypes bigexpr
   :prepwork

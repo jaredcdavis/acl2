@@ -42,7 +42,7 @@
 
 (defxdoc i64
   :parents (nativearith)
-  :short "The signed integer type that all of our @(see operations) produce."
+  :short "The signed integer type that all of our @(see smallops) produce."
   :long "<p>We could just use @(see signed-byte-p) for this, but it seems
 convenient for congruence reasoning, and just for less typing, to introduce our
 own type.</p>")

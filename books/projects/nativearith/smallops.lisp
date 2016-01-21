@@ -42,7 +42,7 @@
 (defmacro uint64-max ()
   (1- (expt 2 64)))
 
-(defxdoc operations
+(defxdoc smallops
   :parents (nativearith)
   :short "Operations on 64-bit signed integers."
 
@@ -66,7 +66,7 @@ i.e., 1 for true or 0 for false.  We considered instead using -1 for true and 0
 for false, which in some cases might work more nicely with bitwise arithmetic
 operations, but so far we haven't had a good reason to do it that way.</p>")
 
-(local (xdoc::set-default-parents operations))
+(local (xdoc::set-default-parents smallops))
 
 (defmacro def-i64-arith1 (name &key short long logic exec prepwork
                                guard-hints (inline 't) (fix 'logext) rest)
