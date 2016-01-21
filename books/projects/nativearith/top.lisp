@@ -37,6 +37,7 @@
 (include-book "bignum")
 (include-book "bigops")
 (include-book "bigexpr")
+(include-book "bigeval")
 (include-book "llvm/ops")
 (include-book "llvm/opstest")
 
@@ -98,7 +99,7 @@ into external programs.</p>")
 
 (xdoc::order-subtopics nativearith
                        (i64 operations llvm-operations expr eval
-                            bignum bigops bigexpr))
+                            bignum bigops bigexpr bigeval))
 
 (local (xdoc::set-default-parents nativearith))
 

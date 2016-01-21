@@ -389,3 +389,54 @@ for details.</p>")
     (if (and a.endp b.endp)
         nil
       (two-bignums-induct a.rest b.rest))))
+
+(define bool->bignum ((x booleanp))
+  :returns (num bignum-p)
+  :inline t
+  (if x
+      (bignum-1)
+    (bignum-0)))
+
+
+
+(deflist bignumlist
+  :elt-type bignum-p
+  :true-listp t)
+
+(define bignumlist-nth ((n natp)
+                        (x bignumlist-p))
+  :returns (nth bignum-p)
+  (mbe :logic (bignum-fix (nth n x))
+       :exec
+       (or (case n
+             (0 (first x))
+             (1 (second x))
+             (2 (third x))
+             (otherwise (nth n x)))
+           (bignum-0)))
+  :prepwork
+  ((local (include-book "arithmetic/top-with-meta" :dir :system))
+   (local (include-book "std/lists/nth" :dir :system))
+   (local (defthm l0
+            (equal (< (+ c a) (+ c b))
+                   (< a b))))
+
+   (local (defthm |(< (+ -1 a) b)|
+            (equal (< (+ -1 a) b)
+                   (< a (+ 1 b)))
+            :hints(("Goal"
+                    :in-theory (disable l0)
+                    :use ((:instance l0 (a (+ -1 a)) (b b) (c 1)))))))
+
+   (local (defthm bignum-p-of-nth-when-bignumlist-p
+            (implies (bignumlist-p x)
+                     (equal (bignum-p (nth n x))
+                            (< (nfix n) (len x))))))
+
+   (local (defthm bignum-fix-of-nth-when-bignumlist-p
+            (implies (bignumlist-p x)
+                     (equal (bignum-fix (nth n x))
+                            (if (< (nfix n) (len x))
+                                (nth n x)
+                              (bignum-0))))))))
+

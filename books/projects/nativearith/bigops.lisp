@@ -167,10 +167,8 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
 
 (define bignum-equalp ((a bignum-p)
                        (b bignum-p))
-  :short "Semantic equality of two @(see bignum)s, returning @(see bignum-1) or
-@(see bignum-0) for true or false, respectively."
-  :long "<p>This is a semantic (not structural) equality check.  That is, the
-answer says whether @('a') and @('b') have the same @(see bignum-val)s.</p>"
+  :parents (bignum-equal)
+  :short "Boolean-valued version of @(see bignum-equal)."
   :returns (bool booleanp :rule-classes :type-prescription)
   :measure (+ (bignum-count a) (bignum-count b))
   (b* (((bignum a))
@@ -188,12 +186,24 @@ answer says whether @('a') and @('b') have the same @(see bignum-val)s.</p>"
     :expand ((bignum-val a)
              (bignum-val b))))
 
+(define bignum-equal ((a bignum-p)
+                      (b bignum-p))
+  :returns (ans bignum-p)
+  :short "Analogue of @('(equal a b)') for @(see bignum)s."
+  :long "<p>This is a semantic (not structural) equality check.  That is, the
+answer says whether @('a') and @('b') have the same @(see bignum-val)s.</p>"
+  :inline t
+  (bool->bignum (bignum-equalp a b))
+  ///
+  (defrule bignum-equal-correct
+    (equal (bignum-equal a b)
+           (bool->bignum (equal (bignum-val a) (bignum-val b))))))
+
+
 (define bignum-not-equalp ((a bignum-p)
                            (b bignum-p))
-  :short "Semantic inequality of two @(see bignum)s, returning @(see bignum-1)
-or @(see bignum-0) for true or false, respectively."
-  :long "<p>This is a semantic (not structural) equality check.  That is, the
-answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
+  :parents (bignum-not-equal)
+  :short "Boolean-valued version of @(see bignum-not-equal)."
   :returns (bool booleanp :rule-classes :type-prescription)
   :measure (+ (bignum-count a) (bignum-count b))
   (b* (((bignum a))
@@ -210,6 +220,20 @@ answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
     :induct (two-bignums-induct a b)
     :expand ((bignum-val a)
              (bignum-val b))))
+
+(define bignum-not-equal ((a bignum-p)
+                          (b bignum-p))
+  :returns (ans bignum-p)
+  :short "Analogue of @('(not (equal a b))') for @(see bignum)s."
+  :long "<p>This is a semantic (not structural) equality check.  That is, the
+answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
+  :inline t
+  (bool->bignum (bignum-not-equalp a b))
+  ///
+  (defrule bignum-not-equal-correct
+    (equal (bignum-not-equal a b)
+           (bool->bignum (not (equal (bignum-val a) (bignum-val b)))))))
+
 
 (define bignum-scmp ((a bignum-p)
                      (b bignum-p))
@@ -245,10 +269,10 @@ answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
 
 (define bignum-sltp ((a bignum-p)
                      (b bignum-p))
-  :short "Signed @(see <) for @(see bignum)s."
   :returns (ans booleanp :rule-classes :type-prescription)
+  :parents (bignum-slt)
+  :short "Boolean-valued version of @(see bignum-slt)."
   :measure (+ (bignum-count a) (bignum-count b))
-  :verify-guards nil
   (b* (((bignum a))
        ((bignum b))
        ((when (and a.endp b.endp))
@@ -266,12 +290,22 @@ answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
     :expand ((bignum-val a)
              (bignum-val b))))
 
+(define bignum-slt ((a bignum-p)
+                    (b bignum-p))
+  :returns (ans bignum-p)
+  :short "Signed @(see <) for @(see bignum)s."
+  :inline t
+  (bool->bignum (bignum-sltp a b))
+  ///
+  (defrule bignum-slt-correct
+    (equal (bignum-slt a b)
+           (bool->bignum (< (bignum-val a) (bignum-val b))))))
+
 (define bignum-slep ((a bignum-p)
                      (b bignum-p))
-  :short "Signed @(see <=) for @(see bignum)s."
+  :short "Boolean-valued version of @(see bignum-sle)."
   :returns (ans booleanp :rule-classes :type-prescription)
   :measure (+ (bignum-count a) (bignum-count b))
-  :verify-guards nil
   (b* (((bignum a))
        ((bignum b))
        ((when (and a.endp b.endp))
@@ -289,12 +323,23 @@ answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
     :expand ((bignum-val a)
              (bignum-val b))))
 
+(define bignum-sle ((a bignum-p)
+                    (b bignum-p))
+  :returns (ans bignum-p)
+  :short "Signed @(see <=) for @(see bignum)s."
+  :inline t
+  (bool->bignum (bignum-slep a b))
+  ///
+  (defrule bignum-sle-correct
+    (equal (bignum-sle a b)
+           (bool->bignum (<= (bignum-val a) (bignum-val b))))))
+
 (define bignum-sgtp ((a bignum-p)
                      (b bignum-p))
-  :short "Signed @(see >) for @(see bignum)s."
+  :parents (bignum-sgt)
+  :short "Boolean-valued version of @(see bignum-sgt)."
   :returns (ans booleanp :rule-classes :type-prescription)
   :measure (+ (bignum-count a) (bignum-count b))
-  :verify-guards nil
   (b* (((bignum a))
        ((bignum b))
        ((when (and a.endp b.endp))
@@ -312,12 +357,23 @@ answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
     :expand ((bignum-val a)
              (bignum-val b))))
 
+(define bignum-sgt ((a bignum-p)
+                    (b bignum-p))
+  :returns (ans bignum-p)
+  :short "Signed @(see >) for @(see bignum)s."
+  :inline t
+  (bool->bignum (bignum-sgtp a b))
+  ///
+  (defrule bignum-sgt-correct
+    (equal (bignum-sgt a b)
+           (bool->bignum (> (bignum-val a) (bignum-val b))))))
+
 (define bignum-sgep ((a bignum-p)
                      (b bignum-p))
-  :short "Signed @(see >=) for @(see bignum)s."
+  :parents (bignum-sge)
+  :short "Boolean-valued version of @(see bignum-sge)."
   :returns (ans booleanp :rule-classes :type-prescription)
   :measure (+ (bignum-count a) (bignum-count b))
-  :verify-guards nil
   (b* (((bignum a))
        ((bignum b))
        ((when (and a.endp b.endp))
@@ -334,3 +390,14 @@ answer says whether @('a') and @('b') have a different @(see bignum-val)s.</p>"
     :do-not-induct t
     :expand ((bignum-val a)
              (bignum-val b))))
+
+(define bignum-sge ((a bignum-p)
+                    (b bignum-p))
+  :returns (ans bignum-p)
+  :short "Signed @(see >=) for @(see bignum)s."
+  :inline t
+  (bool->bignum (bignum-sgep a b))
+  ///
+  (defrule bignum-sge-correct
+    (equal (bignum-sge a b)
+           (bool->bignum (>= (bignum-val a) (bignum-val b))))))
