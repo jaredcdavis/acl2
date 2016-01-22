@@ -32,19 +32,61 @@
 
 (in-package "NATIVEARITH")
 (include-book "bigint")
-(include-book "smallexpr")
+(include-book "util")
+
+(defflexsum bigvar
+  :parents (bigexpr)
+  :kind nil
+  (:bigvar
+   :short "Represents a single variable."
+   :type-name bigvar
+   :cond t
+   :shape (if (atom x)
+              (or (stringp x)
+                  (and (symbolp x)
+                       (not (booleanp x))))
+            (and (eq (car x) :bigvar)
+                 (consp (cdr x))
+                 (not (and (or (stringp (cadr x))
+                               (and (symbolp (cadr x))
+                                    (not (booleanp (cadr x)))))
+                           (not (cddr x))))))
+   :fields
+   ((name :acc-body (if (atom x)
+                        x
+                      (cadr x))
+          :doc "The name of this variable.  This can be any ACL2 object at all,
+                but our representation is optimized for @(see stringp) or @(see
+                symbolp) names.")
+    (subscripts :type nat-listp
+                :acc-body (if (atom x) nil (cddr x))
+                :default nil
+                :doc "An list of natural valued ``subscripts'' for this
+                      variable.  Variables with the same name but different
+                      subscripts are regarded as distinct."))
+   :ctor-body
+   (if (and (or (stringp name)
+                (and (symbolp name)
+                     (not (booleanp name))))
+            (not subscripts))
+       (hons-copy name)
+     (hons :bigvar (hons name subscripts)))
+   :long "<p>This is virtually identical to a @(see smallvar), but having them
+as two separate types helps to keep tabs of which kind of variables we are
+working with.</p>"))
+
 
 (deftypes bigexpr
   :prepwork
-  ((local (defthm var-p-of-quote
-            (equal (var-p (cons 'quote x))
+  ((local (defthm bigvar-p-of-quote
+            (equal (bigvar-p (cons 'quote x))
                    nil)
-            :hints(("Goal" :in-theory (enable var-p)))))
-   (local (defthm var-p-of-fncall
+            :hints(("Goal" :in-theory (enable bigvar-p)))))
+   (local (defthm bigvar-p-of-fncall
             (implies (fn-p fn)
-                     (equal (var-p (cons fn args))
+                     (equal (bigvar-p (cons fn args))
                             nil))
-            :hints(("Goal" :in-theory (enable fn-p var-p))))))
+            :hints(("Goal" :in-theory (enable fn-p bigvar-p))))))
 
   (defflexsum bigexpr
     :parents (nativearith)
@@ -52,14 +94,9 @@
     (:var
      :short "A variable."
      :cond (or (atom x)
-               (var-p x))
-     :fields ((name :acc-body x :type var-p))
-     :ctor-body name
-     :long "<p>For now we reuse the representation of variables from ordinary
-            @(see expr)s.  BOZO it might be better to arrange so that expr vars
-            have an extra level of indexing, so that we can just assign the
-            blocks of a bigexpr var to successive use successive indices of
-            some base variable.</p>")
+               (bigvar-p x))
+     :fields ((name :acc-body x :type bigvar-p))
+     :ctor-body name)
     (:const
      :short "A quoted constant."
      :cond (eq (car x) 'quote)

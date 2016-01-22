@@ -31,27 +31,27 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
-(include-book "smallops")
-(include-book "centaur/fty/deftypes" :dir :system)
+(include-book "i64")
+(include-book "util")
 (local (std::add-default-post-define-hook :fix))
 
-(defflexsum var
+(defflexsum smallvar
   :parents (smallexpr)
   :kind nil
-  (:var
+  (:smallvar
    :short "Represents a single variable."
-   :type-name var
+   :type-name smallvar
    :cond t
    :shape (if (atom x)
               (or (stringp x)
                   (and (symbolp x)
                        (not (booleanp x))))
-            (and (eq (car x) :var)
+            (and (eq (car x) :smallvar)
                  (consp (cdr x))
                  (not (and (or (stringp (cadr x))
                                (and (symbolp (cadr x))
                                     (not (booleanp (cadr x)))))
-                           (eql (cddr x) 0)))))
+                           (not (cddr x))))))
    :fields
    ((name :acc-body (if (atom x)
                         x
@@ -59,84 +59,42 @@
           :doc "The name of this variable.  This can be any ACL2 object at all,
                 but our representation is optimized for @(see stringp) or @(see
                 symbolp) names.")
-    (index :type natp
-           :acc-body (if (atom x) 0 (cddr x))
-           :default 0
-           :doc "An natural valued index for this variable.  The default
-                 index (which enjoys an optimized representation) is 0."))
+    (subscripts :type nat-listp
+                :acc-body (if (atom x) nil (cddr x))
+                :default nil
+                :doc "An list of natural valued ``subscripts'' for this
+                      variable.  Variables with the same name but different
+                      subscripts are regarded as distinct."))
    :ctor-body
    (if (and (or (stringp name)
                 (and (symbolp name)
                      (not (booleanp name))))
-            (eql index 0))
+            (not subscripts))
        (hons-copy name)
-     (hons :var (hons name index)))
+     (hons :smallvar (hons name subscripts)))
    :long "<p>Think of variables as simple structs with a @('name') and
-@('index'), where the name can be any ACL2 object.  These indices have <b>no
-special meaning</b> and are only intended to be a convenient way to distinguish
-variables from one another.  That is, if two variables have the same name but
-different indices, then we think of them as being two completely different
-variables.</p>
+@('subscripts'), where the name can be any ACL2 object.  These subscripts have
+<b>no special meaning</b> and are only intended to be a convenient way to
+distinguish variables from one another.  That is, if two variables have the
+same name but different subscripts, then we think of them as being two
+completely different variables with no special relationship to one another.</p>
 
 <p>Our variables are always honsed.  Variables with simple names (strings or
-non-boolean symbols) and index 0 are represented as just their name.  Variables
-with more complex names or positive indices are represented essentially as
-@('(:var name . index)').</p>"))
-
-
-(defsection fn
-  :parents (smallexpr)
-  :short "Represents a valid function name."
-  :long "<p>Syntactically, we allow most symbols to be used as function names.
-         However, our expression language is fixed: only a few certain
-         pre-defined @(see smallops) are actually understood.</p>"
-  :autodoc nil
-  (local (xdoc::set-default-parents fn))
-
-  (define fn-p (x)
-    :short "Recognizer for valid @(see fn)s."
-    (and (symbolp x)
-         (not (eq x 'quote))
-         (not (keywordp x)))
-    ///
-    (defthm fn-p-compound-recognizer
-      (implies (fn-p x)
-               (symbolp x))
-      :rule-classes :compound-recognizer))
-
-  (define fn-fix (x)
-    :short "Fixing function for @(see fn)s."
-    :returns (x fn-p)
-    (if (fn-p x)
-        x
-      'id)
-    ///
-    (defthm fn-fix-when-fn-p
-      (implies (fn-p x)
-               (equal (fn-fix x) x))))
-
-  (defsection fn-equiv
-    :short "Equivalence relation for @(see fn)s."
-    (deffixtype fn
-      :pred fn-p
-      :fix fn-fix
-      :equiv fn-equiv
-      :define t
-      :forward t
-      :equal eq)))
-
+non-boolean symbols) and no subscripts are represented just with their name.
+Variables with more complex names or subscripts are represented essentially as
+@('(:var name . subscripts)').</p>"))
 
 (deftypes smallexpr
   :prepwork
-  ((local (defthm var-p-of-quote
-            (equal (var-p (cons 'quote x))
+  ((local (defthm smallvar-p-of-quote
+            (equal (smallvar-p (cons 'quote x))
                    nil)
-            :hints(("Goal" :in-theory (enable var-p)))))
-   (local (defthm var-p-of-fncall
+            :hints(("Goal" :in-theory (enable smallvar-p)))))
+   (local (defthm smallvar-p-of-fncall
             (implies (fn-p fn)
-                     (equal (var-p (cons fn args))
+                     (equal (smallvar-p (cons fn args))
                             nil))
-            :hints(("Goal" :in-theory (enable fn-p var-p))))))
+            :hints(("Goal" :in-theory (enable fn-p smallvar-p))))))
 
   (defflexsum smallexpr
     :parents (nativearith)
@@ -144,8 +102,8 @@ with more complex names or positive indices are represented essentially as
     (:var
      :short "A variable."
      :cond (or (atom x)
-               (var-p x))
-     :fields ((name :acc-body x :type var-p))
+               (smallvar-p x))
+     :fields ((name :acc-body x :type smallvar-p))
      :ctor-body name)
     (:const
      :short "A quoted constant."

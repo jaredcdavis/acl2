@@ -38,28 +38,28 @@
 (local (std::add-default-post-define-hook :fix))
 
 (defalist smallenv
-  :key-type var-p
+  :key-type smallvar-p
   :val-type i64-p
   :true-listp t
   :parents (eval)
-  :short "An alist mapping @(see var)s to @(see i64)s, often used as an
+  :short "An alist mapping @(see smallvar)s to @(see i64)s, often used as an
           environment to @(see smalleval).")
 
-(define smallenv-lookup ((var var-p) (env smallenv-p))
+(define smallenv-lookup ((var smallvar-p) (env smallenv-p))
   :parents (smallenv)
   :short "Look up a variable's value in an @(see smallenv). (Slow, logically nice)"
   :long "<p>This is our preferred normal form for environment lookups.  Any
             unbound variables are treated as 0.</p>"
   :returns (val i64-p)
   (mbe :logic
-       (i64-fix (cdr (hons-assoc-equal (var-fix var) (smallenv-fix env))))
+       (i64-fix (cdr (hons-assoc-equal (smallvar-fix var) (smallenv-fix env))))
        :exec
        (let ((look (hons-assoc-equal var env)))
          (if look
              (cdr look)
            0))))
 
-(define smallenv-lookup-fast ((var var-p) (env smallenv-p))
+(define smallenv-lookup-fast ((var smallvar-p) (env smallenv-p))
   :parents (smallenv)
   :short "Fast version of @(see smallenv-lookup) for environments that are @(see
           acl2::fast-alists)."

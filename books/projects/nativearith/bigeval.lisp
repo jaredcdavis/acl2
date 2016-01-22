@@ -36,28 +36,28 @@
 (local (std::add-default-post-define-hook :fix))
 
 (defalist bigenv
-  :key-type var-p
+  :key-type bigvar-p
   :val-type bigint-p
   :true-listp t
   :parents (bigeval)
-  :short "An alist mapping @(see var)s to @(see bigint)s, often used as an
+  :short "An alist mapping @(see bigvar)s to @(see bigint)s, often used as an
           environment to @(see bigeval).")
 
-(define bigenv-lookup ((var var-p) (env bigenv-p))
+(define bigenv-lookup ((var bigvar-p) (env bigenv-p))
   :parents (bigenv)
   :short "Look up a variable's value in an @(see bigenv). (Slow, logically nice)"
   :long "<p>This is our preferred normal form for environment lookups.  Any
             unbound variables are treated as 0.</p>"
   :returns (val bigint-p)
   (mbe :logic
-       (bigint-fix (cdr (hons-assoc-equal (var-fix var) (bigenv-fix env))))
+       (bigint-fix (cdr (hons-assoc-equal (bigvar-fix var) (bigenv-fix env))))
        :exec
        (let ((look (hons-assoc-equal var env)))
          (if look
              (cdr look)
            (bigint-0)))))
 
-(define bigenv-lookup-fast ((var var-p) (env bigenv-p))
+(define bigenv-lookup-fast ((var bigvar-p) (env bigenv-p))
   :parents (bigenv)
   :short "Fast version of @(see bigenv-lookup) for environments that are @(see
           acl2::fast-alists)."
