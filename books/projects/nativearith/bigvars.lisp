@@ -64,14 +64,18 @@
     (if (atom x)
         nil
       (append (bigexpr-vars (car x))
-              (bigexprlist-vars (cdr x))))))
+              (bigexprlist-vars (cdr x)))))
+  ///
+  (deffixequiv-mutual bigexpr-vars))
 
 
 (defines bigexpr-vars-memofal
+  :parents (fast-bigexpr-vars)
   :short "Efficient algorithm for collecting elements from nodes."
 
   (define bigexpr-vars-memofal ((x bigexpr-p) seenfal ans)
-    :returns (mv new-seenfal new-ans)
+    :returns (mv new-seenfal
+                 (new-ans bigvarlist-p :hyp (bigvarlist-p ans)))
     :measure (bigexpr-count x)
     (b* ((kind (bigexpr-kind x))
          ((when (eq kind :const))
@@ -86,7 +90,8 @@
 
   (define bigexprlist-vars-memofal ((x bigexprlist-p) seenfal ans)
     :measure (bigexprlist-count x)
-    :returns (mv new-seenfal new-ans)
+    :returns (mv new-seenfal
+                 (new-ans bigvarlist-p :hyp (bigvarlist-p ans)))
     (b* (((when (atom x))
           (mv seenfal ans))
          ((mv seenfal ans) (bigexpr-vars-memofal (car x) seenfal ans)))
@@ -156,3 +161,25 @@
           :hints(("Goal"
                   :use ((:functional-instance nct-nodelist-collect-memofal-correct
                          . ,fi-pairs)))))))))
+
+(define fast-bigexpr-vars ((x bigexpr-p))
+  :returns (vars bigvarlist-p)
+  (b* (((mv seenlst ans)
+        (bigexpr-vars-memofal (bigexpr-fix x) nil nil)))
+    (fast-alist-free seenlst)
+    ans)
+  ///
+  (defthm fast-bigexpr-vars-elim
+    (set-equiv (fast-bigexpr-vars x)
+               (bigexpr-vars x))))
+
+(define fast-bigexprlist-vars ((x bigexprlist-p))
+  :returns (vars bigvarlist-p)
+  (b* (((mv seenlst ans)
+        (bigexprlist-vars-memofal (bigexprlist-fix x) nil nil)))
+    (fast-alist-free seenlst)
+    ans)
+  ///
+  (defthm fast-bigexprlist-vars-elim
+    (set-equiv (fast-bigexprlist-vars x)
+               (bigexprlist-vars x))))
