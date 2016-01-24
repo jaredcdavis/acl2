@@ -33,5 +33,9 @@
 (in-package "NATIVEARITH")
 (include-book "centaur/sv/portcullis" :dir :system)
 (include-book "top")
+;; These shouldn't be part of top because they're just needed locally
+(include-book "node-collect")
+(include-book "node-collect-triv")
 (include-book "xdoc/all" :dir :system)
 (xdoc::save "./manual" :redef-okp t)
+

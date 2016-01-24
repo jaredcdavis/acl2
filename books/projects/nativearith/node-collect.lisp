@@ -98,12 +98,12 @@ subtrees that we have already visited: this will make our algorithm linear in
 the size of the DAG, instead of exponential.  A good way to do that is to use a
 fast alist as a seen table.</p>
 
-<p>To avoid using lots of stack space, we'd like to have a tail call in the
-node case.  But to get that, we need to mark the node as seen <b>before</b> we
-recur down to collect its childrens' variables.  But this is awful for
-reasoning because it really screws up the invariant about our seen table.  In
-particular, the seen table now records that we have ``seen'' certain nodes that
-are in a weird, partial state (because we're actually still in the process of
+<p>To avoid using lots of stack space, we'd also like to have a tail call in
+the node case.  But to get that, we need to mark the node as seen <b>before</b>
+we recur down to collect its childrens' variables.  But this is awful for
+reasoning and really screws up the invariant about our seen table.  In
+particular, the seen table now claims we have ``seen'' certain nodes that are
+in a weird, partial state (because we're actually still in the process of
 visiting them), so you can't just say something like: all variables for every
 node we have seen are already accounted for.</p>
 
@@ -115,6 +115,12 @@ and prove the correctness of the generic algorithm.</p>
 
 <h3>Details and Usage</h3>
 
+<p>Note: the following scheme essentially requires that we record that
+<b>all</b> nodes have been visited, even if they are trivial leaf nodes with no
+elements and no children.  If you want to avoid visiting ``trivial'' nodes,
+read on, but then also see @(see node-collect-generic-trivial), which extends
+this basic scheme to allow for skipping nodes.</p>
+
 <p>Our proof is about some functions that are constrained via an @(see
 acl2::encapsulate).  You will need to arrange a @(see
 acl2::functional-instantiation) that maps your particular tree structure to
@@ -122,24 +128,24 @@ these generic functions.</p>
 
 <dl>
 
-<dt>(node-children node) &rarr; children</dt>
+<dt>(nc-node-children node) &rarr; children</dt>
 <dd>Explains how to get the children nodes for a node.</dd>
 
-<dt>(node-elems node) &rarr; elems</dt>
+<dt>(nc-node-elems node) &rarr; elems</dt>
 <dd>Extracts the desired elements to accumulate from a single node.</dd>
 
-<dt>(node-count node) &rarr; count</dt>
-<dt>(nodelist-count node) &rarr; count</dt>
+<dt>(nc-node-count node) &rarr; count</dt>
+<dt>(nc-nodelist-count node) &rarr; count</dt>
 <dd>Measures for your function to ensure termination.</dd>
 
 </dl>
 
-<p>We try to assume almost nothing about these functions.  In fact really
-the only constraints are on the count functions.  We require:</p>
+<p>We try to assume almost nothing about these functions.  In fact really the
+only constraints are on the count functions.  We require:</p>
 
-@(def posp-of-node-count)
-@(def nodelist-count-definition)
-@(def nodelist-count-of-children-smaller)
+@(def posp-of-nc-node-count)
+@(def nc-nodelist-count-definition)
+@(def nc-nodelist-count-of-children-smaller)
 
 
 <h3>Logically Nice Specification</h3>
@@ -194,57 +200,57 @@ variables from @(see acl2::sv) expressions.</p>")
 ;;                  (nodelistp (cdr x)))))))
 
 (encapsulate
-  (((node-children *) => *)
-   ((node-elems *) => *)
-   ((node-count *) => *)
-   ((nodelist-count *) => *))
+  (((nc-node-children *) => *)
+   ((nc-node-elems *) => *)
+   ((nc-node-count *) => *)
+   ((nc-nodelist-count *) => *))
 
-  (local (defun node-children (node)
+  (local (defun nc-node-children (node)
            ;; The children of a node.
            (if (atom node)
                nil
              (cdr node))))
 
-  (local (defun node-elems (node)
+  (local (defun nc-node-elems (node)
            ;; The things to collect from each node
            (if (atom node)
                (list node)
              nil)))
 
   (local (mutual-recursion
-          (defun node-count (x)
+          (defun nc-node-count (x)
             (declare (xargs :measure (acl2::two-nats-measure (acl2-count x) 1)))
-            (+ 1 (if (node-children x)
-                     (nodelist-count (node-children x))
+            (+ 1 (if (nc-node-children x)
+                     (nc-nodelist-count (nc-node-children x))
                    0)))
-          (defun nodelist-count (x)
+          (defun nc-nodelist-count (x)
             (declare (xargs :measure (acl2::two-nats-measure (acl2-count x) 0)))
             (if (atom x)
                 0
               (+ 1
-                 (node-count (car x))
-                 (nodelist-count (cdr x)))))))
+                 (nc-node-count (car x))
+                 (nc-nodelist-count (cdr x)))))))
 
-  (defthmd posp-of-node-count
-    (posp (node-count node))
+  (defthmd posp-of-nc-node-count
+    (posp (nc-node-count node))
     :rule-classes :type-prescription)
 
-  (defthmd nodelist-count-definition
-    (equal (nodelist-count nodes)
+  (defthmd nc-nodelist-count-definition
+    (equal (nc-nodelist-count nodes)
            (if (atom nodes)
                0
              (+ 1
-                (node-count (car nodes))
-                (nodelist-count (cdr nodes)))))
-    :rule-classes ((:definition :controller-alist ((nodelist-count t)))))
+                (nc-node-count (car nodes))
+                (nc-nodelist-count (cdr nodes)))))
+    :rule-classes ((:definition :controller-alist ((nc-nodelist-count t)))))
 
-  (defthmd nodelist-count-of-children-smaller
-    (< (nodelist-count (node-children node))
-       (node-count node))
+  (defthmd nc-nodelist-count-of-children-smaller
+    (< (nc-nodelist-count (nc-node-children node))
+       (nc-node-count node))
     :rule-classes ((:rewrite) (:linear))))
 
-(local (in-theory (enable posp-of-node-count
-                          nodelist-count-of-children-smaller)))
+(local (in-theory (enable posp-of-nc-node-count
+                          nc-nodelist-count-of-children-smaller)))
 
 
 (local
@@ -252,37 +258,37 @@ variables from @(see acl2::sv) expressions.</p>")
    ;; This is a little ugly --- we're trying not to assume very many
    ;; constraints, but, as a result, we have to prove a lot of nonsense.
 
-   (defrule natp-of-nodelist-count
-     (natp (nodelist-count nodes))
+   (defrule natp-of-nc-nodelist-count
+     (natp (nc-nodelist-count nodes))
      :rule-classes :type-prescription
      :induct (len nodes)
-     :enable nodelist-count-definition)
+     :enable nc-nodelist-count-definition)
 
-   (defrule nodelist-count-when-atom
+   (defrule nc-nodelist-count-when-atom
      (implies (atom nodes)
-              (equal (nodelist-count nodes) 0))
-     :enable nodelist-count-definition)
+              (equal (nc-nodelist-count nodes) 0))
+     :enable nc-nodelist-count-definition)
 
-   (defrule nodelist-count-of-cons
-     (equal (nodelist-count (cons node nodes))
-            (+ 1 (node-count node) (nodelist-count nodes)))
-     :enable nodelist-count-definition)
+   (defrule nc-nodelist-count-of-cons
+     (equal (nc-nodelist-count (cons node nodes))
+            (+ 1 (nc-node-count node) (nc-nodelist-count nodes)))
+     :enable nc-nodelist-count-definition)
 
-   (defrule equal-nodelist-count-0
-     (equal (equal (nodelist-count nodes) 0)
+   (defrule equal-nc-nodelist-count-0
+     (equal (equal (nc-nodelist-count nodes) 0)
             (atom nodes))
-     :enable nodelist-count-definition
+     :enable nc-nodelist-count-definition
      :induct (len nodes))
 
-   (defrule nodelist-count-of-cdr-strong
+   (defrule nc-nodelist-count-of-cdr-strong
      (implies (consp nodes)
-              (< (nodelist-count (cdr nodes))
-                 (nodelist-count nodes)))
+              (< (nc-nodelist-count (cdr nodes))
+                 (nc-nodelist-count nodes)))
      :rule-classes :linear)
 
-   (defrule nodelist-count-of-cdr-weak
-     (<= (nodelist-count (cdr nodes))
-         (nodelist-count nodes))
+   (defrule nc-nodelist-count-of-cdr-weak
+     (<= (nc-nodelist-count (cdr nodes))
+         (nc-nodelist-count nodes))
      :rule-classes :linear)))
 
 
@@ -292,11 +298,11 @@ variables from @(see acl2::sv) expressions.</p>")
   (define node-collect ((x "Root node to collect elements from."))
     :returns (elements "All transitively collected elements.")
     :short "Logically nice way (but inefficient) to collect elements from nodes."
-    :measure (acl2::two-nats-measure (node-count x) 1)
-    (append (node-elems x)
-            (nodelist-collect (node-children x))))
+    :measure (acl2::two-nats-measure (nc-node-count x) 1)
+    (append (nc-node-elems x)
+            (nodelist-collect (nc-node-children x))))
   (define nodelist-collect (x)
-    :measure (acl2::two-nats-measure (nodelist-count x) 0)
+    :measure (acl2::two-nats-measure (nc-nodelist-count x) 0)
     (if (atom x)
         nil
       (append (node-collect (car x))
@@ -313,17 +319,17 @@ variables from @(see acl2::sv) expressions.</p>")
                  (new-ans     "All elements that have been found in @('x'), plus
                                the original answer."))
     :short "Efficient algorithm for collecting elements from nodes."
-    :measure (node-count x)
+    :measure (nc-node-count x)
     (b* (((when (hons-get x seenfal))
           (mv seenfal ans))
          (seenfal (hons-acons x t seenfal))
-         (ans     (append (node-elems x) ans))
-         (children (node-children x))
+         (ans     (append (nc-node-elems x) ans))
+         (children (nc-node-children x))
          ((unless children)
           (mv seenfal ans)))
-      (nodelist-collect-memofal (node-children x) seenfal ans)))
+      (nodelist-collect-memofal (nc-node-children x) seenfal ans)))
   (define nodelist-collect-memofal (x seenfal ans)
-    :measure (nodelist-count x)
+    :measure (nc-nodelist-count x)
     (b* (((when (atom x))
           (mv seenfal ans))
          ((mv seenfal ans) (node-collect-memofal (car x) seenfal ans)))
@@ -337,17 +343,17 @@ variables from @(see acl2::sv) expressions.</p>")
    :verify-guards nil
    :flag-local nil
    (define node-collect-memolst (x seenlst ans)
-    :measure (node-count x)
+    :measure (nc-node-count x)
     (b* (((when (member x seenlst))
           (mv seenlst ans))
          (seenlst (cons x seenlst))
-         (ans     (append (node-elems x) ans))
-         (children (node-children x))
+         (ans     (append (nc-node-elems x) ans))
+         (children (nc-node-children x))
          ((unless children)
           (mv seenlst ans)))
-      (nodelist-collect-memolst (node-children x) seenlst ans)))
+      (nodelist-collect-memolst (nc-node-children x) seenlst ans)))
   (define nodelist-collect-memolst (x seenlst ans)
-    :measure (nodelist-count x)
+    :measure (nc-nodelist-count x)
     (b* (((when (atom x))
           (mv seenlst ans))
          ((mv seenlst ans) (node-collect-memolst (car x) seenlst ans)))
@@ -458,9 +464,9 @@ variables from @(see acl2::sv) expressions.</p>")
  (defsection node-collect-basics
 
    (defrule node-collect-when-leaf
-     (implies (not (node-children x))
+     (implies (not (nc-node-children x))
               (equal (node-collect x)
-                     (acl2::list-fix (node-elems x))))
+                     (acl2::list-fix (nc-node-elems x))))
      :expand ((node-collect x)))
 
    (defrule nodelist-collect-when-atom
@@ -494,27 +500,27 @@ variables from @(see acl2::sv) expressions.</p>")
      :hints(("Goal" :in-theory (enable set-equiv))))
 
    (defrule node-collect-has-all-immediate-elements
-     (subsetp-equal (node-elems x) (node-collect x))
+     (subsetp-equal (nc-node-elems x) (node-collect x))
      :expand ((node-collect x)))
 
    (defrule node-collect-has-all-child-elements
-     (implies (and (member child (node-children node))
+     (implies (and (member child (nc-node-children node))
                    (member elem (node-collect child)))
               (member elem (node-collect node)))
      :rule-classes ((:rewrite)
                     (:rewrite :corollary
                      (implies (and (member elem (node-collect child))
-                                   (member child (node-children node)))
+                                   (member child (nc-node-children node)))
                               (member elem (node-collect node)))))
      :expand ((node-collect node)))
 
    (defrule node-collect-has-all-child-elements-2
-     (implies (member child (node-children node))
+     (implies (member child (nc-node-children node))
               (subsetp (node-collect child) (node-collect node)))
      :expand ((node-collect node)))
 
    (defrule node-collect-has-all-children-subset-members
-     (implies (subsetp children (node-children node))
+     (implies (subsetp children (nc-node-children node))
               (subsetp (nodelist-collect children) (node-collect node)))
      :expand ((node-collect node)))
 
@@ -539,10 +545,10 @@ variables from @(see acl2::sv) expressions.</p>")
    :verify-guards nil
    :flag-local nil
    (define subnodes (x)
-     :measure (node-count x)
-     (cons x (subnodes-list (node-children x))))
+     :measure (nc-node-count x)
+     (cons x (subnodes-list (nc-node-children x))))
    (define subnodes-list (x)
-     :measure (nodelist-count x)
+     :measure (nc-nodelist-count x)
      (if (atom x)
          nil
        (append (subnodes (car x))
@@ -553,22 +559,22 @@ variables from @(see acl2::sv) expressions.</p>")
      :expand ((subnodes node)))
 
    (defrule subnodes-when-leaf
-     (implies (not (node-children x))
+     (implies (not (nc-node-children x))
               (equal (subnodes x) (list x)))
      :expand ((subnodes x)))
 
    (defthm member-of-subnodes-when-not-member-of-children-subnodes
-     (implies (not (member a (subnodes-list (node-children x))))
+     (implies (not (member a (subnodes-list (nc-node-children x))))
               (iff (member a (subnodes x))
                    (equal a x)))
      :hints(("Goal" :expand ((subnodes x)))))
 
-   (defrule subsetp-of-subnodes-list-of-node-children-and-subnodes
-     (subsetp (subnodes-list (node-children node))
+   (defrule subsetp-of-subnodes-list-of-nc-node-children-and-subnodes
+     (subsetp (subnodes-list (nc-node-children node))
               (subnodes node))
      :expand ((subnodes node))
      :rule-classes ((:rewrite)
-                    (:forward-chaining :trigger-terms ((subnodes-list (node-children node))))))
+                    (:forward-chaining :trigger-terms ((subnodes-list (nc-node-children node))))))
 
    (defrule subnodes-list-when-atom
      (implies (atom nodes)
@@ -599,11 +605,11 @@ variables from @(see acl2::sv) expressions.</p>")
 
    (defthm-subnodes-flag
      (defthm not-member-of-subnodes-by-count
-       (implies (< (node-count x) (node-count y))
+       (implies (< (nc-node-count x) (nc-node-count y))
                 (not (member y (subnodes x))))
        :flag subnodes)
      (defthm not-member-of-subnodes-list-by-count
-       (implies (< (nodelist-count x) (node-count y))
+       (implies (< (nc-nodelist-count x) (nc-node-count y))
                 (not (member y (subnodes-list x))))
        :flag subnodes-list))
 
@@ -674,7 +680,7 @@ variables from @(see acl2::sv) expressions.</p>")
 
    (defrule nodelist-inv-of-children
      (implies (node-inv node seenlst)
-              (nodelist-inv (node-children node) seenlst))
+              (nodelist-inv (nc-node-children node) seenlst))
      :hints (("Goal"
               :expand ((subnodes node))
               :in-theory (enable node-inv-necc))
@@ -725,7 +731,7 @@ variables from @(see acl2::sv) expressions.</p>")
      :hints ((witness)))
 
    (defexample node-inv-example-args
-     :pattern (member z (subnodes-list (node-children sub)))
+     :pattern (member z (subnodes-list (nc-node-children sub)))
      :templates (sub z)
      :instance-rulename node-inv-instancing)
 
@@ -771,12 +777,12 @@ variables from @(see acl2::sv) expressions.</p>")
      (local (defthm l0
               (implies (and (member-equal x seenlst)
                             (node-inv x seenlst))
-                       (subsetp-equal (subnodes-list (node-children x)) seenlst))
+                       (subsetp-equal (subnodes-list (nc-node-children x)) seenlst))
               :hints((witness))))
 
      (local (defthm l1
               (implies (node-inv x seenlst)
-                       (nodelist-inv (node-children x) (cons x seenlst)))
+                       (nodelist-inv (nc-node-children x) (cons x seenlst)))
               :hints((witness))))
 
      (local (defthm l2
@@ -848,7 +854,7 @@ variables from @(see acl2::sv) expressions.</p>")
    :verify-guards nil
    (if (atom seenlst)
        nil
-     (append (node-elems (car seenlst))
+     (append (nc-node-elems (car seenlst))
              (seenlist-elems (cdr seenlst))))
    ///
    (defthm seenlist-elems-when-atom
@@ -858,7 +864,7 @@ variables from @(see acl2::sv) expressions.</p>")
 
    (defthm seenlist-elems-of-cons
      (equal (seenlist-elems (cons a x))
-            (append (node-elems a)
+            (append (nc-node-elems a)
                     (seenlist-elems x))))
 
    (defthm seenlist-elems-of-append
@@ -866,9 +872,9 @@ variables from @(see acl2::sv) expressions.</p>")
             (append (seenlist-elems x)
                     (seenlist-elems y))))
 
-   (defthm node-elems-in-seenlist-elems-when-member
+   (defthm nc-node-elems-in-seenlist-elems-when-member
      (implies (member a x)
-              (subsetp (node-elems a) (seenlist-elems x)))
+              (subsetp (nc-node-elems a) (seenlist-elems x)))
      :hints(("Goal" :induct (len x))))
 
    (defthm seenlist-elems-when-subset

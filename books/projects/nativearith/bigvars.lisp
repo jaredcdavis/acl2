@@ -73,16 +73,16 @@
   (define bigexpr-vars-memofal ((x bigexpr-p) seenfal ans)
     :returns (mv new-seenfal new-ans)
     :measure (bigexpr-count x)
-    ;; BOZO this works but unfortunately it puts even constants into the fast
-    ;; alist.  It would be better to add some kind of "This node is trivial so
-    ;; don't process it" condition into node-collect.
-    (b* (((when (hons-get x seenfal))
+    (b* ((kind (bigexpr-kind x))
+         ((when (eq kind :const))
+          ;; Too trivial, don't even want to mark it as seen.
           (mv seenfal ans))
-         (seenfal (hons-acons x t seenfal)))
-      (bigexpr-case x
-        :const (mv seenfal ans)
-        :var   (mv seenfal (cons x.name ans))
-        :call  (bigexprlist-vars-memofal x.args seenfal ans))))
+         ((when (hons-get x seenfal))
+          (mv seenfal ans))
+         (seenfal (hons-acons x t seenfal))
+         ((when (eq kind :var))
+          (mv seenfal (cons (bigexpr-var->name x) ans))))
+      (bigexprlist-vars-memofal (bigexpr-call->args x) seenfal ans)))
 
   (define bigexprlist-vars-memofal ((x bigexprlist-p) seenfal ans)
     :measure (bigexprlist-count x)
@@ -93,10 +93,10 @@
       (bigexprlist-vars-memofal (cdr x) seenfal ans)))
 
   ///
-  ;; Proof of correctness using the generic node-collect proof.
+  ;; Proof of correctness using the generic node-collect-triv proof.
+  ;; Almost plug-and-play, but we need a slightly modified count.
 
-  (local (include-book "node-collect"))
-
+  (local (include-book "node-collect-triv"))
   (local (defines my-count
            :verify-guards nil
            (define my-count (x)
@@ -127,33 +127,32 @@
 
   (make-event
    (let ((fi-pairs
-          '((node-children
-             (lambda (x) (bigexpr-case x
-                           :const nil
-                           :var nil
-                           :call x.args)))
-            (node-elems
-             (lambda (x) (bigexpr-case x
-                           :const nil
-                           :var (list x.name)
-                           :call nil)))
-            (node-count               (lambda (x) (my-count x)))
-            (nodelist-count           (lambda (x) (my-count-list x)))
-            (node-collect             (lambda (x) (bigexpr-vars x)))
-            (nodelist-collect         (lambda (x) (bigexprlist-vars x)))
-            (node-collect-memofal     (lambda (x seen ans) (bigexpr-vars-memofal x seen ans)))
-            (nodelist-collect-memofal (lambda (x seen ans) (bigexprlist-vars-memofal x seen ans))))))
+          '((nct-node-trivial             (lambda (x) (bigexpr-case x :const)))
+            (nct-node-children            (lambda (x) (bigexpr-case x
+                                                        :const nil
+                                                        :var nil
+                                                        :call x.args)))
+            (nct-node-elems               (lambda (x) (bigexpr-case x
+                                                        :const nil
+                                                        :var (list x.name)
+                                                        :call nil)))
+            (nct-node-count               (lambda (x) (my-count x)))
+            (nct-nodelist-count           (lambda (x) (my-count-list x)))
+            (nct-node-collect             (lambda (x) (bigexpr-vars x)))
+            (nct-nodelist-collect         (lambda (x) (bigexprlist-vars x)))
+            (nct-node-collect-memofal     (lambda (x seen ans) (bigexpr-vars-memofal x seen ans)))
+            (nct-nodelist-collect-memofal (lambda (x seen ans) (bigexprlist-vars-memofal x seen ans))))))
      `(progn
         (defthm bigexpr-vars-memofal-correct
           (b* (((mv ?new-seenlst new-ans) (bigexpr-vars-memofal x nil ans)))
             (set-equiv new-ans (append ans (bigexpr-vars x))))
           :hints(("Goal"
-                  :use ((:functional-instance node-collect-memofal-correct
+                  :use ((:functional-instance nct-node-collect-memofal-correct
                          . ,fi-pairs)))))
 
         (defthm bigexprlist-vars-memofal-correct
           (b* (((mv ?new-seenlst new-ans) (bigexprlist-vars-memofal x nil ans)))
             (set-equiv new-ans (append ans (bigexprlist-vars x))))
           :hints(("Goal"
-                  :use ((:functional-instance nodelist-collect-memofal-correct
+                  :use ((:functional-instance nct-nodelist-collect-memofal-correct
                          . ,fi-pairs)))))))))
