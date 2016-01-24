@@ -75,7 +75,6 @@
 as two separate types helps to keep tabs of which kind of variables we are
 working with.</p>"))
 
-
 (deftypes bigexpr
   :prepwork
   ((local (defthm bigvar-p-of-quote
@@ -113,4 +112,5 @@ working with.</p>"))
 
   (deflist bigexprlist
     :elt-type bigexpr
-    :true-listp t))
+    :true-listp t
+    :elementp-of-nil nil))

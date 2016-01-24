@@ -33,6 +33,7 @@
 (in-package "NATIVEARITH")
 (include-book "centaur/fty/deftypes" :dir :system)
 (include-book "centaur/fty/basetypes" :dir :system)
+(include-book "std/util/deflist" :dir :system)
 (local (std::add-default-post-define-hook :fix))
 
 (deflist nat-list

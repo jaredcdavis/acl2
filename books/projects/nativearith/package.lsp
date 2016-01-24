@@ -55,6 +55,16 @@
               with-redef
               do-not
               bitops
+              set-equiv
+              two-nats-measure
+
+              alist-keys
+              alist-vals
+
+              witness
+              defquant
+              defexample
+              set-reasoning
 
               str::cat
               str::natstr

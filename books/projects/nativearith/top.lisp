@@ -159,3 +159,6 @@ to target than C would be&mdash;we can still have as many variables as we like,
 and let it deal with issues like register allocation, calling conventions,
 etc.</p>")
 
+
+(defsection utilities
+  :short "Miscellaneous utilities used in the @(see nativearith) library.")
