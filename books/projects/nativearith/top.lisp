@@ -38,6 +38,7 @@
 (include-book "bigops")
 (include-book "bigexpr")
 (include-book "bigeval")
+(include-book "bigvars")
 (include-book "llvm/ops")
 (include-book "llvm/opstest")
 
@@ -104,7 +105,7 @@ into external programs.</p>")
 
 (xdoc::order-subtopics nativearith
                        (i64 smallops llvm-smallops smallexpr smalleval
-                            bigint bigops bigexpr bigeval))
+                            bigint bigops bigexpr bigeval bigvars))
 
 (local (xdoc::set-default-parents nativearith))
 
@@ -162,3 +163,4 @@ etc.</p>")
 
 (defsection utilities
   :short "Miscellaneous utilities used in the @(see nativearith) library.")
+

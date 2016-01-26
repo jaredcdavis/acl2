@@ -88,10 +88,10 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
                     ihsext-recursive-redefs)))
 
   (defrule bigint-lognot-correct
-    (equal (bigint-val (bigint-lognot a))
-           (lognot (bigint-val a)))
+    (equal (bigint->val (bigint-lognot a))
+           (lognot (bigint->val a)))
     :induct (bigint-lognot a)
-    :expand (bigint-val a)))
+    :expand (bigint->val a)))
 
 (define bigint-logand ((a bigint-p)
                        (b bigint-p))
@@ -110,12 +110,12 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   (verify-guards bigint-logand)
 
   (defrule bigint-logand-correct
-    (equal (bigint-val (bigint-logand a b))
-           (logand (bigint-val a)
-                   (bigint-val b)))
+    (equal (bigint->val (bigint-logand a b))
+           (logand (bigint->val a)
+                   (bigint->val b)))
     :induct (two-bigints-induct a b)
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-logior ((a bigint-p)
                        (b bigint-p))
@@ -134,12 +134,12 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   (verify-guards bigint-logior)
 
   (defrule bigint-logior-correct
-    (equal (bigint-val (bigint-logior a b))
-           (logior (bigint-val a)
-                   (bigint-val b)))
+    (equal (bigint->val (bigint-logior a b))
+           (logior (bigint->val a)
+                   (bigint->val b)))
     :induct (two-bigints-induct a b)
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-logxor ((a bigint-p)
                        (b bigint-p))
@@ -158,12 +158,12 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   (verify-guards bigint-logxor)
 
   (defrule bigint-logxor-correct
-    (equal (bigint-val (bigint-logxor a b))
-           (logxor (bigint-val a)
-                   (bigint-val b)))
+    (equal (bigint->val (bigint-logxor a b))
+           (logxor (bigint->val a)
+                   (bigint->val b)))
     :induct (two-bigints-induct a b)
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-equalp ((a bigint-p)
                        (b bigint-p))
@@ -181,23 +181,23 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   ///
   (defrule bigint-equalp-correct
     (equal (bigint-equalp a b)
-           (equal (bigint-val a) (bigint-val b)))
+           (equal (bigint->val a) (bigint->val b)))
     :induct (two-bigints-induct a b)
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-equal ((a bigint-p)
                       (b bigint-p))
   :returns (ans bigint-p)
   :short "Analogue of @('(equal a b)') for @(see bigint)s."
   :long "<p>This is a semantic (not structural) equality check.  That is, the
-answer says whether @('a') and @('b') have the same @(see bigint-val)s.</p>"
+answer says whether @('a') and @('b') have the same @(see bigint->val)s.</p>"
   :inline t
   (bool->bigint (bigint-equalp a b))
   ///
   (defrule bigint-equal-correct
     (equal (bigint-equal a b)
-           (bool->bigint (equal (bigint-val a) (bigint-val b))))))
+           (bool->bigint (equal (bigint->val a) (bigint->val b))))))
 
 
 (define bigint-not-equalp ((a bigint-p)
@@ -216,23 +216,23 @@ answer says whether @('a') and @('b') have the same @(see bigint-val)s.</p>"
   ///
   (defrule bigint-not-equalp-correct
     (equal (bigint-not-equalp a b)
-           (not (equal (bigint-val a) (bigint-val b))))
+           (not (equal (bigint->val a) (bigint->val b))))
     :induct (two-bigints-induct a b)
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-not-equal ((a bigint-p)
                           (b bigint-p))
   :returns (ans bigint-p)
   :short "Analogue of @('(not (equal a b))') for @(see bigint)s."
   :long "<p>This is a semantic (not structural) equality check.  That is, the
-answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
+answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :inline t
   (bool->bigint (bigint-not-equalp a b))
   ///
   (defrule bigint-not-equal-correct
     (equal (bigint-not-equal a b)
-           (bool->bigint (not (equal (bigint-val a) (bigint-val b)))))))
+           (bool->bigint (not (equal (bigint->val a) (bigint->val b)))))))
 
 
 (define bigint-scmp ((a bigint-p)
@@ -259,14 +259,14 @@ answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   ///
   (defrule bigint-scmp-correct
     (equal (bigint-scmp a b)
-           (let ((av (bigint-val a))
-                 (bv (bigint-val b)))
+           (let ((av (bigint->val a))
+                 (bv (bigint->val b)))
              (cond ((equal av bv) :equal)
                    ((< av bv)     :less)
                    (t             :greater))))
     :induct (two-bigints-induct a b)
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-sltp ((a bigint-p)
                      (b bigint-p))
@@ -286,10 +286,10 @@ answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   ///
   (defrule bigint-sltp-correct
     (equal (bigint-sltp a b)
-           (< (bigint-val a) (bigint-val b)))
+           (< (bigint->val a) (bigint->val b)))
     :do-not-induct t
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-slt ((a bigint-p)
                     (b bigint-p))
@@ -300,7 +300,7 @@ answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   ///
   (defrule bigint-slt-correct
     (equal (bigint-slt a b)
-           (bool->bigint (< (bigint-val a) (bigint-val b))))))
+           (bool->bigint (< (bigint->val a) (bigint->val b))))))
 
 (define bigint-slep ((a bigint-p)
                      (b bigint-p))
@@ -320,10 +320,10 @@ answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   ///
   (defrule bigint-slep-correct
     (equal (bigint-slep a b)
-           (<= (bigint-val a) (bigint-val b)))
+           (<= (bigint->val a) (bigint->val b)))
     :do-not-induct t
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-sle ((a bigint-p)
                     (b bigint-p))
@@ -334,7 +334,7 @@ answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   ///
   (defrule bigint-sle-correct
     (equal (bigint-sle a b)
-           (bool->bigint (<= (bigint-val a) (bigint-val b))))))
+           (bool->bigint (<= (bigint->val a) (bigint->val b))))))
 
 (define bigint-sgtp ((a bigint-p)
                      (b bigint-p))
@@ -354,10 +354,10 @@ answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   ///
   (defrule bigint-sgtp-correct
     (equal (bigint-sgtp a b)
-           (> (bigint-val a) (bigint-val b)))
+           (> (bigint->val a) (bigint->val b)))
     :do-not-induct t
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-sgt ((a bigint-p)
                     (b bigint-p))
@@ -368,7 +368,7 @@ answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   ///
   (defrule bigint-sgt-correct
     (equal (bigint-sgt a b)
-           (bool->bigint (> (bigint-val a) (bigint-val b))))))
+           (bool->bigint (> (bigint->val a) (bigint->val b))))))
 
 (define bigint-sgep ((a bigint-p)
                      (b bigint-p))
@@ -388,10 +388,10 @@ answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   ///
   (defrule bigint-sgep-correct
     (equal (bigint-sgep a b)
-           (>= (bigint-val a) (bigint-val b)))
+           (>= (bigint->val a) (bigint->val b)))
     :do-not-induct t
-    :expand ((bigint-val a)
-             (bigint-val b))))
+    :expand ((bigint->val a)
+             (bigint->val b))))
 
 (define bigint-sge ((a bigint-p)
                     (b bigint-p))
@@ -402,4 +402,4 @@ answer says whether @('a') and @('b') have a different @(see bigint-val)s.</p>"
   ///
   (defrule bigint-sge-correct
     (equal (bigint-sge a b)
-           (bool->bigint (>= (bigint-val a) (bigint-val b))))))
+           (bool->bigint (>= (bigint->val a) (bigint->val b))))))

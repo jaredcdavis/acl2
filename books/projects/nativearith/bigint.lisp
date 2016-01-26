@@ -33,6 +33,7 @@
 (in-package "NATIVEARITH")
 (include-book "i64")
 (include-book "std/util/defrule" :dir :system)
+(include-book "std/util/defprojection" :dir :system)
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "arith"))
 (local (std::add-default-post-define-hook :fix))
@@ -92,7 +93,7 @@ very low-level wrappers for accessing and iterating through bigints:</p>
 @(see b*) binder; @(see patbind-bigint).</p>
 
 <p>The core function for interpreting a bigint as an ordinary ACL2 integer is
-@(see bigint-val).</p>
+@(see bigint->val).</p>
 
 
 <h3>Higher Level Operations</h3>
@@ -253,7 +254,7 @@ for details.</p>")
                 (bigint-count x)))
     :rule-classes :linear))
 
-(define bigint-val ((x bigint-p))
+(define bigint->val ((x bigint-p))
   :returns (val integerp :rule-classes :type-prescription)
   :short "Value of a @(see bigint) as an ordinary ACL2 integer."
   :measure (bigint-count x)
@@ -261,51 +262,51 @@ for details.</p>")
       (bigint->first x)
     (logapp 64
             (bigint->first x)
-            (bigint-val (bigint->rest x))))
+            (bigint->val (bigint->rest x))))
   ///
   "<p>Basic structural openers.</p>"
 
-  (defrule bigint-val-when-bigint->endp
+  (defrule bigint->val-when-bigint->endp
     (implies (bigint->endp x)
-             (equal (bigint-val x)
+             (equal (bigint->val x)
                     (bigint->first x))))
 
-  (defrule bigint-val-when-not-bigint->endp
+  (defrule bigint->val-when-not-bigint->endp
     (implies (not (bigint->endp x))
-             (equal (bigint-val x)
+             (equal (bigint->val x)
                     (logapp 64
                             (bigint->first x)
-                            (bigint-val (bigint->rest x))))))
+                            (bigint->val (bigint->rest x))))))
 
   "<h5>End-Case Reasoning</h5>
 
    <p>It's crucial to know that when we've reached the end of a bigint, then
    all of the remaining blocks are either @('0') or @('-1').</p>"
 
-  (defrule bigint-val-of-rest-when-first-negative
+  (defrule bigint->val-of-rest-when-first-negative
     (implies (and (< (bigint->first x) 0)
                   (bigint->endp x))
-             (equal (bigint-val (bigint->rest x))
+             (equal (bigint->val (bigint->rest x))
                     -1))
     :enable (bigint->endp bigint->first bigint->rest))
 
-  (defrule bigint-val-of-rest-when-first-positive
+  (defrule bigint->val-of-rest-when-first-positive
     (implies (and (<= 0 (bigint->first x))
                   (bigint->endp x))
-             (equal (bigint-val (bigint->rest x))
+             (equal (bigint->val (bigint->rest x))
                     0))
     :enable (bigint->endp bigint->first bigint->rest))
 
   "<p>A more powerful, case-splitting version of the above.  We'll leave this
    disabled by default since it can lead to a lot of case-splitting.</p>"
 
-  (defruled bigint-val-of-rest-split
+  (defruled bigint->val-of-rest-split
     (implies (bigint->endp x)
-             (equal (bigint-val (bigint->rest x))
+             (equal (bigint->val (bigint->rest x))
                     (if (< (bigint->first x) 0)
                         -1
                       0)))
-    :disable (bigint-val))
+    :disable (bigint->val))
 
 
   "<h5>Special Theorems for Values of 0 and -1</h5>
@@ -314,20 +315,20 @@ for details.</p>")
   special and implies that all of the first/rest values are going to be fully
   @('0') or @('-1').</p>"
 
-  (defrule bigint-val-of-rest-when-bigint-val-is-zero
-    (implies (equal (bigint-val a) 0)
-             (equal (bigint-val (bigint->rest a)) 0)))
+  (defrule bigint->val-of-rest-when-bigint->val-is-zero
+    (implies (equal (bigint->val a) 0)
+             (equal (bigint->val (bigint->rest a)) 0)))
 
-  (defrule bigint->first-when-bigint-val-is-zero
-    (implies (equal (bigint-val a) 0)
+  (defrule bigint->first-when-bigint->val-is-zero
+    (implies (equal (bigint->val a) 0)
              (equal (bigint->first a) 0)))
 
-  (defrule bigint-val-of-rest-when-bigint-val-is-minus1
-    (implies (equal (bigint-val a) -1)
-             (equal (bigint-val (bigint->rest a)) -1)))
+  (defrule bigint->val-of-rest-when-bigint->val-is-minus1
+    (implies (equal (bigint->val a) -1)
+             (equal (bigint->val (bigint->rest a)) -1)))
 
-  (defrule bigint->first-when-bigint-val-is-minus1
-    (implies (equal (bigint-val a) -1)
+  (defrule bigint->first-when-bigint->val-is-minus1
+    (implies (equal (bigint->val a) -1)
              (equal (bigint->first a) -1)))
 
   "<h5>Basic congruence rules</h5>"
@@ -352,8 +353,8 @@ for details.</p>")
     (equal (bigint->first (bigint-singleton x))
            (i64-fix x)))
 
-  (defrule bigint-val-of-bigint-singleton
-    (equal (bigint-val (bigint-singleton x))
+  (defrule bigint->val-of-bigint-singleton
+    (equal (bigint->val (bigint-singleton x))
            (i64-fix x)))
 
   (defrule bigint-count-of-bigint->singleton
@@ -376,9 +377,9 @@ for details.</p>")
   (defrule bigint->first-of-bigint-cons
     (equal (bigint->first (bigint-cons first rest))
            (i64-fix first)))
-  (defrule bigint-val-of-bigint-cons
-    (equal (bigint-val (bigint-cons first rest))
-           (logapp 64 (i64-fix first) (bigint-val rest)))))
+  (defrule bigint->val-of-bigint-cons
+    (equal (bigint->val (bigint-cons first rest))
+           (logapp 64 (i64-fix first) (bigint->val rest)))))
 
 (define two-bigints-induct ((a bigint-p)
                             (b bigint-p))
@@ -404,6 +405,11 @@ for details.</p>")
 (deflist bigintlist
   :elt-type bigint-p
   :true-listp t)
+
+(defprojection bigintlist->vals ((x bigintlist-p))
+  :returns (vals integer-listp)
+  :nil-preservingp nil
+  (bigint->val x))
 
 (define bigintlist-nth ((n natp)
                         (x bigintlist-p))
