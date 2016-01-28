@@ -192,3 +192,114 @@
          (b2 b))))
 
 
+(define recursive-plus-base-case ((cin bitp)
+                                  (a   integerp)
+                                  (b   integerp))
+  :guard (and (or (eql a -1) (eql a 0))
+              (or (eql b -1) (eql b 0)))
+  :returns sum
+  :short "Computes @('A + B + Cin') where A,B are -1 or 0, and Cin is a bit."
+  :long "<p>This is pretty weird but I'm not sure if there's a better way to
+         write it.</p>
+         @({
+                  A    B    CIN      Sum
+                --------------------------
+                  0    0    0        0
+                  0    0    1        1
+                  0   -1    0        -1
+                  0   -1    1        0
+                 -1    0    0        -1
+                 -1    0    1        0
+                 -1   -1    0        -2
+                 -1   -1    1        -1
+         })"
+  :inline t
+  :verify-guards nil
+  (mbe :logic
+       (let ((a0 (logcar a))
+             (b0 (logcar b)))
+         (logcons (b-xor cin (b-xor a0 b0))
+                  (logext 1 (b-ior (b-and a0 b0)
+                                   (b-and (b-xor a0 b0)
+                                          (b-not cin))))))
+       :exec
+       (the (signed-byte 2)
+            (+ (the bit cin)
+               (the (signed-byte 2)
+                    (+ (the (signed-byte 1) a)
+                       (the (signed-byte 1) b))))))
+  ///
+
+  "<p>Since this is generally intended for reasoning about @('+') in a
+   recursive way, the correctness theorem is disabled by default so that you
+   can avoid introducing @('+') terms.</p>"
+
+  (defthmd recursive-plus-base-case-correct
+    (implies (and (or (zip a) (eql a -1))
+                  (or (zip b) (eql b -1)))
+             (equal (recursive-plus-base-case cin a b)
+                    (+ (bfix cin) (ifix a) (ifix b))))
+    ;; Just let things open up and prove it by cases.
+    :hints(("Goal" :in-theory (enable bfix b-not b-xor b-and bitp zip logcar))))
+
+  (verify-guards recursive-plus-base-case$inline
+    :hints(("Goal" :use ((:instance recursive-plus-base-case-correct))))))
+
+
+
+(define recursive-plus ((cin bitp)
+                        (a   integerp)
+                        (b   integerp))
+  :returns sum
+  :measure (+ (integer-length a) (integer-length b))
+  :hints(("Goal" :in-theory (enable* integer-length**)))
+  :inline t
+  :verify-guards nil
+  (mbe :logic
+       (b* (((when (and (or (zip a) (eql a -1))
+                        (or (zip b) (eql b -1))))
+             (recursive-plus-base-case cin a b))
+            ;; Inductive case: standard ripple carry adder
+            (a0   (logcar a))
+            (b0   (logcar b))
+            (sum  (b-xor cin (b-xor a0 b0)))
+            (cout (b-ior (b-and a0 b0)
+                         (b-and cin (b-ior a0 b0)))))
+         (logcons sum
+                  (recursive-plus cout (logcdr a) (logcdr b))))
+       :exec
+       (+ cin a b))
+  ///
+  (local (defthmd inductive-step
+           (let* ((a0   (logcar a))
+                  (b0   (logcar b))
+                  (sum  (b-xor cin (b-xor a0 b0)))
+                  (cout (b-ior (b-and a0 b0)
+                               (b-and cin (b-ior a0 b0))))
+                  (rest (+ cout (logcdr a) (logcdr b))))
+             (equal (logcons sum rest)
+                    (+ (bfix cin) (ifix a) (ifix b))))
+           :hints(("Goal"
+                   :in-theory (e/d (b-ior b-and b-xor b-not)
+                                   (bitops::+-of-logcons-with-cin))
+                   :use ((:instance bitops::+-of-logcons-with-cin
+                          (cin (bfix cin))
+                          (b1 (logcar a))
+                          (r1 (logcdr a))
+                          (b2 (logcar b))
+                          (r2 (logcdr b))))))))
+
+  (defrule recursive-plus-correct
+    (equal (recursive-plus cin a b)
+           (+ (bfix cin) (ifix a) (ifix b)))
+    :hints(("Goal"
+            :induct (recursive-plus cin a b)
+            :in-theory (enable recursive-plus-base-case-correct))
+           ("Subgoal *1/2" ;; Baaaah, can't get rid of it!
+            :use ((:instance inductive-step)))))
+
+  (verify-guards recursive-plus$inline
+    :hints(("Goal"
+            :do-not-induct t
+            :in-theory (disable recursive-plus-correct)
+            :use ((:instance recursive-plus-correct))))))

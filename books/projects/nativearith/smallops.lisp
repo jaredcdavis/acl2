@@ -217,12 +217,16 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
      :prepwork ,prepwork
      :guard-hints ,guard-hints
      :split-types t
-     (mbe :logic
-          (b* ((a (,fix 64 a))
-               (b (,fix 64 b)))
-            ,logic)
-          :exec
-          ,exec)
+     ,(if (not exec)
+          `(b* ((a (,fix 64 a))
+                (b (,fix 64 b)))
+             ,logic)
+        `(mbe :logic
+              (b* ((a (,fix 64 a))
+                   (b (,fix 64 b)))
+                ,logic)
+              :exec
+              ,exec))
      ///
      (defret ,(intern-in-package-of-symbol
                (cat "I64-P-OF-" (symbol-name name))
@@ -258,6 +262,15 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
   :inline nil
   :logic (logext 64 (+ a b))
   :exec (fast-logext 64 (+ a b)))
+
+(def-i64-arith2 i64upluscarry
+  :short "Carry out from 64-bit unsigned integer addition."
+  :long "<p>This computes whether a 64-bit unsigned addition overflows.</p>"
+  :inline nil
+  :fix loghead
+  :logic (if (< (+ a b) (expt 2 64))
+             0
+           1))
 
 (def-i64-arith2 i64minus
   :short "64-bit integer subtraction, i.e., @('a - b')."

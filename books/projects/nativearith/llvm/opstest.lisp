@@ -230,6 +230,7 @@
 (test-binop i64bitor)
 (test-binop i64bitxor)
 (test-binop i64plus)
+(test-binop i64upluscarry)
 (test-binop i64minus)
 (test-binop i64times)
 

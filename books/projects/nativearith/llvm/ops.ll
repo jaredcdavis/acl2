@@ -148,6 +148,21 @@ define i64 @narith_i64plus (i64 %a, i64 %b)
        ret i64 %ans
 }
 
+declare {i64, i1} @llvm.uadd.with.overflow.i64(i64 %a, i64 %b)
+
+define i64 @narith_i64upluscarry (i64 %a, i64 %b)
+{
+	;; BOZO I don't know if this is a very good way to implement this
+	;; operation, but it is simple and seems likely to be something that
+	;; LLVM is designed to optimize.  It would probably be good to
+	;; eventually consider other approaches, but for now I just want to
+	;; get something working.
+	%res = call {i64, i1} @llvm.uadd.with.overflow.i64(i64 %a, i64 %b)
+	%carry = extractvalue {i64, i1} %res, 1
+	%ans = zext i1 %carry to i64
+	ret i64 %ans
+}
+
 define i64 @narith_i64minus (i64 %a, i64 %b)
 {
 	%ans = sub i64 %a, %b
