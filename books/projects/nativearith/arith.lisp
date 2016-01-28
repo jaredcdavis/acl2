@@ -36,9 +36,11 @@
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "centaur/bitops/equal-by-logbitp" :dir :system))
+(local (include-book "centaur/fty/fixequiv" :dir :system))
 (local (include-book "tools/do-not" :dir :system))
 (local (acl2::do-not generalize fertilize))
 (local (in-theory (disable signed-byte-p unsigned-byte-p)))
+(local (std::add-default-post-define-hook :fix))
 
 (defruled logapp-redef
   (equal (logapp n a b)
@@ -192,6 +194,17 @@
          (b2 b))))
 
 
+(local (defthm logcar-when-not-integerp
+         (implies (not (integerp a))
+                  (equal (logcar a) 0))
+         :hints(("Goal" :in-theory (enable logcar)))))
+
+(local (defthm logcdr-when-not-integerp
+         (implies (not (integerp a))
+                  (equal (logcdr a) 0))
+         :hints(("Goal" :in-theory (enable logcdr)))))
+
+
 (define recursive-plus-base-case ((cin bitp)
                                   (a   integerp)
                                   (b   integerp))
@@ -246,7 +259,6 @@
     :hints(("Goal" :use ((:instance recursive-plus-base-case-correct))))))
 
 
-
 (define recursive-plus ((cin bitp)
                         (a   integerp)
                         (b   integerp))
@@ -289,7 +301,7 @@
                           (b2 (logcar b))
                           (r2 (logcdr b))))))))
 
-  (defrule recursive-plus-correct
+  (defruled recursive-plus-correct
     (equal (recursive-plus cin a b)
            (+ (bfix cin) (ifix a) (ifix b)))
     :hints(("Goal"
@@ -299,7 +311,184 @@
             :use ((:instance inductive-step)))))
 
   (verify-guards recursive-plus$inline
+    :hints(("Goal" :use ((:instance recursive-plus-correct))))))
+
+
+(define plus-ucarryout-n ((n natp)
+                          (cin bitp)
+                          (a integerp)
+                          (b integerp))
+  :returns (cout bitp)
+  :measure (nfix n)
+  (b* (((when (zp n))
+        (bfix cin))
+       (a0   (logcar a))
+       (b0   (logcar b))
+       (cout (b-ior (b-and a0 b0)
+                    (b-and cin (b-ior a0 b0)))))
+    (plus-ucarryout-n (- n 1) cout (logcdr a) (logcdr b)))
+  ///
+  (defthm plus-ucarryout-n-of-loghead-n-a
+    (equal (plus-ucarryout-n n cin (loghead n a) b)
+           (plus-ucarryout-n n cin a b))
+    :hints(("Goal" :in-theory (enable* ihsext-recursive-redefs))))
+
+  (defthm plus-ucarryout-n-of-loghead-n-b
+    (equal (plus-ucarryout-n n cin a (loghead n b))
+           (plus-ucarryout-n n cin a b))
+    :hints(("Goal" :in-theory (enable* ihsext-recursive-redefs))))
+
+  (defthmd plus-ucarryout-n-as-unsigned-byte-p
+    (implies (and (unsigned-byte-p n a)
+                  (unsigned-byte-p n b)
+                  (bitp cin))
+             (equal (plus-ucarryout-n n cin a b)
+                    (bool->bit (not (unsigned-byte-p n (recursive-plus cin a b))))))
+    :hints(("Goal"
+            :induct (plus-ucarryout-n n cin a b)
+            :in-theory (enable* ihsext-recursive-redefs
+                                recursive-plus
+                                recursive-plus-base-case
+                                b-not)))))
+
+(defsection split-unsigned-plus
+
+  (local (acl2::do-not generalize fertilize eliminate-destructors))
+
+  (defthm split-unsigned-recursive-plus
+    (implies (and (natp a)
+                  (natp b)
+                  (natp n))
+             (equal (logapp n
+                            (recursive-plus cin (loghead n a) (loghead n b))
+                            (recursive-plus (plus-ucarryout-n n cin (loghead n a) (loghead n b))
+                                            (logtail n a)
+                                            (logtail n b)))
+                    (recursive-plus cin a b)))
     :hints(("Goal"
             :do-not-induct t
-            :in-theory (disable recursive-plus-correct)
-            :use ((:instance recursive-plus-correct))))))
+            :induct (plus-ucarryout-n n cin a b)
+            :expand ((recursive-plus cin a b)
+                     (recursive-plus cin (loghead n a) (loghead n b))
+                     (plus-ucarryout-n n cin (loghead n a) (loghead n b)))
+            :in-theory (enable* ihsext-recursive-redefs
+                                recursive-plus
+                                plus-ucarryout-n
+                                recursive-plus-base-case))))
+
+  (defthm split-unsigned-plus
+    (implies (and (natp a)
+                  (natp b)
+                  (natp n)
+                  (bitp cin))
+             (equal (logapp n
+                            (+ cin (loghead n a) (loghead n b))
+                            (+ (plus-ucarryout-n n cin a b)
+                               (logtail n a)
+                               (logtail n b)))
+                    (+ cin a b)))
+    :hints(("Goal"
+            :in-theory (e/d (recursive-plus-correct)
+                            (split-unsigned-recursive-plus))
+            :use ((:instance split-unsigned-recursive-plus))))))
+
+
+
+zz i-am-here
+
+
+(local (acl2::do-not generalize fertilize eliminate-destructors))
+
+
+
+(let* ((a -1)
+       (b -7)
+       (cin 0)
+       (n 4)
+       (spec (recursive-plus cin a b))
+       (head (recursive-plus cin (loghead n a) (loghead n b)))
+       (cout (plus-ucarryout-n n cin (loghead n a) (loghead n b)))
+       (tail (recursive-plus cout (logtail n a) (logtail n b)))
+       (impl (logapp n head tail)))
+  (list :spec spec
+        :head head
+        :cout cout
+        :tail tail
+        :impl impl))
+
+  (list (recursive-plus 0 -1 -1)
+        (logapp n
+                (recursive-plus cin (loghead n a) (loghead n b))
+                (recursive-plus (plus-ucarryout-n n cin (loghead n a) (loghead n b))
+                                (logtail n a)
+                                (logtail n b)))
+
+
+
+(include-book "acl2s/cgen/top" :dir :system)
+
+(defthm minus-of-minus
+  (equal (- (- n))
+         (fix n)))
+
+
+
+(defthm zip-of-logcons
+  (equal (zip (logcons a x))
+         (and (not (eql a 1))
+              (zip x))))
+
+
+(defthm xx
+  (implies (and (integerp x)
+                (integerp y))
+           (equal (equal (logcons a x) y)
+                  (and (equal (logcar y) (bfix a))
+                       (equal (logcdr y) (ifix x))))))
+
+(defthm equal-logcons-and-loghead
+  (implies (posp n)
+           (equal (equal (logcons a x)
+                         (loghead n y))
+                  (and (equal (bfix a) (logcar y))
+                       (equal (ifix x) (loghead (- n 1) (logcdr y))))))
+  :hints(("Goal"
+          :in-theory (enable* ihsext-recursive-redefs))))
+
+(defun my-induct (n a b)
+  (if (zp n)
+      (list n a b)
+    (my-induct (- n 1) (logcdr a) (logcdr b))))
+
+(defthm l0
+  (equal (loghead n (recursive-plus cin (loghead n a) b))
+         (loghead n (recursive-plus cin a b)))
+  :hints(("Goal" :induct (my-induct n a b)
+          :in-theory (enable* recursive-plus
+                              ihsext-recursive-redefs))))
+                              bitops-congruences))))
+                                    
+
+(defthm split-signed-recursive-plus
+    (implies (and (integerp a)
+                  (integerp b)
+                  (natp n))
+             (equal (logapp n
+                            (recursive-plus cin (loghead n a) (loghead n b))
+                            (recursive-plus (plus-ucarryout-n n cin (loghead n a) (loghead n b))
+                                            (logtail n a)
+                                            (logtail n b)))
+                    (recursive-plus cin a b)))
+    :hints(("Goal"
+            :do-not-induct t
+            :induct (plus-ucarryout-n n cin a b)
+            :expand ((recursive-plus cin a b)
+                     (recursive-plus cin (loghead n a) (loghead n b))
+                     (plus-ucarryout-n n cin (loghead n a) (loghead n b)))
+            :in-theory (e/d* (ihsext-recursive-redefs
+                              recursive-plus
+                              plus-ucarryout-n
+                              recursive-plus-base-case)
+                             (acl2::zip-open)
+                             ))))
+
