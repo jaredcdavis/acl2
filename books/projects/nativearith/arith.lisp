@@ -33,14 +33,21 @@
 (in-package "NATIVEARITH")
 (include-book "ihs/basic-definitions" :dir :system)
 (include-book "std/util/defrule" :dir :system)
+(local (include-book "arithmetic/top-with-meta" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "centaur/bitops/equal-by-logbitp" :dir :system))
 (local (include-book "centaur/fty/fixequiv" :dir :system))
 (local (include-book "tools/do-not" :dir :system))
 (local (acl2::do-not generalize fertilize))
-(local (in-theory (disable signed-byte-p unsigned-byte-p)))
+(local (in-theory (disable signed-byte-p unsigned-byte-p acl2::zip-open)))
 (local (std::add-default-post-define-hook :fix))
+
+(defrule zip-of-logcons
+  (equal (zip (logcons a x))
+         (and (not (eql a 1))
+              (zip x)))
+  :hints(("Goal" :in-theory (enable acl2::zip-open))))
 
 (defruled logapp-redef
   (equal (logapp n a b)
@@ -116,7 +123,16 @@
                        (equal (ifix b1)
                               (ifix b2)))))
   :enable (ihsext-recursive-redefs
-           ihsext-inductions))
+           ihsext-inductions)
+  ;; Just a dumb accumulated-persistence speed hint
+  :disable (acl2::loghead-identity
+            unsigned-byte-p**
+            signed-byte-p**
+            EQUAL-LOGHEAD-0-WHEN-SIGNED-BYTE-P
+            bitops::signed-byte-p-of-logcdr
+            bitops::logcdr-natp
+            bitops::ash-natp-type
+            acl2::unsigned-byte-p-plus))
 
 (defrule equal-of-same-size-logapps
   (equal (equal (logapp 64 a1 b1)
@@ -194,15 +210,15 @@
          (b2 b))))
 
 
-(local (defthm logcar-when-not-integerp
+(local (defrule logcar-when-not-integerp
          (implies (not (integerp a))
                   (equal (logcar a) 0))
-         :hints(("Goal" :in-theory (enable logcar)))))
+         :enable logcar))
 
-(local (defthm logcdr-when-not-integerp
+(local (defrule logcdr-when-not-integerp
          (implies (not (integerp a))
                   (equal (logcdr a) 0))
-         :hints(("Goal" :in-theory (enable logcdr)))))
+         :enable logcdr))
 
 
 (define recursive-plus-base-case ((cin bitp)
@@ -247,13 +263,21 @@
    recursive way, the correctness theorem is disabled by default so that you
    can avoid introducing @('+') terms.</p>"
 
-  (defthmd recursive-plus-base-case-correct
+  (defruled recursive-plus-base-case-correct
     (implies (and (or (zip a) (eql a -1))
                   (or (zip b) (eql b -1)))
              (equal (recursive-plus-base-case cin a b)
                     (+ (bfix cin) (ifix a) (ifix b))))
     ;; Just let things open up and prove it by cases.
-    :hints(("Goal" :in-theory (enable bfix b-not b-xor b-and bitp zip logcar))))
+    :enable (bfix b-not b-xor b-and bitp zip logcar))
+
+  (defrule logcar-of-recursive-plus-base-case
+    (equal (logcar (recursive-plus-base-case cin a b))
+           (b-xor cin (b-xor (logcar a) (logcar b)))))
+
+  (defrule recursive-plus-baze-case-of-zeroes
+    (equal (recursive-plus-base-case cin 0 0)
+           (bfix cin)))
 
   (verify-guards recursive-plus-base-case$inline
     :hints(("Goal" :use ((:instance recursive-plus-base-case-correct))))))
@@ -267,6 +291,7 @@
   :hints(("Goal" :in-theory (enable* integer-length**)))
   :inline t
   :verify-guards nil
+  :verbosep t
   (mbe :logic
        (b* (((when (and (or (zip a) (eql a -1))
                         (or (zip b) (eql b -1))))
@@ -282,7 +307,10 @@
        :exec
        (+ cin a b))
   ///
-  (local (defthmd inductive-step
+  (acl2::add-to-ruleset ihsext-inductions '((:i recursive-plus)))
+  (acl2::add-to-ruleset ihsext-recursive-redefs '((:d recursive-plus)))
+
+  (local (defruled inductive-step
            (let* ((a0   (logcar a))
                   (b0   (logcar b))
                   (sum  (b-xor cin (b-xor a0 b0)))
@@ -291,15 +319,14 @@
                   (rest (+ cout (logcdr a) (logcdr b))))
              (equal (logcons sum rest)
                     (+ (bfix cin) (ifix a) (ifix b))))
-           :hints(("Goal"
-                   :in-theory (e/d (b-ior b-and b-xor b-not)
-                                   (bitops::+-of-logcons-with-cin))
-                   :use ((:instance bitops::+-of-logcons-with-cin
-                          (cin (bfix cin))
-                          (b1 (logcar a))
-                          (r1 (logcdr a))
-                          (b2 (logcar b))
-                          (r2 (logcdr b))))))))
+           :enable (b-ior b-and b-xor b-not)
+           :disable (bitops::+-of-logcons-with-cin)
+           :use ((:instance bitops::+-of-logcons-with-cin
+                  (cin (bfix cin))
+                  (b1 (logcar a))
+                  (r1 (logcdr a))
+                  (b2 (logcar b))
+                  (r2 (logcdr b))))))
 
   (defruled recursive-plus-correct
     (equal (recursive-plus cin a b)
@@ -307,11 +334,21 @@
     :hints(("Goal"
             :induct (recursive-plus cin a b)
             :in-theory (enable recursive-plus-base-case-correct))
-           ("Subgoal *1/2" ;; Baaaah, can't get rid of it!
-            :use ((:instance inductive-step)))))
+           ;; Baaaah, can't get rid of it!
+           ("Subgoal *1/2" :use ((:instance inductive-step)))))
 
   (verify-guards recursive-plus$inline
-    :hints(("Goal" :use ((:instance recursive-plus-correct))))))
+    :hints(("Goal" :use ((:instance recursive-plus-correct)))))
+
+  (defrule recursive-plus-of-zeroes
+    (and (equal (recursive-plus cin 0 0)
+                (bfix cin))
+         (equal (recursive-plus 0 a 0)
+                (ifix a))
+         (equal (recursive-plus 0 0 b)
+                (ifix b)))
+    :enable (recursive-plus-correct)
+    :disable (recursive-plus)))
 
 
 (define plus-ucarryout-n ((n natp)
@@ -328,17 +365,20 @@
                     (b-and cin (b-ior a0 b0)))))
     (plus-ucarryout-n (- n 1) cout (logcdr a) (logcdr b)))
   ///
-  (defthm plus-ucarryout-n-of-loghead-n-a
+  (acl2::add-to-ruleset ihsext-recursive-redefs '((:d plus-ucarryout-n)))
+  (acl2::add-to-ruleset ihsext-inductions '((:i plus-ucarryout-n)))
+
+  (defrule plus-ucarryout-n-of-loghead-n-a
     (equal (plus-ucarryout-n n cin (loghead n a) b)
            (plus-ucarryout-n n cin a b))
-    :hints(("Goal" :in-theory (enable* ihsext-recursive-redefs))))
+    :enable (ihsext-recursive-redefs))
 
-  (defthm plus-ucarryout-n-of-loghead-n-b
+  (defrule plus-ucarryout-n-of-loghead-n-b
     (equal (plus-ucarryout-n n cin a (loghead n b))
            (plus-ucarryout-n n cin a b))
-    :hints(("Goal" :in-theory (enable* ihsext-recursive-redefs))))
+    :enable (ihsext-recursive-redefs))
 
-  (defthmd plus-ucarryout-n-as-unsigned-byte-p
+  (defruled plus-ucarryout-n-as-unsigned-byte-p
     (implies (and (unsigned-byte-p n a)
                   (unsigned-byte-p n b)
                   (bitp cin))
@@ -349,146 +389,68 @@
             :in-theory (enable* ihsext-recursive-redefs
                                 recursive-plus
                                 recursive-plus-base-case
-                                b-not)))))
+                                b-not))))
 
-(defsection split-unsigned-plus
+  (defrule plus-ucarryout-n-special-cases
+    (and (equal (plus-ucarryout-n n 0 0 b) 0)
+         (equal (plus-ucarryout-n n 0 a 0) 0))))
 
-  (local (acl2::do-not generalize fertilize eliminate-destructors))
 
-  (defthm split-unsigned-recursive-plus
-    (implies (and (natp a)
-                  (natp b)
-                  (natp n))
-             (equal (logapp n
-                            (recursive-plus cin (loghead n a) (loghead n b))
-                            (recursive-plus (plus-ucarryout-n n cin (loghead n a) (loghead n b))
-                                            (logtail n a)
-                                            (logtail n b)))
-                    (recursive-plus cin a b)))
-    :hints(("Goal"
-            :do-not-induct t
-            :induct (plus-ucarryout-n n cin a b)
-            :expand ((recursive-plus cin a b)
-                     (recursive-plus cin (loghead n a) (loghead n b))
-                     (plus-ucarryout-n n cin (loghead n a) (loghead n b)))
-            :in-theory (enable* ihsext-recursive-redefs
-                                recursive-plus
-                                plus-ucarryout-n
-                                recursive-plus-base-case))))
+(defsection split-plus
+  :short "This is the key decomposition for big integer addition."
 
-  (defthm split-unsigned-plus
-    (implies (and (natp a)
-                  (natp b)
-                  (natp n)
-                  (bitp cin))
+  (defrule split-recursive-plus
+    (equal (logapp n
+                   (recursive-plus cin (loghead n a) (loghead n b))
+                   (recursive-plus (plus-ucarryout-n n cin a b)
+                                   (logtail n a)
+                                   (logtail n b)))
+           (recursive-plus cin a b))
+    :do-not-induct t
+    :induct (plus-ucarryout-n n cin a b)
+    :expand ((recursive-plus cin a b))
+    :enable (ihsext-recursive-redefs
+             ihsext-inductions
+             recursive-plus-correct
+             bitops::equal-logcons-strong)
+    ;; Dumb speed hint
+    :disable (equal-of-logapp-split
+              zip-of-logcons
+              unsigned-byte-p**
+              signed-byte-p**))
+
+  (defrule split-plus
+    (implies (bitp cin)
              (equal (logapp n
                             (+ cin (loghead n a) (loghead n b))
                             (+ (plus-ucarryout-n n cin a b)
                                (logtail n a)
                                (logtail n b)))
-                    (+ cin a b)))
+                    (+ cin (ifix a) (ifix b))))
     :hints(("Goal"
+            :use ((:instance split-recursive-plus
+                   (cin (bfix cin))
+                   (a   (ifix a))
+                   (b   (ifix b))))
             :in-theory (e/d (recursive-plus-correct)
-                            (split-unsigned-recursive-plus))
-            :use ((:instance split-unsigned-recursive-plus))))))
+                            (split-recursive-plus))))))
 
+;; (defrule recursive-plus-of-loghead-left
+;;   (equal (loghead n (recursive-plus cin (loghead n a) b))
+;;          (loghead n (recursive-plus cin a b)))
+;;   :induct (plus-ucarryout-n n cin a b)
+;;   :expand ((recursive-plus cin a b)
+;;            (recursive-plus cin (loghead n a) b))
+;;   :in-theory (enable* recursive-plus
+;;                       recursive-plus-base-case
+;;                       ihsext-recursive-redefs
+;;                       ihsext-inductions))
 
-
-zz i-am-here
-
-
-(local (acl2::do-not generalize fertilize eliminate-destructors))
-
-
-
-(let* ((a -1)
-       (b -7)
-       (cin 0)
-       (n 4)
-       (spec (recursive-plus cin a b))
-       (head (recursive-plus cin (loghead n a) (loghead n b)))
-       (cout (plus-ucarryout-n n cin (loghead n a) (loghead n b)))
-       (tail (recursive-plus cout (logtail n a) (logtail n b)))
-       (impl (logapp n head tail)))
-  (list :spec spec
-        :head head
-        :cout cout
-        :tail tail
-        :impl impl))
-
-  (list (recursive-plus 0 -1 -1)
-        (logapp n
-                (recursive-plus cin (loghead n a) (loghead n b))
-                (recursive-plus (plus-ucarryout-n n cin (loghead n a) (loghead n b))
-                                (logtail n a)
-                                (logtail n b)))
-
-
-
-(include-book "acl2s/cgen/top" :dir :system)
-
-(defthm minus-of-minus
-  (equal (- (- n))
-         (fix n)))
-
-
-
-(defthm zip-of-logcons
-  (equal (zip (logcons a x))
-         (and (not (eql a 1))
-              (zip x))))
-
-
-(defthm xx
-  (implies (and (integerp x)
-                (integerp y))
-           (equal (equal (logcons a x) y)
-                  (and (equal (logcar y) (bfix a))
-                       (equal (logcdr y) (ifix x))))))
-
-(defthm equal-logcons-and-loghead
-  (implies (posp n)
-           (equal (equal (logcons a x)
-                         (loghead n y))
-                  (and (equal (bfix a) (logcar y))
-                       (equal (ifix x) (loghead (- n 1) (logcdr y))))))
-  :hints(("Goal"
-          :in-theory (enable* ihsext-recursive-redefs))))
-
-(defun my-induct (n a b)
-  (if (zp n)
-      (list n a b)
-    (my-induct (- n 1) (logcdr a) (logcdr b))))
-
-(defthm l0
-  (equal (loghead n (recursive-plus cin (loghead n a) b))
-         (loghead n (recursive-plus cin a b)))
-  :hints(("Goal" :induct (my-induct n a b)
-          :in-theory (enable* recursive-plus
-                              ihsext-recursive-redefs))))
-                              bitops-congruences))))
-                                    
-
-(defthm split-signed-recursive-plus
-    (implies (and (integerp a)
-                  (integerp b)
-                  (natp n))
-             (equal (logapp n
-                            (recursive-plus cin (loghead n a) (loghead n b))
-                            (recursive-plus (plus-ucarryout-n n cin (loghead n a) (loghead n b))
-                                            (logtail n a)
-                                            (logtail n b)))
-                    (recursive-plus cin a b)))
-    :hints(("Goal"
-            :do-not-induct t
-            :induct (plus-ucarryout-n n cin a b)
-            :expand ((recursive-plus cin a b)
-                     (recursive-plus cin (loghead n a) (loghead n b))
-                     (plus-ucarryout-n n cin (loghead n a) (loghead n b)))
-            :in-theory (e/d* (ihsext-recursive-redefs
-                              recursive-plus
-                              plus-ucarryout-n
-                              recursive-plus-base-case)
-                             (acl2::zip-open)
-                             ))))
+;; (defrule recursive-plus-of-loghead-right
+;;   (equal (loghead n (recursive-plus cin a (loghead n b)))
+;;          (loghead n (recursive-plus cin a b)))
+;;   :hints(("Goal"
+;;           :use ((:instance recursive-plus-of-loghead-left (a b) (b a)))
+;;           :in-theory (e/d (recursive-plus-correct)
+;;                           (recursive-plus-of-loghead-left)))))
 
