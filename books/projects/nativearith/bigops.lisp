@@ -417,11 +417,48 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
            (bool->bigint (>= (bigint->val a) (bigint->val b))))))
 
 
+(define bigint-clean ((a bigint-p))
+  :short "Clean up a bigint by removing any extra blocks, without changing its value."
+  :measure (bigint-count a)
+  :returns (cleaned-a bigint-p)
+  :verify-guards nil
+  (b* (((bigint a))
+       ((when a.endp)
+        ;; Nothing more we can clean up
+        (bigint-fix a))
+       ((when (and (>= a.first 0)
+                   (bigint-equalp a.rest (bigint-0))))
+        (bigint-singleton a.first))
+       ((when (and (< a.first 0)
+                   (bigint-equalp a.rest (bigint-minus1))))
+        (bigint-singleton a.first)))
+    (bigint-cons a.first (bigint-clean a.rest)))
+  ///
+  (verify-guards bigint-clean)
+
+  (local (defthm l0
+           (implies (and (signed-byte-p 64 a)
+                         (<= 0 a))
+                    (unsigned-byte-p 63 a))
+           :hints(("Goal" :in-theory (enable signed-byte-p
+                                             unsigned-byte-p)))))
+
+  (local (defthm l1
+           (implies (unsigned-byte-p 63 a)
+                    (equal (loghead 64 a)
+                           a))))
+
+  (local (in-theory (enable bigint-clean)))
+
+  (defrule bigint-clean-correct
+    (equal (bigint->val (bigint-clean a))
+           (bigint->val a))))
 
 
 (define bigint-plus-cout0 ((cin bitp)
                                   (afirst i64-p)
                                   (bfirst i64-p))
+  :parents (bigint-plus)
   :short "Determines the carry chain out for adding CIN+A+B by first
           computing CIN+A, then bringing in B afterward."
   :returns (cout bitp)
@@ -478,6 +515,8 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 (define bigint-plus-sum0 ((cin bitp)
                           (afirst i64-p)
                           (bfirst i64-p))
+  :parents (bigint-plus)
+  :short "Computes the low 64 bits of the result of CIN+A+B."
   :returns (sum i64-p)
   (b* ((cin     (lbfix cin))
        (afirst  (i64-fix afirst))
@@ -498,7 +537,8 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
                          (a bigint-p)
                          (b bigint-p))
   :returns (ans bigint-p)
-  :short "Ripple carry addition of @(see bigint)s."
+  :parents (bigint-plus)
+  :short "Ripple carry addition of @(see bigint)s with carry in."
   :measure (+ (bigint-count a) (bigint-count b))
   :verify-guards nil
   (b* ((cin (lbfix cin))
@@ -510,7 +550,11 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
         (b* ((asign  (bigint->first a.rest))
              (bsign  (bigint->first b.rest))
              (final  (i64plus cout (i64plus asign bsign))))
-          (bigint-cons sum0 (bigint-singleton final)))))
+          ;; We go ahead and clean here because it's very likely that we don't
+          ;; actually need the extra block.  This is especially nice so that
+          ;; when you look at, e.g., (bigint-plus '(3) '(5)), the answer is
+          ;; just '(8) instead of '(8 0), and so forth.
+          (bigint-clean (bigint-cons sum0 (bigint-singleton final))))))
     (bigint-cons sum0
                  (bigint-plus-aux cout a.rest b.rest)))
   ///
