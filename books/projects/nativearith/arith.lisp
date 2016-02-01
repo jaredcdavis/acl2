@@ -44,6 +44,15 @@
 (local (in-theory (disable signed-byte-p unsigned-byte-p acl2::zip-open)))
 (local (std::add-default-post-define-hook :fix))
 
+(defthm signed-byte-p-when-bitp
+  (implies (and (syntaxp (quotep n))
+                (natp n)
+                (<= 2 n)
+                (bitp x))
+           (signed-byte-p n x))
+  :hints(("Goal" :in-theory (enable bitp))))
+
+
 (defrule zip-of-logcons
   (equal (zip (logcons a x))
          (and (not (eql a 1))
@@ -351,7 +360,6 @@
     :enable (recursive-plus-correct)
     :disable (recursive-plus)))
 
-
 (define plus-ucarryout-n ((n natp)
                           (cin bitp)
                           (a integerp)
@@ -394,7 +402,48 @@
 
   (defrule plus-ucarryout-n-special-cases
     (and (equal (plus-ucarryout-n n 0 0 b) 0)
-         (equal (plus-ucarryout-n n 0 a 0) 0))))
+         (equal (plus-ucarryout-n n 0 a 0) 0)))
+
+  (defrule plus-ucarryout-n-of-logext-n-a
+    (equal (plus-ucarryout-n n cin (logext n a) b)
+           (plus-ucarryout-n n cin a b))
+    :enable (ihsext-recursive-redefs))
+
+  (defrule plus-ucarryout-n-of-logext-n-b
+    (equal (plus-ucarryout-n n cin a (logext n b))
+           (plus-ucarryout-n n cin a b))
+    :enable (ihsext-recursive-redefs))
+
+  (defruled plus-carryout-n-using-preadd
+    ;; This was a tricky lemma to figure out.  Of course addition modulo 32 is
+    ;; perfectly associative and commutative so, when we want to compute CIN +
+    ;; A + B, we can do the additions in any order.  But, when computing the
+    ;; carry out we don't have this same kind of freedom.  For instance it is
+    ;; not generally the case that
+    ;;
+    ;;   (plus-carryout-n n cin a b) == (plus-carryout-n n 0 (+ cin a) b)
+    ;;
+    ;; But it is *almost* true.  This lemma shows that the above is only wrong
+    ;; when A is -1 and CIN is 1.  And we can easily check for these using
+    ;; machine operations.
+    (implies (and (posp n)
+                  (bitp cin))
+             (equal (plus-ucarryout-n n cin a b)
+                    (if (and (equal (logext n a) -1)
+                             (equal cin 1))
+                        1
+                      (plus-ucarryout-n n 0 (logext n (+ cin (ifix a))) b))))
+    :enable (ihsext-recursive-redefs bitp b-ior b-and)
+    :induct (plus-ucarryout-n n cin a b)
+    :expand ((:free (cin a b) (plus-ucarryout-n n cin a b))))
+
+  (defthm plus-ucarryout-n-of-logapp-n-left
+    (equal (plus-ucarryout-n n cin (logapp n a1 a2) b)
+           (plus-ucarryout-n n cin a1 b)))
+
+  (defthm plus-ucarryout-n-of-logapp-n-right
+    (equal (plus-ucarryout-n n cin a (logapp n b1 b2))
+           (plus-ucarryout-n n cin a b1))))
 
 
 (defsection split-plus
@@ -436,22 +485,70 @@
             :in-theory (e/d (recursive-plus-correct)
                             (split-recursive-plus))))))
 
-;; (defrule recursive-plus-of-loghead-left
-;;   (equal (loghead n (recursive-plus cin (loghead n a) b))
-;;          (loghead n (recursive-plus cin a b)))
-;;   :induct (plus-ucarryout-n n cin a b)
-;;   :expand ((recursive-plus cin a b)
-;;            (recursive-plus cin (loghead n a) b))
-;;   :in-theory (enable* recursive-plus
-;;                       recursive-plus-base-case
-;;                       ihsext-recursive-redefs
-;;                       ihsext-inductions))
 
-;; (defrule recursive-plus-of-loghead-right
-;;   (equal (loghead n (recursive-plus cin a (loghead n b)))
-;;          (loghead n (recursive-plus cin a b)))
-;;   :hints(("Goal"
-;;           :use ((:instance recursive-plus-of-loghead-left (a b) (b a)))
-;;           :in-theory (e/d (recursive-plus-correct)
-;;                           (recursive-plus-of-loghead-left)))))
+(defsection loghead/logext-of-plus
 
+  (local (defruled l0
+           (equal (logext n (recursive-plus cin (logext n a) b))
+                  (logext n (recursive-plus cin a b)))
+           :enable (ihsext-recursive-redefs
+                    ihsext-inductions
+                    recursive-plus-base-case)))
+
+  (defrule logext-of-plus-of-logext-left
+    (implies (and (integerp a)
+                  (integerp b))
+             (equal (logext n (+ (logext n a) b))
+                    (logext n (+ a b))))
+    :use ((:instance l0 (cin 0) (a (ifix a)) (b (ifix b))))
+    :enable (recursive-plus-correct))
+
+  (local (defruled l1
+           (equal (logext n (recursive-plus cin a (logext n b)))
+                  (logext n (recursive-plus cin a b)))
+           :enable (ihsext-recursive-redefs
+                    ihsext-inductions
+                    recursive-plus-base-case)))
+
+  (defrule logext-of-plus-of-logext-right
+    (implies (and (integerp a)
+                  (integerp b))
+             (equal (logext n (+ a (logext n b)))
+                    (logext n (+ a b))))
+    :use ((:instance l1 (cin 0) (a (ifix a)) (b (ifix b))))
+    :enable (recursive-plus-correct))
+
+  (local (include-book "centaur/bitops/congruences" :dir :system))
+  (local (in-theory (enable* bitops-congruences)))
+
+  (defrule loghead-of-plus-of-loghead-right
+    (implies (and (integerp a)
+                  (integerp b))
+             (equal (loghead n (+ a (loghead n b)))
+                    (loghead n (+ a b)))))
+
+  (defrule loghead-of-plus-of-loghead-right
+    (implies (and (integerp a)
+                  (integerp b))
+             (equal (loghead n (+ a (loghead n b)))
+                    (loghead n (+ a b)))))
+
+  (defrule |(loghead n (+ a b (loghead n c)))|
+    (implies (and (integerp a)
+                  (integerp b)
+                  (integerp c))
+             (equal (loghead n (+ a b (loghead n c)))
+                    (loghead n (+ a b c))))
+    :in-theory (disable loghead-of-plus-of-loghead-right)
+    :use ((:instance loghead-of-plus-of-loghead-right
+           (a (+ a b))
+           (b c))))
+
+  (defrule |(loghead n (+ a b (logapp n c1 c2)))|
+    (implies (and (integerp a)
+                  (integerp b)
+                  (integerp c1))
+             (equal (loghead n (+ a b (logapp n c1 c2)))
+                    (loghead n (+ a b c1))))
+    :use ((:instance |(loghead n (+ a b (loghead n c)))|
+           (c (logapp n c1 c2))))))

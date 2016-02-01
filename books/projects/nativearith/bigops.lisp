@@ -47,6 +47,18 @@
 (local (acl2::do-not generalize fertilize))
 (local (in-theory (disable signed-byte-p unsigned-byte-p)))
 
+(defthm logext-64-of-bfix
+  (equal (logext 64 (bfix b))
+         (bfix b))
+  :hints(("Goal" :in-theory (enable bfix))))
+
+(defthm logext-when-bitp
+  (implies (bitp b)
+           (equal (logext 64 b)
+                  b))
+  :hints(("Goal" :in-theory (enable bitp))))
+
+
 (defsection bigops
   :parents (nativearith)
   :short "High-level operations on @(see bigint)s."
@@ -403,3 +415,178 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   (defrule bigint-sge-correct
     (equal (bigint-sge a b)
            (bool->bigint (>= (bigint->val a) (bigint->val b))))))
+
+
+
+
+(define bigint-plus-cout0 ((cin bitp)
+                                  (afirst i64-p)
+                                  (bfirst i64-p))
+  :short "Determines the carry chain out for adding CIN+A+B by first
+          computing CIN+A, then bringing in B afterward."
+  :returns (cout bitp)
+  :verbosep t
+  (b* ((cin     (bfix cin))
+       (afirst  (i64-fix afirst))
+       (bfirst  (i64-fix bfirst))
+       (cin+a   (i64plus cin afirst))
+       (usual   (i64upluscarry cin+a bfirst))
+       (special (i64bitand (i64eql afirst -1) cin))
+       (cout    (i64bitor usual special)))
+    cout)
+
+  :prepwork
+  ((local (defrule bitp-of-i64upluscarry
+            (bitp (i64upluscarry a b))
+            :enable (i64upluscarry)))
+
+   (local (defrule bitp-of-i64bitor
+            (implies (and (bitp a)
+                          (bitp b))
+                     (bitp (i64bitor a b)))
+            :enable (i64bitor bitp)))
+
+   (local (defrule bitp-of-i64bitand
+            (implies (and (bitp a)
+                          (bitp b))
+                     (bitp (i64bitand a b)))
+            :enable (i64bitand bitp))))
+  ///
+  (deffixequiv bigint-plus-cout0))
+
+(local
+ (defsection bigint-plus-cout0-correct
+   ;; We put this in its own section to avoid nonlocally depending on plus-ucarryout-n.
+
+   (defrule i64upluscarry-to-plus-ucarryout-n
+     (equal (i64upluscarry a b)
+            (plus-ucarryout-n 64 0 a b))
+     :enable (bigint-plus-cout0 i64upluscarry recursive-plus-correct)
+     :disable (plus-ucarryout-n-as-unsigned-byte-p)
+     :use ((:instance plus-ucarryout-n-as-unsigned-byte-p
+            (n 64) (cin 0) (a (loghead 64 a)) (b (loghead 64 b)))))
+
+   (defrule bigint-plus-cout0-correct
+     (equal (bigint-plus-cout0 cin a b)
+            (plus-ucarryout-n 64 cin a b))
+     :enable (bigint-plus-cout0 i64bitor i64bitand i64eql i64plus i64-fix)
+     :use ((:instance plus-carryout-n-using-preadd
+            (n 64)
+            (cin (bfix cin))
+            (a   (logext 64 a)))))))
+
+(define bigint-plus-sum0 ((cin bitp)
+                          (afirst i64-p)
+                          (bfirst i64-p))
+  :returns (sum i64-p)
+  (b* ((cin     (lbfix cin))
+       (afirst  (i64-fix afirst))
+       (bfirst  (i64-fix bfirst))
+       (cin+a   (i64plus cin afirst))
+       (cin+a+b (i64plus cin+a bfirst)))
+    cin+a+b)
+  ///
+  (local (in-theory (enable i64plus i64-fix)))
+
+  (defthm loghead-64-of-bigint-plus-sum0
+    (equal (loghead 64 (bigint-plus-sum0 cin afirst bfirst))
+           (loghead 64 (+ (bfix cin)
+                          (i64-fix afirst)
+                          (i64-fix bfirst))))))
+
+(define bigint-plus-aux ((cin bitp)
+                         (a bigint-p)
+                         (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Ripple carry addition of @(see bigint)s."
+  :measure (+ (bigint-count a) (bigint-count b))
+  :verify-guards nil
+  (b* ((cin (lbfix cin))
+       ((bigint a))
+       ((bigint b))
+       (sum0 (bigint-plus-sum0 cin a.first b.first))
+       (cout (bigint-plus-cout0 cin a.first b.first))
+       ((when (and a.endp b.endp))
+        (b* ((asign  (bigint->first a.rest))
+             (bsign  (bigint->first b.rest))
+             (final  (i64plus cout (i64plus asign bsign))))
+          (bigint-cons sum0 (bigint-singleton final)))))
+    (bigint-cons sum0
+                 (bigint-plus-aux cout a.rest b.rest)))
+  ///
+  (verify-guards bigint-plus-aux)
+
+  (local (include-book "arithmetic/top-with-meta" :dir :system))
+  (local (in-theory (disable split-plus)))
+
+  (local (defthm base-case
+           (implies (and (bigint->endp a) (bigint->endp b))
+                    (equal (bigint->val (bigint-plus-aux cin a b))
+                           (+ (bfix cin)
+                              (bigint->val a)
+                              (bigint->val b))))
+           :hints(("Goal"
+                   :expand (bigint-plus-aux cin a b)
+                   :do-not-induct t
+                   :do-not '(generalize fertilize)
+                   :in-theory (enable i64plus)
+                   :use ((:instance split-plus
+                          (n 64)
+                          (cin (bfix cin))
+                          (a (bigint->val a))
+                          (b (bigint->val b))))))))
+
+  (local (defthm inductive-case
+           (IMPLIES (AND (or (NOT (BIGINT->ENDP A))
+                             (NOT (BIGINT->ENDP B)))
+                         (EQUAL (BIGINT->VAL (BIGINT-PLUS-AUX (BIGINT-PLUS-COUT0 (BFIX CIN)
+                                                                                 (BIGINT->FIRST A)
+                                                                                 (BIGINT->FIRST B))
+                                                              (BIGINT->REST A)
+                                                              (BIGINT->REST B)))
+                                (+ (BFIX (BIGINT-PLUS-COUT0 (BFIX CIN)
+                                                            (BIGINT->FIRST A)
+                                                            (BIGINT->FIRST B)))
+                                   (BIGINT->VAL (BIGINT->REST A))
+                                   (BIGINT->VAL (BIGINT->REST B)))))
+                    (EQUAL (BIGINT->VAL (BIGINT-PLUS-AUX CIN A B))
+                           (+ (BFIX CIN)
+                              (BIGINT->VAL A)
+                              (BIGINT->VAL B))))
+           :hints(("Goal"
+                   :do-not-induct t
+                   :do-not '(generalize fertilize eliminate-destructors)
+                   :expand ((bigint-plus-aux cin a b)
+                            (bigint->val a)
+                            (bigint->val b))
+                   :use ((:instance split-plus
+                          (n 64)
+                          (cin (bfix cin))
+                          (a (bigint->val a))
+                          (b (bigint->val b))))))))
+
+  (defrule bigint-plus-aux-correct
+    (equal (bigint->val (bigint-plus-aux cin a b))
+           (+ (bfix cin)
+              (bigint->val a)
+              (bigint->val b)))
+    :hints(("Goal"
+            :induct (bigint-plus-aux cin a b))
+           ("Subgoal *1/2"
+            :in-theory (theory 'minimal-theory)
+            :use ((:instance inductive-case)))
+           ("Subgoal *1/1"
+            :in-theory (theory 'minimal-theory)
+            :use ((:instance base-case))))))
+
+(define bigint-plus ((a bigint-p)
+                     (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Analogue of @(see +) for @(see bigint)s."
+  (bigint-plus-aux 0 a b)
+  ///
+  (defthm bigint-plus-correct
+    (equal (bigint->val (bigint-plus a b))
+           (+ (bigint->val a)
+              (bigint->val b)))))
+

@@ -108,7 +108,6 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
           (the (signed-byte 64) (- a))))
 
 
-
 (defmacro def-i64-cmp2 (name &key short long logic exec prepwork
                              guard-hints (fix 'logext) rest)
   `(define ,name ((a i64-p :type (signed-byte 64))
@@ -268,9 +267,12 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
   :long "<p>This computes whether a 64-bit unsigned addition overflows.</p>"
   :inline nil
   :fix loghead
-  :logic (if (< (+ a b) (expt 2 64))
-             0
-           1))
+  :logic (bool->bit (not (unsigned-byte-p 64 (+ a b))))
+  :exec  (let ((a (loghead 64 a))
+               (b (loghead 64 b)))
+           (if (< (+ a b) (expt 2 64))
+               0
+             1)))
 
 (def-i64-arith2 i64minus
   :short "64-bit integer subtraction, i.e., @('a - b')."

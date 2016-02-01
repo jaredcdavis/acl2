@@ -31,9 +31,11 @@
 ; Original author: Jared Davis <jared@kookamara.com>
 
 (in-package "NATIVEARITH")
+(include-book "ihs/basic-definitions" :dir :system)
 (include-book "centaur/fty/deftypes" :dir :system)
 (include-book "centaur/fty/basetypes" :dir :system)
 (include-book "std/util/deflist" :dir :system)
+(local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 
 (deflist nat-list
