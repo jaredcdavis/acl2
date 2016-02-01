@@ -1,5 +1,5 @@
 
-CC := clang-3.5
+CC := clang
 CCFLAGS := -Wall
 OPT := opt
 OPTFLAGS := -O3
