@@ -634,3 +634,27 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
            (+ (bigint->val a)
               (bigint->val b)))))
 
+(define bigint-minus ((a bigint-p)
+                      (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Analogue of @(see binary--) for @(see bigint)s."
+  (bigint-plus-aux 1 a (bigint-lognot b))
+  ///
+  (defthm bigint-minus-correct
+    (equal (bigint->val (bigint-minus a b))
+           (- (bigint->val a)
+              (bigint->val b)))
+    :hints(("Goal"
+            :use ((:instance bitops::minus-to-lognot (x (bigint->val b))))))))
+
+(define bigint-nfix ((n bigint-p))
+  :returns (fixed bigint-p)
+  :short "Analogue of @(see nfix) for @(see bigint)s."
+  (if (bigint-slep (bigint-0) n)
+      (bigint-fix n)
+    (bigint-0))
+  ///
+  (defthm bigint-nfix-correct
+    (equal (bigint->val (bigint-nfix n))
+           (nfix (bigint->val n)))))
+
