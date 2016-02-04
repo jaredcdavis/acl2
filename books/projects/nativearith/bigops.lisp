@@ -815,3 +815,59 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
            (logext (i64-fix n) (bigint->val a)))
     :induct (bigint-logext-aux n a)
     :expand ((bigint->val a))))
+
+(define bigint-logext ((n bigint-p)
+                       (a bigint-p))
+  :returns (ans bigint-p)
+  :short "Analogue of @(see logext) for @(see bigint)s."
+  :measure (nfix (bigint->val n))
+  :verify-guards nil
+  :prepwork ((local (in-theory (enable i64-p signed-byte-p))))
+  (b* (((bigint n))
+       ((when (bigint-slep n (bigint-i64max)))
+        (if (bigint-slep n (bigint-0))
+            ;; Special degenerate case of logext by a negative or 0.  We know
+            ;; the answer but don't know that N is an i64, so just return it
+            ;; directly instead of calling the aux function.
+            (if (bit->bool (logcar (bigint->first a)))
+                (bigint-minus1)
+              (bigint-0))
+          ;; Else it must be an i64, so call the aux function.
+          (bigint-logext-aux (bigint->val-when-i64 n) a)))
+
+       ;; Anything past here should be very rare.
+       ((when (bigint-equalp a (bigint-0)))
+        ;; Special hack.  Logically we don't need to do this, but this allows
+        ;; us to stop computing things like
+        ;;      (bigint-logext <huge number> '(5))
+        ;; as soon as we run out of digits in A, instead of having to walk
+        ;; through all of N by 64 bit decrements.
+        (bigint-0))
+       ((when (bigint-equalp a (bigint-minus1)))
+        ;; Same idea as the special hack above, except for negative A.
+        (bigint-minus1)))
+
+    ;; Extralogical safety valve, as in bigint-logext-aux
+    (and (bigint-sltp a (bigint-0))
+         (raise "Trying to take ~x0 bits of a negative integer seems like a ~
+                 bad idea." (bigint->val n)))
+
+    (bigint-cons (bigint->first a)
+                 (bigint-logext (bigint-minus n (bigint-64))
+                                (bigint->rest a))))
+  ///
+  (verify-guards bigint-logext)
+
+  (local (defrule l0
+           (implies (<= n 0)
+                    (equal (logext n a)
+                           (if (bit->bool (logcar a))
+                               -1
+                             0)))
+           :enable (logext**)))
+
+  (defrule bigint-logext-correct
+    (equal (bigint->val (bigint-logext n a))
+           (logext (bigint->val n) (bigint->val a)))
+    :induct (bigint-logext n a)
+    :expand ((bigint->val a))))
