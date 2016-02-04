@@ -420,7 +420,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 (define bigint-clean ((a bigint-p))
   :short "Clean up a bigint by removing any extra blocks, without changing its value."
   :measure (bigint-count a)
-  :returns (cleaned-a bigint-p)
+  :returns (ans bigint-p)
   :verify-guards nil
   (b* (((bigint a))
        ((when a.endp)
@@ -648,7 +648,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
             :use ((:instance bitops::minus-to-lognot (x (bigint->val b))))))))
 
 (define bigint-nfix ((n bigint-p))
-  :returns (fixed bigint-p)
+  :returns (ans bigint-p)
   :short "Analogue of @(see nfix) for @(see bigint)s."
   (if (bigint-slep (bigint-0) n)
       (bigint-fix n)
@@ -657,4 +657,130 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   (defthm bigint-nfix-correct
     (equal (bigint->val (bigint-nfix n))
            (nfix (bigint->val n)))))
+
+(define bigint->val-when-i64 ((a bigint-p))
+  :guard (i64-p (bigint->val a))
+  :returns (val i64-p)
+  (bigint->first a)
+  ///
+  (defthm bigint->val-when-i64-correct
+    (implies (i64-p (bigint->val a))
+             (equal (bigint->val-when-i64 a)
+                    (bigint->val a)))
+    :hints(("Goal"
+            :do-not-induct t
+            :do-not '(generalize fertilize)
+            :expand ((bigint->val a))
+            :in-theory (enable i64-p)))))
+
+(local (defthm i64-p-of-subtract-64-from-positive
+         (implies (and (i64-p n)
+                       (<= 0 n))
+                  (i64-p (- n 64)))
+         :hints(("Goal" :in-theory (enable i64-p signed-byte-p)))))
+
+(define bigint-loghead-aux ((n i64-p)
+                            (a bigint-p))
+  :returns (ans bigint-p)
+  :parents (bigint-loghead)
+  :measure (nfix (i64-fix n))
+  :verify-guards nil
+  (b* ((n (i64-fix n))
+       ((when (<= n 64))
+        (cond ((< n 0)
+               ;; Special degenerate case, loghead of a negative is just always 0
+               (bigint-0))
+              ((< n 64)
+               ;; We have enough bits to zero extend in a single chunk.
+               (bigint-singleton (loghead n (bigint->first a))))
+              (t
+               ;; Special case where we need another digit because we're right
+               ;; at the boundary.  For instance, to zero-extend -1 to 64 bits,
+               ;; we need 64 bits of 1s, followed by a zero so that we don't
+               ;; interpret the result as negative.
+               (bigint-cons (bigint->first a) (bigint-0))))))
+    ;; Otherwise, we want more than 64 bits so keep the entire first chunk
+    ;; and truncate the tail.
+
+    ;; Extralogical safety valve: it seems pretty unreasonable to create
+    ;; numbers that are 2^30 bits or more (that'd be a gigabyte of bits, plus
+    ;; cons overhead!)  For comparison, its native bignums, CCL prevents you
+    ;; from running (loghead (expt 2 60) -1) and dies with the error: count
+    ;; 1152921504606846976 too large for ASH, but it doesn't stop you from
+    ;; trying to run (loghead (expt 2 59) -1) and instead reports Memory
+    ;; allocation request failed in this case.
+
+    (progn$
+     (and (<= (ash 1 30) n)
+          (bigint-sltp a (bigint-0))
+          (raise "Trying to take ~x0 bits of a negative integer seems like ~
+                  a bad idea." n))
+     (bigint-cons (bigint->first a)
+                  (bigint-loghead-aux (- n 64) (bigint->rest a)))))
+  ///
+  (verify-guards bigint-loghead-aux)
+
+  (local (defthm l0
+           (implies (<= n 0)
+                    (equal (loghead n a)
+                           0))
+           :hints(("Goal" :in-theory (enable loghead**)))))
+
+  (defthm bigint-loghead-aux-correct
+    (equal (bigint->val (bigint-loghead-aux n a))
+           (loghead (i64-fix n) (bigint->val a)))
+    :hints(("Goal"
+            :induct (bigint-loghead-aux n a)
+            :expand ((bigint->val a))))))
+
+(define bigint-loghead ((n bigint-p)
+                        (a bigint-p))
+  :returns (ans bigint-p)
+  :short "Analogue of @(see loghead) for @(see bigint)s."
+  :measure (nfix (bigint->val n))
+  :verify-guards nil
+  :prepwork ((local (in-theory (enable i64-p signed-byte-p))))
+  (b* (((bigint n))
+       ((when (bigint-slep n (bigint-i64max)))
+        (if (bigint-slep n (bigint-0))
+            (bigint-0)
+          (bigint-loghead-aux (bigint->val-when-i64 n) a)))
+       ((when (bigint-equalp a (bigint-0)))
+        ;; Special hack.  Logically we don't need to do this, but in practice
+        ;; if you write something like (bigint-loghead <huge number> '(5)),
+        ;; you'd like it to finish.
+        (bigint-0)))
+    ;; Extralogical safety valve, as in bigint-loghead-aux
+    (and (bigint-sltp a (bigint-0))
+         (raise "Trying to take ~x0 bits of a negative integer seems like a ~
+                 bad idea." (bigint->val n)))
+    (bigint-cons (bigint->first a)
+                 (bigint-loghead (bigint-minus n (bigint-64))
+                                 (bigint->rest a))))
+  ///
+  (verify-guards bigint-loghead)
+
+  (local (defthm l0
+           (implies (<= n 0)
+                    (equal (loghead n a)
+                           0))
+           :hints(("Goal" :in-theory (enable loghead**)))))
+
+  (defthm bigint-loghead-correct
+    (equal (bigint->val (bigint-loghead n a))
+           (loghead (bigint->val n) (bigint->val a)))
+    :hints(("Goal"
+            :induct (bigint-loghead n a)
+            :expand ((bigint->val a))))))
+
+
+
+
+
+
+
+
+
+
+
 

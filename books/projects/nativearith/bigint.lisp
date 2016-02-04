@@ -136,6 +136,20 @@ for details.</p>")
   (defmacro bigint-1 ()
     (list 'quote (list 1))))
 
+(defsection bigint-64
+  :parents (bigint)
+  :short "Bigint representation of @($64$)."
+  :long "@(def bigint-64)"
+  (defmacro bigint-64 ()
+    (list 'quote (list 64))))
+
+(defsection bigint-i64max
+  :parents (bigint)
+  :short "Bigint representation of @(see i64-max)."
+  :long "@(def bigint-i64max)"
+  (defmacro bigint-i64max ()
+    (list 'quote (list (i64-max)))))
+
 (define bigint-fix ((x bigint-p))
   :short "Fixing function for @(see bigint)s."
   :returns (x-fix bigint-p)

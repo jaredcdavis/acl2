@@ -219,6 +219,18 @@
          (a2 a)
          (b2 b))))
 
+(defrule signed-byte-p-n-of-logapp-n
+  (implies (posp n)
+           (equal (signed-byte-p n (logapp n a b))
+                  (let ((b (ifix b)))
+                    (if (<= 0 (logext n a))
+                        (equal b 0)
+                      (equal b -1)))))
+  :induct (logapp n a b)
+  :enable (bitops::ihsext-inductions
+           bitops::ihsext-recursive-redefs))
+
+
 
 (local (defrule logcar-when-not-integerp
          (implies (not (integerp a))
