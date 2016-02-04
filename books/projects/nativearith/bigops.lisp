@@ -47,18 +47,6 @@
 (local (acl2::do-not generalize fertilize))
 (local (in-theory (disable signed-byte-p unsigned-byte-p)))
 
-(defthm logext-64-of-bfix
-  (equal (logext 64 (bfix b))
-         (bfix b))
-  :hints(("Goal" :in-theory (enable bfix))))
-
-(defthm logext-when-bitp
-  (implies (bitp b)
-           (equal (logext 64 b)
-                  b))
-  :hints(("Goal" :in-theory (enable bitp))))
-
-
 (defsection bigops
   :parents (nativearith)
   :short "High-level operations on @(see bigint)s."
@@ -436,14 +424,13 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   ///
   (verify-guards bigint-clean)
 
-  (local (defthm l0
+  (local (defrule l0
            (implies (and (signed-byte-p 64 a)
                          (<= 0 a))
                     (unsigned-byte-p 63 a))
-           :hints(("Goal" :in-theory (enable signed-byte-p
-                                             unsigned-byte-p)))))
+           :enable (signed-byte-p unsigned-byte-p)))
 
-  (local (defthm l1
+  (local (defrule l1
            (implies (unsigned-byte-p 63 a)
                     (equal (loghead 64 a)
                            a))))
@@ -527,7 +514,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   ///
   (local (in-theory (enable i64plus i64-fix)))
 
-  (defthm loghead-64-of-bigint-plus-sum0
+  (defrule loghead-64-of-bigint-plus-sum0
     (equal (loghead 64 (bigint-plus-sum0 cin afirst bfirst))
            (loghead 64 (+ (bfix cin)
                           (i64-fix afirst)
@@ -563,24 +550,22 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   (local (include-book "arithmetic/top-with-meta" :dir :system))
   (local (in-theory (disable split-plus)))
 
-  (local (defthm base-case
+  (local (defrule base-case
            (implies (and (bigint->endp a) (bigint->endp b))
                     (equal (bigint->val (bigint-plus-aux cin a b))
                            (+ (bfix cin)
                               (bigint->val a)
                               (bigint->val b))))
-           :hints(("Goal"
-                   :expand (bigint-plus-aux cin a b)
-                   :do-not-induct t
-                   :do-not '(generalize fertilize)
-                   :in-theory (enable i64plus)
-                   :use ((:instance split-plus
-                          (n 64)
-                          (cin (bfix cin))
-                          (a (bigint->val a))
-                          (b (bigint->val b))))))))
+           :expand (bigint-plus-aux cin a b)
+           :do-not-induct t
+           :in-theory (enable i64plus)
+           :use ((:instance split-plus
+                  (n 64)
+                  (cin (bfix cin))
+                  (a (bigint->val a))
+                  (b (bigint->val b))))))
 
-  (local (defthm inductive-case
+  (local (defrule inductive-case
            (IMPLIES (AND (or (NOT (BIGINT->ENDP A))
                              (NOT (BIGINT->ENDP B)))
                          (EQUAL (BIGINT->VAL (BIGINT-PLUS-AUX (BIGINT-PLUS-COUT0 (BFIX CIN)
@@ -597,31 +582,25 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
                            (+ (BFIX CIN)
                               (BIGINT->VAL A)
                               (BIGINT->VAL B))))
-           :hints(("Goal"
-                   :do-not-induct t
-                   :do-not '(generalize fertilize eliminate-destructors)
-                   :expand ((bigint-plus-aux cin a b)
-                            (bigint->val a)
-                            (bigint->val b))
-                   :use ((:instance split-plus
-                          (n 64)
-                          (cin (bfix cin))
-                          (a (bigint->val a))
-                          (b (bigint->val b))))))))
+           :do-not-induct t
+           :expand ((bigint-plus-aux cin a b)
+                    (bigint->val a)
+                    (bigint->val b))
+           :use ((:instance split-plus
+                  (n 64)
+                  (cin (bfix cin))
+                  (a (bigint->val a))
+                  (b (bigint->val b))))))
 
   (defrule bigint-plus-aux-correct
     (equal (bigint->val (bigint-plus-aux cin a b))
            (+ (bfix cin)
               (bigint->val a)
               (bigint->val b)))
-    :hints(("Goal"
-            :induct (bigint-plus-aux cin a b))
-           ("Subgoal *1/2"
-            :in-theory (theory 'minimal-theory)
-            :use ((:instance inductive-case)))
-           ("Subgoal *1/1"
-            :in-theory (theory 'minimal-theory)
-            :use ((:instance base-case))))))
+    :in-theory (union-theories (theory 'minimal-theory)
+                               '((:induction bigint-plus-aux)
+                                 inductive-case base-case))
+    :induct (bigint-plus-aux cin a b)))
 
 (define bigint-plus ((a bigint-p)
                      (b bigint-p))
@@ -629,7 +608,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :short "Analogue of @(see +) for @(see bigint)s."
   (bigint-plus-aux 0 a b)
   ///
-  (defthm bigint-plus-correct
+  (defrule bigint-plus-correct
     (equal (bigint->val (bigint-plus a b))
            (+ (bigint->val a)
               (bigint->val b)))))
@@ -640,12 +619,11 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :short "Analogue of @(see binary--) for @(see bigint)s."
   (bigint-plus-aux 1 a (bigint-lognot b))
   ///
-  (defthm bigint-minus-correct
+  (defrule bigint-minus-correct
     (equal (bigint->val (bigint-minus a b))
            (- (bigint->val a)
               (bigint->val b)))
-    :hints(("Goal"
-            :use ((:instance bitops::minus-to-lognot (x (bigint->val b))))))))
+    :use ((:instance bitops::minus-to-lognot (x (bigint->val b))))))
 
 (define bigint-nfix ((n bigint-p))
   :returns (ans bigint-p)
@@ -654,41 +632,45 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
       (bigint-fix n)
     (bigint-0))
   ///
-  (defthm bigint-nfix-correct
+  (defrule bigint-nfix-correct
     (equal (bigint->val (bigint-nfix n))
            (nfix (bigint->val n)))))
 
 (define bigint->val-when-i64 ((a bigint-p))
+  :short "Equivalent to @(see bigint->val) when the value of the bigint is
+          already known to fit into 64 bits."
   :guard (i64-p (bigint->val a))
   :returns (val i64-p)
+  :inline t
   (bigint->first a)
   ///
-  (defthm bigint->val-when-i64-correct
+  (defrule bigint->val-when-i64-correct
     (implies (i64-p (bigint->val a))
              (equal (bigint->val-when-i64 a)
                     (bigint->val a)))
-    :hints(("Goal"
-            :do-not-induct t
-            :do-not '(generalize fertilize)
-            :expand ((bigint->val a))
-            :in-theory (enable i64-p)))))
+    :do-not-induct t
+    :expand ((bigint->val a))
+    :in-theory (enable i64-p)))
 
-(local (defthm i64-p-of-subtract-64-from-positive
+(local (defrule i64-p-of-subtract-64-from-positive
          (implies (and (i64-p n)
                        (<= 0 n))
                   (i64-p (- n 64)))
-         :hints(("Goal" :in-theory (enable i64-p signed-byte-p)))))
+         :enable (i64-p signed-byte-p)))
 
 (define bigint-loghead-aux ((n i64-p)
                             (a bigint-p))
   :returns (ans bigint-p)
   :parents (bigint-loghead)
+  :short "Implementation of @(see bigint-loghead) when we know that @('n') fits
+          into 64 bits (to avoid @(see bigint) operations on @('n'))."
   :measure (nfix (i64-fix n))
   :verify-guards nil
   (b* ((n (i64-fix n))
        ((when (<= n 64))
-        (cond ((< n 0)
-               ;; Special degenerate case, loghead of a negative is just always 0
+        (cond ((<= n 0)
+               ;; Special degenerate case, loghead with a negative or zero
+               ;; width is just always 0.
                (bigint-0))
               ((< n 64)
                ;; We have enough bits to zero extend in a single chunk.
@@ -709,29 +691,26 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
     ;; 1152921504606846976 too large for ASH, but it doesn't stop you from
     ;; trying to run (loghead (expt 2 59) -1) and instead reports Memory
     ;; allocation request failed in this case.
-
-    (progn$
-     (and (<= (ash 1 30) n)
-          (bigint-sltp a (bigint-0))
-          (raise "Trying to take ~x0 bits of a negative integer seems like ~
-                  a bad idea." n))
-     (bigint-cons (bigint->first a)
-                  (bigint-loghead-aux (- n 64) (bigint->rest a)))))
+    (and (<= (ash 1 30) n)
+         (bigint-sltp a (bigint-0))
+         (raise "Trying to take ~x0 bits of a negative integer seems like a ~
+                 bad idea." n))
+    (bigint-cons (bigint->first a)
+                 (bigint-loghead-aux (- n 64) (bigint->rest a))))
   ///
   (verify-guards bigint-loghead-aux)
 
-  (local (defthm l0
+  (local (defrule l0
            (implies (<= n 0)
                     (equal (loghead n a)
                            0))
-           :hints(("Goal" :in-theory (enable loghead**)))))
+           :enable (loghead**)))
 
-  (defthm bigint-loghead-aux-correct
+  (defrule bigint-loghead-aux-correct
     (equal (bigint->val (bigint-loghead-aux n a))
            (loghead (i64-fix n) (bigint->val a)))
-    :hints(("Goal"
-            :induct (bigint-loghead-aux n a)
-            :expand ((bigint->val a))))))
+    :induct (bigint-loghead-aux n a)
+    :expand ((bigint->val a))))
 
 (define bigint-loghead ((n bigint-p)
                         (a bigint-p))
@@ -746,9 +725,11 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
             (bigint-0)
           (bigint-loghead-aux (bigint->val-when-i64 n) a)))
        ((when (bigint-equalp a (bigint-0)))
-        ;; Special hack.  Logically we don't need to do this, but in practice
-        ;; if you write something like (bigint-loghead <huge number> '(5)),
-        ;; you'd like it to finish.
+        ;; Special hack.  Logically we don't need to do this, but this allows
+        ;; us to stop computing things like
+        ;;      (bigint-loghead <huge number> '(5))
+        ;; as soon as we run out of digits in A, instead of having to walk
+        ;; through all of N by 64 bit decrements.
         (bigint-0)))
     ;; Extralogical safety valve, as in bigint-loghead-aux
     (and (bigint-sltp a (bigint-0))
@@ -760,27 +741,77 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   ///
   (verify-guards bigint-loghead)
 
-  (local (defthm l0
+  (local (defrule l0
            (implies (<= n 0)
                     (equal (loghead n a)
                            0))
-           :hints(("Goal" :in-theory (enable loghead**)))))
+           :enable (loghead**)))
 
-  (defthm bigint-loghead-correct
+  (defrule bigint-loghead-correct
     (equal (bigint->val (bigint-loghead n a))
            (loghead (bigint->val n) (bigint->val a)))
-    :hints(("Goal"
-            :induct (bigint-loghead n a)
-            :expand ((bigint->val a))))))
+    :induct (bigint-loghead n a)
+    :expand ((bigint->val a))))
 
+(define bigint-logext-aux ((n i64-p)
+                           (a bigint-p))
+  :returns (ans bigint-p)
+  :parents (bigint-logext)
+  :short "Implementation of @(see bigint-logext) when we know that @('n') fits
+          into 64 bits (to avoid @(see bigint) operations on @('n'))."
+  :measure (nfix (i64-fix n))
+  :verify-guards nil
+  (b* ((n (i64-fix n))
+       ((bigint a))
+       ((when (<= n 64))
+        (cond ((<= n 0)
+               ;; Special degenerate case, logext with a negative or zero width
+               ;; is the sign extension of the lsb.
+               (if (bit->bool (logcar a.first))
+                   (bigint-minus1)
+                 (bigint-0)))
+              ((< n 64)
+               ;; We have enough bits to zero extend in a single chunk.
+               (bigint-singleton (logext n a.first)))
+              (t
+               ;; Special case where we need another digit because we're right
+               ;; at the boundary.  For instance, to zero-extend -1 to 64 bits,
+               ;; we need 64 bits of 1s, followed by a zero so that we don't
+               ;; interpret the result as negative.
+               (bigint-cons a.first
+                            (if (< a.first 0)
+                                (bigint-minus1)
+                              (bigint-0)))))))
+    ;; Otherwise, we want more than 64 bits so keep the entire first chunk
+    ;; and sign-extend the tail.
 
+    ;; Extralogical safety valve as in bigint-loghead-aux.
+    (and (<= (ash 1 30) n)
+         (bigint-sltp a (bigint-0))
+         (raise "Trying to take ~x0 bits of a negative integer seems like a ~
+                 bad idea." n))
+    (bigint-cons a.first
+                 (bigint-logext-aux (- n 64) a.rest)))
+  ///
+  (verify-guards bigint-logext-aux)
 
+  (local (defrule l0
+           (implies (<= n 0)
+                    (equal (logext n a)
+                           (if (bit->bool (logcar a))
+                               -1
+                             0)))
+           :enable (logext**)))
 
+  (local (defrule l1
+           (implies (and (signed-byte-p n a)
+                         (<= 0 a))
+                    (equal (loghead n a)
+                           a))
+           :enable (ihsext-inductions ihsext-recursive-redefs)))
 
-
-
-
-
-
-
-
+  (defrule bigint-logext-aux-correct
+    (equal (bigint->val (bigint-logext-aux n a))
+           (logext (i64-fix n) (bigint->val a)))
+    :induct (bigint-logext-aux n a)
+    :expand ((bigint->val a))))

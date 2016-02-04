@@ -44,6 +44,17 @@
 (local (in-theory (disable signed-byte-p unsigned-byte-p acl2::zip-open)))
 (local (std::add-default-post-define-hook :fix))
 
+(defrule logext-64-of-bfix
+  (equal (logext 64 (bfix b))
+         (bfix b))
+  :enable bfix)
+
+(defrule logext-when-bitp
+  (implies (bitp b)
+           (equal (logext 64 b)
+                  b))
+  :enable bitp)
+
 (defthm signed-byte-p-when-bitp
   (implies (and (syntaxp (quotep n))
                 (natp n)
@@ -227,10 +238,39 @@
                         (equal b 0)
                       (equal b -1)))))
   :induct (logapp n a b)
-  :enable (bitops::ihsext-inductions
-           bitops::ihsext-recursive-redefs))
+  :enable (ihsext-inductions ihsext-recursive-redefs))
 
+(defrule logext-of-logapp-more
+  (implies (< (nfix n) (nfix m))
+           (equal (logext n (logapp m a b))
+                  (logext n a)))
+  :enable (ihsext-inductions ihsext-recursive-redefs))
 
+(defrule logext-of-logapp-less
+  (implies (> (nfix n) (nfix m))
+           (equal (logext n (logapp m a b))
+                  (logapp m a (logext (- (nfix n) (nfix m)) b))))
+  :induct (my-ind m n a b)
+  :enable (ihsext-inductions ihsext-recursive-redefs)
+  :prep-lemmas
+  ((defun my-ind (m n a b)
+     (if (or (zp m)
+             (zp n))
+         (list m n a b)
+       (my-ind (- m 1) (- n 1) (logcdr a) b)))))
+
+(defrule logext-of-logapp-same
+  (equal (logext n (logapp n a b))
+         (if (zp n)
+             (logext 0 b)
+           (logext n a)))
+  :enable (ihsext-inductions ihsext-recursive-redefs))
+
+(defrule logtail-of-logext-less
+  (implies (< (nfix m) (nfix n))
+           (equal (logtail m (logext n a))
+                  (logext (- (nfix n) (nfix m)) (logtail m a))))
+  :enable (ihsext-recursive-redefs ihsext-inductions))
 
 (local (defrule logcar-when-not-integerp
          (implies (not (integerp a))
