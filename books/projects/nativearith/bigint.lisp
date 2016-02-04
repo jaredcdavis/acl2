@@ -414,6 +414,38 @@ for details.</p>")
       (bigint-1)
     (bigint-0)))
 
+(define make-bigint ((x integerp))
+  :returns (big bigint-p)
+  :short "Construct a @(see bigint) that represents any ACL2 integer."
+  :verify-guards nil
+  :measure (integer-length x)
+  (b* ((x (ifix x))
+       ((when (i64-p x))
+        (bigint-singleton x)))
+    (bigint-cons (logext 64 x)
+                 (make-bigint (logtail 64 x))))
+  :prepwork
+  ((local (in-theory (enable i64-p)))
+
+   (local (defrule integer-length-bounded-by-signed-byte-p
+            (implies (and (posp n)
+                          (signed-byte-p n x))
+                     (<= (integer-length x) n))
+            :rule-classes ((:linear) (:rewrite))
+            :enable (ihsext-inductions ihsext-recursive-redefs)))
+
+   (local (defrule integer-length-lower-bound-when-not-signed-byte-p
+            (implies (and (not (signed-byte-p n (ifix x)))
+                          (posp n))
+                     (<= n (integer-length x)))
+            :rule-classes ((:linear) (:rewrite))
+            :enable (ihsext-inductions ihsext-recursive-redefs zip))))
+  ///
+  (verify-guards make-bigint)
+
+  (defthm make-bigint-correct
+    (equal (bigint->val (make-bigint x))
+           (ifix x))))
 
 
 (deflist bigintlist
