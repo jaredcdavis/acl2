@@ -60,6 +60,7 @@
 
               alist-keys
               alist-vals
+              alist-equiv
 
               witness
               defquant
