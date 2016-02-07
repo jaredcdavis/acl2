@@ -237,7 +237,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 
 (define bigint-scmp ((a bigint-p)
                      (b bigint-p))
-  :parents (bigint-sltp bigint-slep bigint-sgtp bigint-sgep)
+  :parents (bigint-<-p bigint-<=-p bigint->-p bigint->=-p)
   :short "Helper for implementing signed comparisons."
   :measure (+ (bigint-count a) (bigint-count b))
   :returns (ans "Says whether @('a') is :equal, :less, or :greater than @('b').")
@@ -268,11 +268,11 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
     :expand ((bigint->val a)
              (bigint->val b))))
 
-(define bigint-sltp ((a bigint-p)
-                     (b bigint-p))
+(define bigint-<-p ((a bigint-p)
+                    (b bigint-p))
   :returns (ans booleanp :rule-classes :type-prescription)
-  :parents (bigint-slt)
-  :short "Boolean-valued version of @(see bigint-slt)."
+  :parents (bigint-<)
+  :short "Boolean-valued version of @(see bigint-<)."
   :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
        ((bigint b))
@@ -284,28 +284,28 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
              (< (loghead 64 a.first)
                 (loghead 64 b.first)))))
   ///
-  (defrule bigint-sltp-correct
-    (equal (bigint-sltp a b)
+  (defrule bigint-<-p-correct
+    (equal (bigint-<-p a b)
            (< (bigint->val a) (bigint->val b)))
     :do-not-induct t
     :expand ((bigint->val a)
              (bigint->val b))))
 
-(define bigint-slt ((a bigint-p)
-                    (b bigint-p))
+(define bigint-< ((a bigint-p)
+                  (b bigint-p))
   :returns (ans bigint-p)
-  :short "Signed @(see <) for @(see bigint)s."
+  :short "Analogue of @(see <) for @(see bigint)s; returns bigint 0 or 1."
   :inline t
-  (bool->bigint (bigint-sltp a b))
+  (bool->bigint (bigint-<-p a b))
   ///
-  (defrule bigint-slt-correct
-    (equal (bigint-slt a b)
+  (defrule bigint-<-correct
+    (equal (bigint-< a b)
            (bool->bigint (< (bigint->val a) (bigint->val b))))))
 
-(define bigint-slep ((a bigint-p)
+(define bigint-<=-p ((a bigint-p)
                      (b bigint-p))
-  :parents (bigint-sle)
-  :short "Boolean-valued version of @(see bigint-sle)."
+  :parents (bigint-<=)
+  :short "Boolean-valued version of @(see bigint-<=)."
   :returns (ans booleanp :rule-classes :type-prescription)
   :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
@@ -318,28 +318,28 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
              (<= (loghead 64 a.first)
                  (loghead 64 b.first)))))
   ///
-  (defrule bigint-slep-correct
-    (equal (bigint-slep a b)
+  (defrule bigint-<=-p-correct
+    (equal (bigint-<=-p a b)
            (<= (bigint->val a) (bigint->val b)))
     :do-not-induct t
     :expand ((bigint->val a)
              (bigint->val b))))
 
-(define bigint-sle ((a bigint-p)
-                    (b bigint-p))
+(define bigint-<= ((a bigint-p)
+                   (b bigint-p))
   :returns (ans bigint-p)
-  :short "Signed @(see <=) for @(see bigint)s."
+  :short "Analogue of @(see <=) for @(see bigint)s; returns bigint 0 or 1."
   :inline t
-  (bool->bigint (bigint-slep a b))
+  (bool->bigint (bigint-<=-p a b))
   ///
-  (defrule bigint-sle-correct
-    (equal (bigint-sle a b)
+  (defrule bigint-<=-correct
+    (equal (bigint-<= a b)
            (bool->bigint (<= (bigint->val a) (bigint->val b))))))
 
-(define bigint-sgtp ((a bigint-p)
-                     (b bigint-p))
-  :parents (bigint-sgt)
-  :short "Boolean-valued version of @(see bigint-sgt)."
+(define bigint->-p ((a bigint-p)
+                    (b bigint-p))
+  :parents (bigint->)
+  :short "Boolean-valued version of @(see bigint->)."
   :returns (ans booleanp :rule-classes :type-prescription)
   :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
@@ -352,28 +352,28 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
              (> (loghead 64 a.first)
                 (loghead 64 b.first)))))
   ///
-  (defrule bigint-sgtp-correct
-    (equal (bigint-sgtp a b)
+  (defrule bigint->-p-correct
+    (equal (bigint->-p a b)
            (> (bigint->val a) (bigint->val b)))
     :do-not-induct t
     :expand ((bigint->val a)
              (bigint->val b))))
 
-(define bigint-sgt ((a bigint-p)
-                    (b bigint-p))
+(define bigint-> ((a bigint-p)
+                  (b bigint-p))
   :returns (ans bigint-p)
-  :short "Signed @(see >) for @(see bigint)s."
+  :short "Analogue of @(see >) for @(see bigint)s; returns bigint 0 or 1."
   :inline t
-  (bool->bigint (bigint-sgtp a b))
+  (bool->bigint (bigint->-p a b))
   ///
-  (defrule bigint-sgt-correct
-    (equal (bigint-sgt a b)
+  (defrule bigint->-correct
+    (equal (bigint-> a b)
            (bool->bigint (> (bigint->val a) (bigint->val b))))))
 
-(define bigint-sgep ((a bigint-p)
+(define bigint->=-p ((a bigint-p)
                      (b bigint-p))
-  :parents (bigint-sge)
-  :short "Boolean-valued version of @(see bigint-sge)."
+  :parents (bigint->=)
+  :short "Boolean-valued version of @(see bigint->=)."
   :returns (ans booleanp :rule-classes :type-prescription)
   :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
@@ -386,22 +386,22 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
              (>= (loghead 64 a.first)
                  (loghead 64 b.first)))))
   ///
-  (defrule bigint-sgep-correct
-    (equal (bigint-sgep a b)
+  (defrule bigint->=-p-correct
+    (equal (bigint->=-p a b)
            (>= (bigint->val a) (bigint->val b)))
     :do-not-induct t
     :expand ((bigint->val a)
              (bigint->val b))))
 
-(define bigint-sge ((a bigint-p)
-                    (b bigint-p))
+(define bigint->= ((a bigint-p)
+                   (b bigint-p))
   :returns (ans bigint-p)
-  :short "Signed @(see >=) for @(see bigint)s."
+  :short "Analogue of @(see >=) for @(see bigint)s; returns bigint 0 or 1."
   :inline t
-  (bool->bigint (bigint-sgep a b))
+  (bool->bigint (bigint->=-p a b))
   ///
-  (defrule bigint-sge-correct
-    (equal (bigint-sge a b)
+  (defrule bigint->=-correct
+    (equal (bigint->= a b)
            (bool->bigint (>= (bigint->val a) (bigint->val b))))))
 
 
@@ -628,29 +628,13 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 (define bigint-nfix ((n bigint-p))
   :returns (ans bigint-p)
   :short "Analogue of @(see nfix) for @(see bigint)s."
-  (if (bigint-slep (bigint-0) n)
+  (if (bigint-<=-p (bigint-0) n)
       (bigint-fix n)
     (bigint-0))
   ///
   (defrule bigint-nfix-correct
     (equal (bigint->val (bigint-nfix n))
            (nfix (bigint->val n)))))
-
-(define bigint->val-when-i64 ((a bigint-p))
-  :short "Equivalent to @(see bigint->val) when the value of the bigint is
-          already known to fit into 64 bits."
-  :guard (i64-p (bigint->val a))
-  :returns (val i64-p)
-  :inline t
-  (bigint->first a)
-  ///
-  (defrule bigint->val-when-i64-correct
-    (implies (i64-p (bigint->val a))
-             (equal (bigint->val-when-i64 a)
-                    (bigint->val a)))
-    :do-not-induct t
-    :expand ((bigint->val a))
-    :in-theory (enable i64-p)))
 
 (local (defrule i64-p-of-subtract-64-from-positive
          (implies (and (i64-p n)
@@ -692,7 +676,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
     ;; trying to run (loghead (expt 2 59) -1) and instead reports Memory
     ;; allocation request failed in this case.
     (and (<= (ash 1 30) n)
-         (bigint-sltp a (bigint-0))
+         (bigint-<-p a (bigint-0))
          (raise "Trying to take ~x0 bits of a negative integer seems like a ~
                  bad idea." n))
     (bigint-cons (bigint->first a)
@@ -720,8 +704,8 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :verify-guards nil
   :prepwork ((local (in-theory (enable i64-p signed-byte-p))))
   (b* (((bigint n))
-       ((when (bigint-slep n (bigint-i64max)))
-        (if (bigint-slep n (bigint-0))
+       ((when (bigint-<=-p n (bigint-i64max)))
+        (if (bigint-<=-p n (bigint-0))
             (bigint-0)
           (bigint-loghead-aux (bigint->val-when-i64 n) a)))
        ((when (bigint-equalp a (bigint-0)))
@@ -732,7 +716,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
         ;; through all of N by 64 bit decrements.
         (bigint-0)))
     ;; Extralogical safety valve, as in bigint-loghead-aux
-    (and (bigint-sltp a (bigint-0))
+    (and (bigint-<-p a (bigint-0))
          (raise "Trying to take ~x0 bits of a negative integer seems like a ~
                  bad idea." (bigint->val n)))
     (bigint-cons (bigint->first a)
@@ -787,7 +771,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 
     ;; Extralogical safety valve as in bigint-loghead-aux.
     (and (<= (ash 1 30) n)
-         (bigint-sltp a (bigint-0))
+         (bigint-<-p a (bigint-0))
          (raise "Trying to take ~x0 bits of a negative integer seems like a ~
                  bad idea." n))
     (bigint-cons a.first
@@ -824,8 +808,8 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :verify-guards nil
   :prepwork ((local (in-theory (enable i64-p signed-byte-p))))
   (b* (((bigint n))
-       ((when (bigint-slep n (bigint-i64max)))
-        (if (bigint-slep n (bigint-0))
+       ((when (bigint-<=-p n (bigint-i64max)))
+        (if (bigint-<=-p n (bigint-0))
             ;; Special degenerate case of logext by a negative or 0.  We know
             ;; the answer but don't know that N is an i64, so just return it
             ;; directly instead of calling the aux function.
@@ -848,7 +832,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
         (bigint-minus1)))
 
     ;; Extralogical safety valve, as in bigint-logext-aux
-    (and (bigint-sltp a (bigint-0))
+    (and (bigint-<-p a (bigint-0))
          (raise "Trying to take ~x0 bits of a negative integer seems like a ~
                  bad idea." (bigint->val n)))
 

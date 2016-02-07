@@ -494,3 +494,19 @@ for details.</p>")
                                 (nth n x)
                               (bigint-0))))))))
 
+(define bigint->val-when-i64 ((a bigint-p))
+  :short "Equivalent to @(see bigint->val) when the value of the bigint is
+          already known to fit into 64 bits."
+  :guard (i64-p (bigint->val a))
+  :returns (val i64-p)
+  :inline t
+  (bigint->first a)
+  ///
+  (defrule bigint->val-when-i64-correct
+    (implies (i64-p (bigint->val a))
+             (equal (bigint->val-when-i64 a)
+                    (bigint->val a)))
+    :do-not-induct t
+    :expand ((bigint->val a))
+    :in-theory (enable i64-p)))
+

@@ -44,6 +44,7 @@
 
 
 (defxdoc nativearith
+  :parents (acl2::top)
   :short "A library of ``native'' machine-like arithmetic expressions with a
 strong connection to <a href='http://llvm.org/'>LLVM</a> assembly code."
 
