@@ -412,7 +412,11 @@ for details.</p>")
   :inline t
   (if x
       (bigint-1)
-    (bigint-0)))
+    (bigint-0))
+  ///
+  (defthm bool->bigint-correct
+    (equal (bigint->val (bool->bigint x))
+           (bool->bit x))))
 
 (define make-bigint ((x integerp))
   :returns (big bigint-p)

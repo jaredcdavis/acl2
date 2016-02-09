@@ -47,16 +47,18 @@
               disable*
               e/d*
               assert!
-              maybe-natp
-              lnfix
               b*
               fun
               why
               with-redef
               do-not
-              bitops
               set-equiv
               two-nats-measure
+
+              ;; BOZO consider adding to bitops-exports
+              maybe-natp
+              maybe-integerp
+              bitops
 
               alist-keys
               alist-vals
@@ -75,6 +77,7 @@
 
               signed-byte-listp
               unsigned-byte-listp
+              pos-listp
 
               fty::deflist
               fty::defprod

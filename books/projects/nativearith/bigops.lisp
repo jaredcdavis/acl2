@@ -66,7 +66,6 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   :measure (bigint-count a)
   :verify-guards nil
   (b* (((bigint a))
-       ((bigint b))
        (first (lognot a.first))
        ((when a.endp)
         (bigint-singleton first)))
@@ -703,8 +702,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :measure (nfix (bigint->val n))
   :verify-guards nil
   :prepwork ((local (in-theory (enable i64-p signed-byte-p))))
-  (b* (((bigint n))
-       ((when (bigint-<=-p n (bigint-i64max)))
+  (b* (((when (bigint-<=-p n (bigint-i64max)))
         (if (bigint-<=-p n (bigint-0))
             (bigint-0)
           (bigint-loghead-aux (bigint->val-when-i64 n) a)))
@@ -807,8 +805,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :measure (nfix (bigint->val n))
   :verify-guards nil
   :prepwork ((local (in-theory (enable i64-p signed-byte-p))))
-  (b* (((bigint n))
-       ((when (bigint-<=-p n (bigint-i64max)))
+  (b* (((when (bigint-<=-p n (bigint-i64max)))
         (if (bigint-<=-p n (bigint-0))
             ;; Special degenerate case of logext by a negative or 0.  We know
             ;; the answer but don't know that N is an i64, so just return it

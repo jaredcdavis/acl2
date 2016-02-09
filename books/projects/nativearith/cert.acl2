@@ -34,4 +34,4 @@
 (in-package "ACL2")
 
 (include-book "portcullis")
-; cert-flags: ? t :ttags :all
+; cert-flags: ? t :ttags :all :defaxioms-okp t

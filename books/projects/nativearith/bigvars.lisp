@@ -34,11 +34,6 @@
 (include-book "bigexpr")
 (local (std::add-default-post-define-hook :fix))
 
-(deflist bigvarlist
-  :elt-type bigvar
-  :true-listp t
-  :elementp-of-nil nil)
-
 (defines bigexpr-vars
   :parents (bigexpr)
   :short "Logically nice (but inefficient) way to collect variables from @(see

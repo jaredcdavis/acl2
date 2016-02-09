@@ -39,6 +39,7 @@
 (include-book "bigexpr")
 (include-book "bigeval")
 (include-book "bigvars")
+(include-book "bigbound")
 (include-book "llvm/ops")
 (include-book "llvm/opstest")
 

@@ -33,6 +33,8 @@
 (in-package "NATIVEARITH")
 (include-book "bigops")
 (include-book "bigexpr")
+(include-book "std/alists/alist-defuns" :dir :system)
+(local (include-book "std/alists/alist-keys" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 
 (defalist bigenv
@@ -41,7 +43,17 @@
   :true-listp t
   :parents (bigeval)
   :short "An alist mapping @(see bigvar)s to @(see bigint)s, often used as an
-          environment to @(see bigeval).")
+          environment to @(see bigeval)."
+  ///
+  (defthm bigvarlist-p-of-alist-keys-when-bigenv-p
+    (implies (bigenv-p x)
+             (bigvarlist-p (alist-keys x)))
+    :hints(("Goal" :induct (len x))))
+
+  (defthm bigvarlist-p-of-alist-keys-of-bigenv-fix
+    (bigvarlist-p (alist-keys (bigenv-fix env)))))
+
+
 
 (define bigenv-lookup ((var bigvar-p) (env bigenv-p))
   :parents (bigenv)
@@ -173,6 +185,10 @@
            (bigapply fn (bigeval-list args env)))
     :expand ((bigeval (make-bigexpr-call :fn fn :args args) env)))
 
+  (defrule bigeval-of-bigexpr-0
+    (equal (bigeval (bigexpr-0) env)
+           (bigint-0)))
+
   (defrule bigeval-list-when-atom
     (implies (atom x)
              (equal (bigeval-list x env)
@@ -194,10 +210,5 @@
     (equal (len (bigeval-list x env))
            (len x))
     :induct (len x)))
-
-
-
-
-
 
 
