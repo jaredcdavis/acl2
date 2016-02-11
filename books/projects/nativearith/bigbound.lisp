@@ -147,6 +147,16 @@
   :short "A @(see bigbound) for single bits, i.e., 0 or 1."
   (make-bigbound :size 2 :min 0 :max 1))
 
+(defval *bigbound-for-0*
+  :parents (bigbound)
+  :short "A @(see bigbound) for exactly 0."
+  (make-bigbound :size 1 :min 0 :max 0))
+
+(defval *bigbound-for-1*
+  :parents (bigbound)
+  :short "A @(see bigbound) for exactly 1."
+  (make-bigbound :size 2 :min 1 :max 1))
+
 
 (define bigbound-from-value ((x bigint-p))
   :returns (bound bigbound-p)
@@ -372,6 +382,165 @@
     :hints(("Goal" :in-theory (enable bigint-bounded-p)))))
 
 
+(define bigint-equal-bound ((arg1   bigexpr-p)
+                            (bound1 bigbound-p)
+                            (arg2   bigexpr-p)
+                            (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  (declare (ignorable arg1 arg2 bound1 bound2))
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+       ((when (or (and bound1.max bound2.min (< bound1.max bound2.min))
+                  (and bound2.max bound1.min (< bound2.max bound1.min))))
+        ;; Equality is impossible because the possible ranges of arg1 and arg2
+        ;; don't intersect
+        *bigbound-for-0*)
+       ((when (and bound1.min bound1.max (eql bound1.min bound1.max)
+                   bound2.min bound2.max (eql bound2.min bound2.max)
+                   (eql bound1.min bound2.min)))
+        ;; Equality is guaranteed because the possible ranges of arg1 and arg2
+        ;; constrain them to single values that happen to be identical.
+        *bigbound-for-1*))
+    *bigbound-for-bit*)
+  ///
+  (defrule bigint-equal-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint-equal (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint-equal-bound arg1 bound1 arg2 bound2)))
+    :hints(("Goal" :in-theory (enable bigint-bounded-p bool->bit)))))
+
+
+(define bigint-not-equal-bound ((arg1   bigexpr-p)
+                                (bound1 bigbound-p)
+                                (arg2   bigexpr-p)
+                                (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  (declare (ignorable arg1 arg2 bound1 bound2))
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+       ((when (or (and bound1.max bound2.min (< bound1.max bound2.min))
+                  (and bound2.max bound1.min (< bound2.max bound1.min))))
+        ;; Equality is impossible because the possible ranges of arg1 and arg2
+        ;; don't intersect
+        *bigbound-for-1*)
+       ((when (and bound1.min bound1.max (eql bound1.min bound1.max)
+                   bound2.min bound2.max (eql bound2.min bound2.max)
+                   (eql bound1.min bound2.min)))
+        ;; Equality is guaranteed because the possible ranges of arg1 and arg2
+        ;; constrain them to single values that happen to be identical.
+        *bigbound-for-0*))
+    *bigbound-for-bit*)
+  ///
+  (defrule bigint-not-equal-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint-not-equal (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint-not-equal-bound arg1 bound1 arg2 bound2)))
+    :hints(("Goal" :in-theory (enable bigint-bounded-p bool->bit)))))
+
+
+(define bigint-<-bound ((arg1   bigexpr-p)
+                        (bound1 bigbound-p)
+                        (arg2   bigexpr-p)
+                        (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  (declare (ignorable arg1 arg2 bound1 bound2))
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+       ((when (and bound1.max bound2.min (< bound1.max bound2.min)))
+        ;; arg1 <= max1 < min2 <= arg2
+        *bigbound-for-1*)
+       ((when (and bound2.max bound1.min (< bound2.max bound1.min)))
+        ;; arg2 <= max2 < min1 <= arg1
+        *bigbound-for-0*)
+       ((when (and bound1.min bound1.max (eql bound1.min bound1.max)
+                   bound2.min bound2.max (eql bound2.min bound2.max)))
+        ;; both constant, so just compute the answer.
+        (if (< bound1.min bound2.min)
+            *bigbound-for-1*
+          *bigbound-for-0*)))
+    *bigbound-for-bit*)
+  ///
+  (defrule bigint-<-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint-< (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint-<-bound arg1 bound1 arg2 bound2)))
+    :hints(("Goal" :in-theory (enable bigint-bounded-p bool->bit)))))
+
+
+(define bigint-<=-bound ((arg1   bigexpr-p)
+                         (bound1 bigbound-p)
+                         (arg2   bigexpr-p)
+                         (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  (declare (ignorable arg1 arg2 bound1 bound2))
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+       ((when (and bound1.max bound2.min (<= bound1.max bound2.min)))
+        ;; arg1 <= max1 <= min2 <= arg2
+        *bigbound-for-1*)
+       ((when (and bound2.max bound1.min (< bound2.max bound1.min)))
+        ;; arg2 <= max2 < min1 <= arg1
+        *bigbound-for-0*)
+       ((when (and bound1.min bound1.max (eql bound1.min bound1.max)
+                   bound2.min bound2.max (eql bound2.min bound2.max)))
+        ;; both constant, so just compute the answer.
+        (if (<= bound1.min bound2.min)
+            *bigbound-for-1*
+          *bigbound-for-0*)))
+    *bigbound-for-bit*)
+  ///
+  (defrule bigint-<=-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint-<= (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint-<=-bound arg1 bound1 arg2 bound2)))
+    :hints(("Goal" :in-theory (enable bigint-bounded-p bool->bit)))))
+
+
+(define bigint->-bound ((arg1   bigexpr-p)
+                        (bound1 bigbound-p)
+                        (arg2   bigexpr-p)
+                        (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  :inline t
+  (bigint-<-bound arg2 bound2 arg1 bound1)
+  ///
+  (defrule bigint->-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint-> (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint->-bound arg1 bound1 arg2 bound2)))
+    :disable (bigint-<-bound-correct)
+    :use ((:instance bigint-<-bound-correct
+           (arg1 arg2)
+           (bound1 bound2)
+           (arg2 arg1)
+           (bound2 bound1)))))
+
+(define bigint->=-bound ((arg1   bigexpr-p)
+                         (bound1 bigbound-p)
+                         (arg2   bigexpr-p)
+                         (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  :inline t
+  (bigint-<=-bound arg2 bound2 arg1 bound1)
+  ///
+  (defrule bigint->=-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint->= (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint->=-bound arg1 bound1 arg2 bound2)))
+    :disable (bigint-<=-bound-correct)
+    :use ((:instance bigint-<=-bound-correct
+           (arg1 arg2)
+           (bound1 bound2)
+           (arg2 arg1)
+           (bound2 bound1)))))
+
+
 (define bigfn-bound-nth ((n         natp)
                          (args      bigexprlist-p)
                          (argbounds bigboundlist-p))
@@ -408,6 +577,7 @@
     :in-theory (enable bigintlist-nth nth)
     :induct (nth n args)))
 
+
 (define bigfn-bound ((fn        fn-p            "Function being applied.")
                      (args      bigexprlist-p   "Arguments it is being applied to.")
                      (argbounds bigboundlist-p "Sizes we have inferred for these arguments."))
@@ -419,20 +589,40 @@
        (args      (bigexprlist-fix args))
        (argbounds (bigboundlist-fix argbounds)))
     (case fn
-      ((bigint-equal bigint-not-equal bigint-< bigint-<= bigint-> bigint->=)
-       ;; The answer is only 0 or 1, which requires 2 signed bits.
-       ;;
-       ;;  - It might be nice to switch to using -1 for true, which would give
-       ;;    us a one-bit size here.
-       ;;
-       ;;  - We could probably do better than this by considering ranges, i.e.,
-       ;;    for bigint-<, if we can see that [min,max] < [min,max] then we
-       ;;    know the answer will just be 1, etc.
-       *bigbound-for-bit*)
 
       ((bigint-lognot)
        (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds)))
          (bigint-lognot-bound arg1 bound1)))
+
+      ((bigint-equal)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-equal-bound arg1 bound1 arg2 bound2)))
+
+      ((bigint-not-equal)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-not-equal-bound arg1 bound1 arg2 bound2)))
+
+      ((bigint-<)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-<-bound arg1 bound1 arg2 bound2)))
+
+      ((bigint-<=)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-<=-bound arg1 bound1 arg2 bound2)))
+
+      ((bigint->)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint->-bound arg1 bound1 arg2 bound2)))
+
+      ((bigint->=)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint->=-bound arg1 bound1 arg2 bound2)))
 
       ((bigint-logand)
        (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
@@ -444,6 +634,11 @@
             ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
          (bigint-logior-bound arg1 bound1 arg2 bound2)))
 
+      ((bigint-logxor)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-logxor-bound arg1 bound1 arg2 bound2)))
+
       (otherwise
        (bigfn-bound-other fn args argbounds))))
   ///
@@ -451,7 +646,14 @@
     (implies (bigintlist-bounded-p (bigeval-list args env) argbounds)
              (bigint-bounded-p (bigapply fn (bigeval-list args env))
                                (bigfn-bound fn args argbounds)))
-    :enable bigintlist-nth-becomes-eval-of-bigfn-bound-nth))
+    :enable (bigintlist-nth-becomes-eval-of-bigfn-bound-nth)
+    :disable (bigint-equal-correct
+              bigint-not-equal-correct
+              bigint-<-correct
+              bigint-<=-correct
+              bigint->-correct
+              bigint->=-correct
+              )))
 
 
 (defines bigexpr-bound
