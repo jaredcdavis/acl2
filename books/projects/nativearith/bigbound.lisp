@@ -64,6 +64,21 @@
          :rule-classes :forward-chaining
          :enable signed-byte-p))
 
+(local (defrule equal-ash-1-zero
+         ;; BOZO maybe belongs in bitops
+         (equal (equal (ash 1 n) 0)
+                (negp n))
+         :rule-classes ((:rewrite)
+                        (:rewrite :corollary
+                         (implies (negp n)
+                                  (equal (ash 1 n)
+                                         0)))
+                        (:linear :corollary
+                         (implies (natp n)
+                                  (< 0 (ash 1 n)))))
+         :enable (ihsext-inductions ihsext-recursive-redefs)))
+
+
 
 (defprod bigbound
   :short "Static bounding information for a @(see bigexpr)."
@@ -157,9 +172,9 @@
   :short "A @(see bigbound) for exactly 1."
   (make-bigbound :size 2 :min 1 :max 1))
 
-
 (define bigbound-from-value ((x bigint-p))
   :returns (bound bigbound-p)
+  :short "Create a tight @(see bigbound) for a constant @(see bigint) value."
   (b* ((val (bigint->val x)))
     (make-bigbound :size (+ 1 (integer-length val))
                    :min val
@@ -167,6 +182,43 @@
   ///
   (defrule bigbound-from-value-correct
     (bigint-bounded-p x (bigbound-from-value x))))
+
+
+(define bigbound-maybe-strengthen ((x bigbound-p))
+  :returns (stronger-x bigbound-p)
+  :short "Try to improve the @('size') of a @(see bigbound) from its other components."
+  :inline t ;; Because I only use it in one place, below.
+  (b* (((bigbound x) (bigbound-fix x))
+       ((unless (and x.min x.max))
+        x)
+       (max-size (+ 1 (integer-length x.max)))
+       (min-size (+ 1 (integer-length x.min)))
+       (new-size (max max-size min-size))
+       ((unless (< new-size x.size))
+        x))
+    (change-bigbound x :size new-size))
+  ///
+
+  (local (defrule l0
+           (implies (and (<= min val)
+                         (<= val max)
+                         (signed-byte-p n min)
+                         (signed-byte-p n max)
+                         (integerp min)
+                         (integerp max)
+                         (integerp val))
+                    (signed-byte-p n val))
+           :enable signed-byte-p))
+
+  (local (defrule l1
+           (implies (integerp x)
+                    (signed-byte-p (+ 1 (integer-length x)) x))
+           :rule-classes ((:forward-chaining :trigger-terms ((integer-length x))))))
+
+  (defrule bigint-bounded-p-of-bigbound-maybe-strengthen
+    (implies (bigint-bounded-p x bound)
+             (bigint-bounded-p x (bigbound-maybe-strengthen bound)))
+    :enable bigint-bounded-p))
 
 
 (defsection-progn bigfn-bound-other
@@ -194,6 +246,22 @@
            (args (bigexprlist-fix args))))))
 
 
+(define bigint-nfix-bound ((arg1   bigexpr-p)
+                           (bound1 bigbound-p))
+  :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-nfix)."
+  (declare (ignorable arg1))
+  (b* (((bigbound bound1)))
+    (make-bigbound :size bound1.size
+                   :max (and bound1.max (nfix bound1.max))
+                   :min 0))
+  ///
+  (defrule bigint-nfix-bound-correct
+    (implies (bigint-bounded-p (bigeval arg1 env) bound1)
+             (bigint-bounded-p (bigint-nfix (bigeval arg1 env))
+                               (bigint-nfix-bound arg1 bound1)))
+    :enable (bigint-bounded-p nfix)))
+
 
 (define bigint-lognot-bound ((arg1   bigexpr-p)
                              (bound1 bigbound-p))
@@ -212,14 +280,14 @@
                          (integerp max)
                          (<= x max))
                     (<= (lognot max) (lognot x)))
-           :hints(("Goal" :in-theory (enable lognot)))))
+           :enable lognot))
 
   (local (defrule l1
            (implies (and (integerp x)
                          (integerp min)
                          (<= min x))
                     (<= (lognot x) (lognot min)))
-           :hints(("Goal" :in-theory (enable lognot)))))
+           :enable lognot))
 
   (defrule bigint-lognot-bound-correct
     (implies (bigint-bounded-p (bigeval arg1 env) bound1)
@@ -232,14 +300,15 @@
                              (arg2   bigexpr-p)
                              (bound2 bigbound-p))
   :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-logand)."
+  :long "<p>BOZO.  The tau/bounders/elementary-bounders book does something
+  very sophisticated for logand and we probably aren't doing nearly as good of
+  a job here.  It may be that we should do better.  For now, I can't stomach
+  the thought of depending on such a heavy book.  Maybe we can improve that
+  book or redo the proofs in a bitops style?  Also, it looks like tau-bounders
+  does some exhaustive exploration of smallish ranges, which might be too
+  expensive for our purposes?  We will need to experiment.</p>"
   (declare (ignorable arg1 arg2))
-  ;; BOZO.  The tau/bounders/elementary-bounders book does something very
-  ;; sophisticated for logand.  We probably aren't doing nearly as good of a
-  ;; job here.  It may be that we should do better.  For now, I can't stomach
-  ;; the thought of depending on such a heavy book.  Maybe we can improve that
-  ;; book or redo the proofs in a bitops style?  Also, it looks like
-  ;; tau-bounders does some exhaustive exploration of smallish ranges, which
-  ;; might be too expensive for our purposes?  We will need to experiment.
   (b* (((bigbound bound1))
        ((bigbound bound2))
        (arg1-natp (and bound1.min (<= 0 bound1.min)))
@@ -341,7 +410,7 @@
                   (bigint-bounded-p (bigeval arg2 env) bound2))
              (bigint-bounded-p (bigint-logand (bigeval arg1 env) (bigeval arg2 env))
                                (bigint-logand-bound arg1 bound1 arg2 bound2)))
-    :hints(("Goal" :in-theory (enable bigint-bounded-p)))))
+    :enable bigint-bounded-p))
 
 
 (define bigint-logior-bound ((arg1   bigexpr-p)
@@ -349,8 +418,9 @@
                              (arg2   bigexpr-p)
                              (bound2 bigbound-p))
   :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-logior)."
+  :long "<p>BOZO horribly stupid!  Improve me!</p>"
   (declare (ignorable arg1 arg2))
-  ;; BOZO horribly stupid!  Improve me!
   (b* (((bigbound bound1))
        ((bigbound bound2)))
     (make-bigbound :size (max bound1.size bound2.size)))
@@ -360,7 +430,7 @@
                   (bigint-bounded-p (bigeval arg2 env) bound2))
              (bigint-bounded-p (bigint-logior (bigeval arg1 env) (bigeval arg2 env))
                                (bigint-logior-bound arg1 bound1 arg2 bound2)))
-    :hints(("Goal" :in-theory (enable bigint-bounded-p)))))
+    :enable bigint-bounded-p))
 
 
 (define bigint-logxor-bound ((arg1   bigexpr-p)
@@ -368,8 +438,9 @@
                              (arg2   bigexpr-p)
                              (bound2 bigbound-p))
   :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-logxor)."
+  :long "<p>BOZO horribly stupid!  Improve me!</p>"
   (declare (ignorable arg1 arg2))
-  ;; BOZO horribly stupid!  Improve me!
   (b* (((bigbound bound1))
        ((bigbound bound2)))
     (make-bigbound :size (max bound1.size bound2.size)))
@@ -379,7 +450,7 @@
                   (bigint-bounded-p (bigeval arg2 env) bound2))
              (bigint-bounded-p (bigint-logxor (bigeval arg1 env) (bigeval arg2 env))
                                (bigint-logxor-bound arg1 bound1 arg2 bound2)))
-    :hints(("Goal" :in-theory (enable bigint-bounded-p)))))
+    :enable bigint-bounded-p))
 
 
 (define bigint-equal-bound ((arg1   bigexpr-p)
@@ -387,6 +458,7 @@
                             (arg2   bigexpr-p)
                             (bound2 bigbound-p))
   :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-equal)."
   (declare (ignorable arg1 arg2 bound1 bound2))
   (b* (((bigbound bound1))
        ((bigbound bound2))
@@ -408,7 +480,7 @@
                   (bigint-bounded-p (bigeval arg2 env) bound2))
              (bigint-bounded-p (bigint-equal (bigeval arg1 env) (bigeval arg2 env))
                                (bigint-equal-bound arg1 bound1 arg2 bound2)))
-    :hints(("Goal" :in-theory (enable bigint-bounded-p bool->bit)))))
+    :enable (bigint-bounded-p bool->bit)))
 
 
 (define bigint-not-equal-bound ((arg1   bigexpr-p)
@@ -416,6 +488,7 @@
                                 (arg2   bigexpr-p)
                                 (bound2 bigbound-p))
   :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-not-equal)."
   (declare (ignorable arg1 arg2 bound1 bound2))
   (b* (((bigbound bound1))
        ((bigbound bound2))
@@ -437,7 +510,7 @@
                   (bigint-bounded-p (bigeval arg2 env) bound2))
              (bigint-bounded-p (bigint-not-equal (bigeval arg1 env) (bigeval arg2 env))
                                (bigint-not-equal-bound arg1 bound1 arg2 bound2)))
-    :hints(("Goal" :in-theory (enable bigint-bounded-p bool->bit)))))
+    :enable (bigint-bounded-p bool->bit)))
 
 
 (define bigint-<-bound ((arg1   bigexpr-p)
@@ -445,6 +518,7 @@
                         (arg2   bigexpr-p)
                         (bound2 bigbound-p))
   :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-<)."
   (declare (ignorable arg1 arg2 bound1 bound2))
   (b* (((bigbound bound1))
        ((bigbound bound2))
@@ -467,7 +541,7 @@
                   (bigint-bounded-p (bigeval arg2 env) bound2))
              (bigint-bounded-p (bigint-< (bigeval arg1 env) (bigeval arg2 env))
                                (bigint-<-bound arg1 bound1 arg2 bound2)))
-    :hints(("Goal" :in-theory (enable bigint-bounded-p bool->bit)))))
+    :enable (bigint-bounded-p bool->bit)))
 
 
 (define bigint-<=-bound ((arg1   bigexpr-p)
@@ -475,6 +549,7 @@
                          (arg2   bigexpr-p)
                          (bound2 bigbound-p))
   :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-<=)."
   (declare (ignorable arg1 arg2 bound1 bound2))
   (b* (((bigbound bound1))
        ((bigbound bound2))
@@ -497,7 +572,7 @@
                   (bigint-bounded-p (bigeval arg2 env) bound2))
              (bigint-bounded-p (bigint-<= (bigeval arg1 env) (bigeval arg2 env))
                                (bigint-<=-bound arg1 bound1 arg2 bound2)))
-    :hints(("Goal" :in-theory (enable bigint-bounded-p bool->bit)))))
+    :enable (bigint-bounded-p bool->bit)))
 
 
 (define bigint->-bound ((arg1   bigexpr-p)
@@ -505,6 +580,7 @@
                         (arg2   bigexpr-p)
                         (bound2 bigbound-p))
   :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint->)."
   :inline t
   (bigint-<-bound arg2 bound2 arg1 bound1)
   ///
@@ -515,16 +591,18 @@
                                (bigint->-bound arg1 bound1 arg2 bound2)))
     :disable (bigint-<-bound-correct)
     :use ((:instance bigint-<-bound-correct
-           (arg1 arg2)
+           (arg1   arg2)
            (bound1 bound2)
-           (arg2 arg1)
+           (arg2   arg1)
            (bound2 bound1)))))
+
 
 (define bigint->=-bound ((arg1   bigexpr-p)
                          (bound1 bigbound-p)
                          (arg2   bigexpr-p)
                          (bound2 bigbound-p))
   :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint->=)."
   :inline t
   (bigint-<=-bound arg2 bound2 arg1 bound1)
   ///
@@ -535,10 +613,235 @@
                                (bigint->=-bound arg1 bound1 arg2 bound2)))
     :disable (bigint-<=-bound-correct)
     :use ((:instance bigint-<=-bound-correct
-           (arg1 arg2)
+           (arg1   arg2)
            (bound1 bound2)
-           (arg2 arg1)
+           (arg2   arg1)
            (bound2 bound1)))))
+
+
+(define bigint-plus-bound ((arg1   bigexpr-p)
+                           (bound1 bigbound-p)
+                           (arg2   bigexpr-p)
+                           (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-plus)."
+  (declare (ignorable arg1 arg2))
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+       (size
+        ;; A rough size bound, which can be justified by theorems such as
+        ;; bitops::basic-signed-byte-p-of-+.
+        (+ 1 (max bound1.size bound2.size)))
+       (min
+        ;; min1 <= arg1
+        ;; min2 <= arg2
+        ;; --------------------------
+        ;; min1 + min2 <= arg1 + arg2
+        (and bound1.min bound2.min (+ bound1.min bound2.min)))
+       (max
+        ;; arg1 <= max1
+        ;; arg2 <= max2
+        ;; --------------------------
+        ;; arg1 + arg2 <= max1 + max2
+        (and bound1.max bound2.max (+ bound1.max bound2.max))))
+    (make-bigbound :size size :min min :max max))
+  ///
+  (defrule bigint-plus-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint-plus (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint-plus-bound arg1 bound1 arg2 bound2)))))
+
+
+(define bigint-minus-bound ((arg1   bigexpr-p)
+                            (bound1 bigbound-p)
+                            (arg2   bigexpr-p)
+                            (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-minus)."
+  (declare (ignorable arg1 arg2))
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+       (size
+        ;; A rough size bound, which can be justified by theorems such as
+        ;; bitops::basic-signed-byte-p-of-binary-minus.
+        (+ 1 (max bound1.size bound2.size)))
+       (min
+        ;; min1 <= arg1
+        ;; arg2 <= max2
+        ;; --------------------------
+        ;; min1 - max2 <= arg1 - arg2
+        (and bound1.min bound2.max (- bound1.min bound2.max)))
+       (max
+        ;; arg1 <= max1
+        ;; min2 <= arg2
+        ;; --------------------------
+        ;; arg1 - arg2 <= max1 - min2
+        (and bound1.max bound2.min (- bound1.max bound2.min))))
+    (make-bigbound :size size :min min :max max))
+  ///
+  (defrule bigint-minus-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint-minus (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint-minus-bound arg1 bound1 arg2 bound2)))))
+
+
+
+(define bigint-loghead-bound ((arg1   bigexpr-p)
+                              (bound1 bigbound-p)
+                              (arg2   bigexpr-p)
+                              (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-loghead)."
+  (declare (ignorable arg1 arg2 bound2))
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+       ;; This is tricky and also important to get right, since we expect that
+       ;; loghead operations could be frequently useful as size hints to bound
+       ;; other expressions.
+
+       ((when (and bound1.min bound1.max (equal bound1.min bound1.max)))
+        ;; Important, common case to optimize.  We know exactly how many bits
+        ;; we need.
+        (b* (((when (<= bound1.min 0))
+              ;; Degenerate case: we want 0 or negative bits?  Loghead just
+              ;; returns 0.
+              *bigbound-for-0*)
+             (size
+              ;; We want N bits, so the result is an N-bit unsigned number,
+              ;; i.e., a N+1 bit signed number.
+              (+ 1 bound1.min))
+             (max
+              ;; BOZO infer a max.  We can probably always fall back to inferring
+              ;; a max from the size, but we may often be able to do better, e.g.,
+              ;; if we are doing (loghead 64 7), we obviously still have a max
+              ;; value of 7.
+              nil))
+          (make-bigbound :size size
+                         :max max
+                         :min 0)))
+
+       ;; BOZO add other optimizations here.
+       ;;
+       ;;  - We will want at least to have a good case for when we can bound N
+       ;;    to a range (instead of a constant like the above).
+       ;;
+       ;;  - If X is known to be positive then we should be able to use its
+       ;;    bounds instead of falling through to the worst case.
+       ;;
+       ;; /BOZO
+
+       ;; Worst case.  N is some more complex expression and we only have some
+       ;; rough size bound for it, and X might be negative so we might really
+       ;; need some huge number of 1 bits.
+
+       (worst-case-size
+        ;; Let SIZE be bound1.size.  All we really know about N is that it fits
+        ;; into SIZE bits.  So N might be as large as 2^{SIZE-1}-1.
+        (ash 1 (- bound1.size 1)))
+
+       (worst-case-max
+        ;; At worst N is 2^{SIZE-1}-1 and X is, say, -1.  In this case we need
+        ;; to create a number with 2^{SIZE-1}-1 bits, all of which are 1s.
+        ;; What's the magnitude of that number?  Yikes: 2^{2^{SIZE-1}-1} - 1.
+        ;;
+        ;; We will only infer a max if SIZE is "small enough."  For instance,
+        ;; if SIZE = 14 then worst-case-size is 8192, so the max integer is
+        ;; 2^8192-1, which would take around 1 KB of space to represent.  It's
+        ;; not clear how much space is reasonable to devote just to computing
+        ;; bounds, but hopefully this will be small enough not to cause
+        ;; problems while still being large enough to be useful.  Sure, why
+        ;; not.  We can tune this later if it becomes a problem.
+        (if (< bound1.size 14)
+            (ash 1 (+ -1 worst-case-size))
+          nil)))
+    (make-bigbound :size worst-case-size
+                   :max  worst-case-max
+                   :min  0))
+  ///
+  (local (defruled signed-byte-p-at-most-max-int
+           (implies (signed-byte-p size n)
+                    (let ((max-int (+ -1 (ash 1 (+ -1 size)))))
+                      (<= n max-int)))
+           :rule-classes (:linear)
+           :enable (signed-byte-p bitops::expt-2-is-ash)
+           :do-not-induct t))
+
+  (local (defruled unsigned-byte-p-monotonic
+           (implies (and (unsigned-byte-p n x)
+                         (<= n m)
+                         (integerp m))
+                    (unsigned-byte-p m x))
+           :enable (unsigned-byte-p)
+           :prep-lemmas ;; bozo wish this was just :prepwork.
+           ((local (include-book "arithmetic/top" :dir :system))
+            (defrule l0
+              ;; Wow why doesn't ACL2 get this on its own??
+              (implies (and (< x (expt 2 n))
+                            (<= n m)
+                            (integerp n)
+                            (integerp m)
+                            (integerp x))
+                       (< x (expt 2 m)))
+              :in-theory (disable acl2::expt-is-increasing-for-base>1)
+              :use ((:instance acl2::expt-is-increasing-for-base>1
+                     (r 2) (i n) (j m)))))))
+
+  (local (defrule loghead-when-degenerate
+           (implies (<= n 0)
+                    (equal (loghead n a)
+                           0))
+           :enable (loghead**)))
+
+  (local (defrule unsigned-byte-p-of-loghead-same
+           ;; BOZO maybe belongs in bitops
+           (equal (unsigned-byte-p n (loghead n x))
+                  (natp n))
+           :disable (unsigned-byte-p)
+           :prep-lemmas
+           ((defrule l1
+              (implies (natp n)
+                       (unsigned-byte-p n (loghead n x))))
+
+            (defrule l2
+              (implies (not (natp n))
+                       (not (unsigned-byte-p n x)))))))
+
+  (local (defrule worst-case-bound-of-loghead-unsigned
+           (implies (signed-byte-p size n)
+                    (let ((max-int (+ -1 (ash 1 (+ -1 size)))))
+                      (unsigned-byte-p max-int (loghead n x))))
+           :do-not-induct t
+           :disable (unsigned-byte-p)
+           :use ((:instance signed-byte-p-at-most-max-int)
+                 (:instance unsigned-byte-p-monotonic
+                  (n n)
+                  (m (+ -1 (ash 1 (+ -1 size))))
+                  (x (loghead n x))))))
+
+  (local (defrule worst-case-bound-of-loghead-signed
+           (implies (signed-byte-p size n)
+                    (signed-byte-p (ash 1 (+ -1 size)) (loghead n x)))
+           :do-not-induct t
+           :disable (signed-byte-p unsigned-byte-p
+                                   worst-case-bound-of-loghead-unsigned)
+           :use ((:instance worst-case-bound-of-loghead-unsigned))))
+
+  (local (defrule worst-case-bound-of-loghead-linear
+           (implies (signed-byte-p size n)
+                    (< (loghead n x)
+                       (ash 1 (+ -1 (ash 1 (+ -1 size))))))
+           :rule-classes ((:linear))
+           :disable (worst-case-bound-of-loghead-signed)
+           :use ((:instance worst-case-bound-of-loghead-signed))
+           :enable (signed-byte-p bitops::expt-2-is-ash)))
+
+  (defrule bigint-loghead-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint-loghead (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint-loghead-bound arg1 bound1 arg2 bound2)))))
 
 
 (define bigfn-bound-nth ((n         natp)
@@ -547,6 +850,11 @@
   :guard (equal (len args) (len argbounds))
   :returns (mv (arg   bigexpr-p)
                (bound bigbound-p))
+  :parents (bigfn-bound)
+  :short "Extract the @('n')th expression and its corresponding bound from the
+          argument lists, with special fixing."
+  :long "<p>This is just a stupid, technical trick to help get the fixing stuff
+         right for @(see bigfn-bound).</p>"
   (b* ((n (nfix n)))
     (if (< n (len args))
         (mv (bigexpr-fix (nth n args))
@@ -578,12 +886,12 @@
     :induct (nth n args)))
 
 
-(define bigfn-bound ((fn        fn-p            "Function being applied.")
-                     (args      bigexprlist-p   "Arguments it is being applied to.")
+(define bigfn-bound ((fn        fn-p           "Function being applied.")
+                     (args      bigexprlist-p  "Arguments it is being applied to.")
                      (argbounds bigboundlist-p "Sizes we have inferred for these arguments."))
   :guard (equal (len args) (len argbounds))
   :returns (bound bigbound-p "Size bound inferred for @('fn(args)').")
-  :short "Compute a (possibly overapproximate) size bound for a function call."
+  :short "Infer static bounds for a function call."
   :long "<p>This is the main intelligence behind @(see bigexpr-bound).</p>"
   (b* ((fn        (fn-fix fn))
        (args      (bigexprlist-fix args))
@@ -593,6 +901,10 @@
       ((bigint-lognot)
        (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds)))
          (bigint-lognot-bound arg1 bound1)))
+
+      ((bigint-nfix)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds)))
+         (bigint-nfix-bound arg1 bound1)))
 
       ((bigint-equal)
        (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
@@ -639,6 +951,16 @@
             ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
          (bigint-logxor-bound arg1 bound1 arg2 bound2)))
 
+      ((bigint-plus)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-plus-bound arg1 bound1 arg2 bound2)))
+
+      ((bigint-minus)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-minus-bound arg1 bound1 arg2 bound2)))
+
       (otherwise
        (bigfn-bound-other fn args argbounds))))
   ///
@@ -663,7 +985,7 @@
   (define bigexpr-bound ((x        bigexpr-p     "Expression to evaluate.")
                          (varsizes bigvarsizes-p "Sizes of variables in the expression."))
     :returns (bound bigbound-p "Size bound inferred for @('x').")
-    :short "Compute a (possibly overapproximate) size bound for an expression."
+    :short "Infer static bounds for an expression."
     :measure (bigexpr-count x)
     :verify-guards nil
     :flag :expr
@@ -671,8 +993,9 @@
       (bigexpr-case x
         :const (bigbound-from-value x.val)
         :var   (make-bigbound :size (bigvarsize-lookup x.name varsizes))
-        :call  (b* ((argbounds (bigexprlist-bounds x.args varsizes)))
-                 (bigfn-bound x.fn x.args argbounds)))))
+        :call  (b* ((argbounds (bigexprlist-bounds x.args varsizes))
+                    (tentative (bigfn-bound x.fn x.args argbounds)))
+                 (bigbound-maybe-strengthen tentative)))))
 
   (define bigexprlist-bounds ((x        bigexprlist-p)
                               (varsizes bigvarsizes-p))
