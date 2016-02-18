@@ -78,6 +78,20 @@
                                   (< 0 (ash 1 n)))))
          :enable (ihsext-inductions ihsext-recursive-redefs)))
 
+  ;; (local (defrule unsigned-byte-p-of-loghead-same
+  ;;          ;; BOZO maybe belongs in bitops
+  ;;          (equal (unsigned-byte-p n (loghead n x))
+  ;;                 (natp n))
+  ;;          :disable (unsigned-byte-p)
+  ;;          :prep-lemmas
+  ;;          ((defrule l1
+  ;;             (implies (natp n)
+  ;;                      (unsigned-byte-p n (loghead n x))))
+
+  ;;           (defrule l2
+  ;;             (implies (not (natp n))
+  ;;                      (not (unsigned-byte-p n x)))))))
+
 
 
 (defprod bigbound
@@ -119,6 +133,13 @@
              (<= (bigint->val x) (bigbound->max bound)))
     :rule-classes :linear)
 
+  (defrule bigbound-minmax-linear
+    (implies (and (bigint-bounded-p x bound)
+                  (bigbound->min bound)
+                  (bigbound->max bound))
+             (<= (bigbound->min bound) (bigbound->max bound)))
+    :rule-classes :linear)
+
   (defrule bigint-bounded-p-of-make-bigbound
     (equal (bigint-bounded-p x (make-bigbound :size size :min min :max max))
            (let ((val  (bigint->val x))
@@ -155,6 +176,42 @@
     (equal (bigintlist-bounded-p (cons a x) bounds)
            (and (bigint-bounded-p a (car bounds))
                 (bigintlist-bounded-p x (cdr bounds))))))
+
+
+
+(defval *bigbound-2^N-max*
+  :short "Artificial limit for computing @('2^N') when inferring bounds."
+
+  :long "<p>Our bounding functions for some operations might, in some cases,
+  try to creates numbers that are too large to be practical.  We especially
+  want to be careful not to compute exponents such as @('2^N') where N is too
+  large.</p>
+
+  <p>It's not clear how much space is reasonable to devote just to computing
+  bounds.  To get some rough intuition: 1 KB is 8192 bits, which is 2^13.  So
+  if we are going to compute 2^{2^13}, the result will take roughly 1 KB of
+  space.  By similar reasoning,</p>
+
+  @({
+       2^{2^12} -- 512 B
+       2^{2^13} -- 1 KB
+       2^{2^14} -- 2 KB
+       2^{2^15} -- 4 KB
+       2^{2^16} -- 8 KB
+       ...
+  })
+
+  <p>For now I will hope that 1 KB will be small enough not to cause problems,
+  while still being large enough to be useful in almost all practical cases.
+  We may want to tune this later if turns out to be too large or too
+  small.</p>"
+
+  (expt 2 13))
+
+(defval *bigbound-2^2^N-max*
+  :short "Artificial limit for computing @('2^{2^N}') when inferring bounds."
+  (integer-length *bigbound-2^N-max*))
+
 
 
 (defval *bigbound-for-bit*
@@ -467,8 +524,8 @@
         ;; Equality is impossible because the possible ranges of arg1 and arg2
         ;; don't intersect
         *bigbound-for-0*)
-       ((when (and bound1.min bound1.max (eql bound1.min bound1.max)
-                   bound2.min bound2.max (eql bound2.min bound2.max)
+       ((when (and bound1.min (eql bound1.min bound1.max)
+                   bound2.min (eql bound2.min bound2.max)
                    (eql bound1.min bound2.min)))
         ;; Equality is guaranteed because the possible ranges of arg1 and arg2
         ;; constrain them to single values that happen to be identical.
@@ -497,8 +554,8 @@
         ;; Equality is impossible because the possible ranges of arg1 and arg2
         ;; don't intersect
         *bigbound-for-1*)
-       ((when (and bound1.min bound1.max (eql bound1.min bound1.max)
-                   bound2.min bound2.max (eql bound2.min bound2.max)
+       ((when (and bound1.min (eql bound1.min bound1.max)
+                   bound2.min (eql bound2.min bound2.max)
                    (eql bound1.min bound2.min)))
         ;; Equality is guaranteed because the possible ranges of arg1 and arg2
         ;; constrain them to single values that happen to be identical.
@@ -528,8 +585,8 @@
        ((when (and bound2.max bound1.min (< bound2.max bound1.min)))
         ;; arg2 <= max2 < min1 <= arg1
         *bigbound-for-0*)
-       ((when (and bound1.min bound1.max (eql bound1.min bound1.max)
-                   bound2.min bound2.max (eql bound2.min bound2.max)))
+       ((when (and bound1.min (eql bound1.min bound1.max)
+                   bound2.min (eql bound2.min bound2.max)))
         ;; both constant, so just compute the answer.
         (if (< bound1.min bound2.min)
             *bigbound-for-1*
@@ -559,8 +616,8 @@
        ((when (and bound2.max bound1.min (< bound2.max bound1.min)))
         ;; arg2 <= max2 < min1 <= arg1
         *bigbound-for-0*)
-       ((when (and bound1.min bound1.max (eql bound1.min bound1.max)
-                   bound2.min bound2.max (eql bound2.min bound2.max)))
+       ((when (and bound1.min (eql bound1.min bound1.max)
+                   bound2.min (eql bound2.min bound2.max)))
         ;; both constant, so just compute the answer.
         (if (<= bound1.min bound2.min)
             *bigbound-for-1*
@@ -687,75 +744,27 @@
                                (bigint-minus-bound arg1 bound1 arg2 bound2)))))
 
 
-
-(define bigint-loghead-bound ((arg1   bigexpr-p)
-                              (bound1 bigbound-p)
-                              (arg2   bigexpr-p)
-                              (bound2 bigbound-p))
+(define bigint-loghead-bound.worstcase ((bound1 bigbound-p))
   :returns (bound bigbound-p)
-  :short "Infer static bounds for @(see bigint-loghead)."
-  (declare (ignorable arg1 arg2 bound2))
+  :parents (bigint-loghead-bound)
+  :short "Bad, general case for bounding @('(loghead n x)')."
+
+  :long "<p>N is some more complex expression and we only have some @(see
+  signed-byte-p) width for it, not an upper bound.  Meanwhile X is not known to
+  be positive.  So we may really need some huge number of 1 bits.</p>
+
+  <p><b>Result Size</b>.  Let SIZE be bound1.size.  All we really know about N
+  is that it fits into SIZE bits.  So N might be as large as 2^{SIZE-1}-1.</p>
+
+  <p><b>Result Max</b>.  At worst N is 2^{SIZE-1}-1 and X is, say, -1.  In this
+  case we need to create a number with 2^{SIZE-1}-1 bits, all of which are
+  1s.</p>"
+
   (b* (((bigbound bound1))
-       ((bigbound bound2))
-       ;; This is tricky and also important to get right, since we expect that
-       ;; loghead operations could be frequently useful as size hints to bound
-       ;; other expressions.
-
-       ((when (and bound1.min bound1.max (equal bound1.min bound1.max)))
-        ;; Important, common case to optimize.  We know exactly how many bits
-        ;; we need.
-        (b* (((when (<= bound1.min 0))
-              ;; Degenerate case: we want 0 or negative bits?  Loghead just
-              ;; returns 0.
-              *bigbound-for-0*)
-             (size
-              ;; We want N bits, so the result is an N-bit unsigned number,
-              ;; i.e., a N+1 bit signed number.
-              (+ 1 bound1.min))
-             (max
-              ;; BOZO infer a max.  We can probably always fall back to inferring
-              ;; a max from the size, but we may often be able to do better, e.g.,
-              ;; if we are doing (loghead 64 7), we obviously still have a max
-              ;; value of 7.
-              nil))
-          (make-bigbound :size size
-                         :max max
-                         :min 0)))
-
-       ;; BOZO add other optimizations here.
-       ;;
-       ;;  - We will want at least to have a good case for when we can bound N
-       ;;    to a range (instead of a constant like the above).
-       ;;
-       ;;  - If X is known to be positive then we should be able to use its
-       ;;    bounds instead of falling through to the worst case.
-       ;;
-       ;; /BOZO
-
-       ;; Worst case.  N is some more complex expression and we only have some
-       ;; rough size bound for it, and X might be negative so we might really
-       ;; need some huge number of 1 bits.
-
-       (worst-case-size
-        ;; Let SIZE be bound1.size.  All we really know about N is that it fits
-        ;; into SIZE bits.  So N might be as large as 2^{SIZE-1}-1.
-        (ash 1 (- bound1.size 1)))
-
-       (worst-case-max
-        ;; At worst N is 2^{SIZE-1}-1 and X is, say, -1.  In this case we need
-        ;; to create a number with 2^{SIZE-1}-1 bits, all of which are 1s.
-        ;; What's the magnitude of that number?  Yikes: 2^{2^{SIZE-1}-1} - 1.
-        ;;
-        ;; We will only infer a max if SIZE is "small enough."  For instance,
-        ;; if SIZE = 14 then worst-case-size is 8192, so the max integer is
-        ;; 2^8192-1, which would take around 1 KB of space to represent.  It's
-        ;; not clear how much space is reasonable to devote just to computing
-        ;; bounds, but hopefully this will be small enough not to cause
-        ;; problems while still being large enough to be useful.  Sure, why
-        ;; not.  We can tune this later if it becomes a problem.
-        (if (< bound1.size 14)
-            (ash 1 (+ -1 worst-case-size))
-          nil)))
+       (worst-case-size (ash 1 (- bound1.size 1)))
+       (worst-case-max  (if (< bound1.size *bigbound-2^2^N-max*)
+                            (ash 1 (+ -1 worst-case-size))
+                          nil)))
     (make-bigbound :size worst-case-size
                    :max  worst-case-max
                    :min  0))
@@ -787,12 +796,6 @@
               :in-theory (disable acl2::expt-is-increasing-for-base>1)
               :use ((:instance acl2::expt-is-increasing-for-base>1
                      (r 2) (i n) (j m)))))))
-
-  (local (defrule loghead-when-degenerate
-           (implies (<= n 0)
-                    (equal (loghead n a)
-                           0))
-           :enable (loghead**)))
 
   (local (defrule unsigned-byte-p-of-loghead-same
            ;; BOZO maybe belongs in bitops
@@ -830,12 +833,199 @@
 
   (local (defrule worst-case-bound-of-loghead-linear
            (implies (signed-byte-p size n)
-                    (< (loghead n x)
-                       (ash 1 (+ -1 (ash 1 (+ -1 size))))))
+                    (<= (loghead n x)
+                        (+ -1 (ash 1 (+ -1 (ash 1 (+ -1 size)))))))
            :rule-classes ((:linear))
            :disable (worst-case-bound-of-loghead-signed)
            :use ((:instance worst-case-bound-of-loghead-signed))
            :enable (signed-byte-p bitops::expt-2-is-ash)))
+
+  (defrule bigint-loghead-bound.worstcase-correct
+    (implies (bigint-bounded-p (bigeval arg1 env) bound1)
+             (bigint-bounded-p (bigint-loghead (bigeval arg1 env) val2)
+                               (bigint-loghead-bound.worstcase bound1)))
+    :hints(("Goal" :in-theory (enable bigint-bounded-p)))))
+
+
+(define bigint-loghead-bound.nmax ((max natp))
+  :returns (bound bigbound-p)
+  :parents (bigint-loghead-bound)
+  :short "Bound for @('(loghead n x)') when we know @('n <= max') but we do not
+  know that @('x') is non-negative."
+
+  :long "<p>Since we want at most @('max') bits of @('x').  The result is
+  definitely an @('max')-bit unsigned, i.e., an @('max+1') bit signed.  This
+  gives us:</p>
+
+  <ul>
+    <li>A plausible size bound: max+1</li>
+    <li>A plausible max value:  2^max - 1</li>
+  </ul>
+
+  <p>Since we do not know that @('x') is positive, its bounds are not very
+  useful to us.  For instance: @('(loghead 3 -1)') is @('7'), so in this case
+  the result size is pretty much governed by @('n').</p>"
+
+  (b* ((max (lnfix max)))
+    (make-bigbound :size (+ 1 max)
+                   :max (and (<= max *bigbound-2^N-max*)
+                             (+ -1 (ash 1 max)))
+                   :min 0))
+  ///
+  (local (defrule loghead-bounded-by-max-of-size-bits
+           (implies (and (<= n max)
+                         (case-split (natp max)))
+                    (signed-byte-p (+ 1 max) (loghead n x)))
+           :enable (ihsext-inductions ihsext-recursive-redefs)))
+
+  (local (defrule loghead-bounded-by-max-of-size-bits-linear
+           (implies (and (<= n max)
+                         (case-split (natp max)))
+                    (<= (loghead n x)
+                        (+ -1 (ash 1 max))))
+           :rule-classes :linear
+           :disable (loghead-bounded-by-max-of-size-bits)
+           :use ((:instance loghead-bounded-by-max-of-size-bits))
+           :enable (signed-byte-p bitops::expt-2-is-ash)))
+
+  (defrule bigint-loghead-bound.nmax-correct
+    (implies (and (<= (bigint->val val1) max)
+                  (natp max))
+             (bigint-bounded-p (bigint-loghead val1 val2)
+                               (bigint-loghead-bound.nmax max)))
+    :hints(("Goal" :in-theory (enable bigint-bounded-p)))))
+
+
+(define bigint-loghead-bound.natp ((bound1 bigbound-p)
+                                   (bound2 bigbound-p))
+  :guard (b* (((bigbound bound1))
+              ((bigbound bound2)))
+           (and bound2.min
+                (<= 0 bound2.min)))
+  :returns (bound bigbound-p)
+  :parents (bigint-loghead-bound)
+  :short "Bound for @('(loghead n x)') when we know @('x') is a natural."
+  :long "<p>In this case the loghead can only chop down the result, so we know
+  we can either reuse or improve @('bound2').</p>
+
+  <p>If we have an upper bound for @('n'), i.e., @('n <= max'), then we are
+  taking at most @('max') bits of @('x').  The result is therefore at most an
+  @('max')-bit unsigned, i.e., an @('max+1') bit signed.  This gives us:</p>
+
+  <ul>
+    <li>A plausible size bound: psize = max + 1</li>
+    <li>A plausible max value:  pmax = 2^max - 1</li>
+  </ul>
+
+  <p>So we want to:</p>
+
+  <ul>
+    <li>Use min(psize, bound2.size) as the new size, and </li>
+    <li>Use min(pmax, bound2.max) as the new max.</li>
+  </ul>"
+
+  (declare (ignorable bound2))
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+
+       ((unless (and bound1.max (<= 0 bound1.max)))
+        ;; We don't know a maximum bound for ARG1, so we'll just reuse the size
+        ;; and max bounds from ARG2.
+        (change-bigbound bound2 :min 0))
+
+       ;; Bound1.max+1 is the plausible size.
+       (psize (+ bound1.max 1))
+       (pmax  (and (<= psize *bigbound-2^N-max*)
+                   (+ -1 (ash 1 psize)))))
+
+    (make-bigbound :size (min bound2.size psize)
+                   :min 0
+                   :max (cond ((and pmax bound2.max)
+                               (min pmax bound2.max))
+                              (pmax
+                               pmax)
+                              (t
+                               bound2.max))))
+  ///
+  (local (in-theory (enable bitops::expt-2-is-ash)))
+
+  (local (defrule loghead-self-bound-when-natural
+           (implies (natp x)
+                    (<= (loghead n x) x))
+           :rule-classes ((:linear) (:rewrite))
+           :enable (ihsext-recursive-redefs ihsext-inductions logcons)
+           :induct (loghead n x)))
+
+  (local (defrule loghead-bounded-by-max-of-size-bits
+           (implies (and (<= n max)
+                         (case-split (natp max)))
+                    (signed-byte-p (+ 1 max) (loghead n x)))
+           :enable (ihsext-inductions ihsext-recursive-redefs)))
+
+  (local (defrule loghead-self-bounded-when-natural-sbp
+           (implies (and (signed-byte-p size x)
+                         (natp x))
+                    (signed-byte-p size (loghead n x)))
+           :disable (loghead-self-bound-when-natural)
+           :use ((:instance loghead-self-bound-when-natural))
+           :enable (signed-byte-p)))
+
+  (local (defrule loghead-bounded-by-max-of-size-bits-linear
+           (implies (and (<= n max)
+                         (case-split (natp max)))
+                    (<= (loghead n x)
+                        (+ -1 (ash 1 max))))
+           :rule-classes (:linear :rewrite)
+           :disable (loghead-bounded-by-max-of-size-bits)
+           :use ((:instance loghead-bounded-by-max-of-size-bits))
+           :enable (signed-byte-p bitops::expt-2-is-ash)))
+
+  (defrule bigint-loghead-bound.natp-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2)
+                  (bigbound->min bound2)
+                  (<= 0 (bigbound->min bound2)))
+             (bigint-bounded-p (bigint-loghead (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint-loghead-bound.natp bound1 bound2)))
+    :hints(("Goal" :in-theory (enable bigint-bounded-p)))))
+
+
+(define bigint-loghead-bound ((arg1   bigexpr-p)
+                              (bound1 bigbound-p)
+                              (arg2   bigexpr-p)
+                              (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-loghead)."
+  (declare (ignorable arg1 arg2))
+  :guard-debug t
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+       ;; This is tricky and also important to get right, since we expect that
+       ;; loghead operations could be frequently useful as size hints to bound
+       ;; other expressions.
+
+       ((when (and bound1.max (<= bound1.max 0)))
+        ;; Degenerate case: we want 0 or negative bits?  Loghead just returns 0
+        ;; in these cases, so we can return a very good bound.
+        *bigbound-for-0*)
+
+       ((when (and bound2.min (<= 0 bound2.min)))
+        ;; Good case: loghead of a natural: we can only get a better bound.
+        (bigint-loghead-bound.natp bound1 bound2))
+
+       ((when bound1.max)
+        ;; Not so good case: loghead of a possibly negative integer, but we at
+        ;; least know a bound on how many bits we're taking.
+        (bigint-loghead-bound.nmax bound1.max)))
+
+    ;; Worst case: don't know much and we can only infer a bad bound.
+    (bigint-loghead-bound.worstcase bound1))
+  ///
+  (local (defrule loghead-when-degenerate
+           (implies (<= n 0)
+                    (equal (loghead n a)
+                           0))
+           :enable (loghead**)))
 
   (defrule bigint-loghead-bound-correct
     (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
@@ -936,6 +1126,16 @@
             ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
          (bigint->=-bound arg1 bound1 arg2 bound2)))
 
+      ((bigint-plus)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-plus-bound arg1 bound1 arg2 bound2)))
+
+      ((bigint-minus)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-minus-bound arg1 bound1 arg2 bound2)))
+
       ((bigint-logand)
        (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
             ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
@@ -951,15 +1151,10 @@
             ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
          (bigint-logxor-bound arg1 bound1 arg2 bound2)))
 
-      ((bigint-plus)
+      ((bigint-loghead)
        (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
             ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
-         (bigint-plus-bound arg1 bound1 arg2 bound2)))
-
-      ((bigint-minus)
-       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
-            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
-         (bigint-minus-bound arg1 bound1 arg2 bound2)))
+         (bigint-loghead-bound arg1 bound1 arg2 bound2)))
 
       (otherwise
        (bigfn-bound-other fn args argbounds))))
