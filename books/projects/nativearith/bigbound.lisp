@@ -65,7 +65,7 @@
          :enable signed-byte-p))
 
 (local (defrule equal-ash-1-zero
-         ;; BOZO maybe belongs in bitops
+         ;; BOZO maybe belongs in bitops?
          (equal (equal (ash 1 n) 0)
                 (negp n))
          :rule-classes ((:rewrite)
@@ -78,19 +78,79 @@
                                   (< 0 (ash 1 n)))))
          :enable (ihsext-inductions ihsext-recursive-redefs)))
 
-  ;; (local (defrule unsigned-byte-p-of-loghead-same
-  ;;          ;; BOZO maybe belongs in bitops
-  ;;          (equal (unsigned-byte-p n (loghead n x))
-  ;;                 (natp n))
-  ;;          :disable (unsigned-byte-p)
-  ;;          :prep-lemmas
-  ;;          ((defrule l1
-  ;;             (implies (natp n)
-  ;;                      (unsigned-byte-p n (loghead n x))))
+(local (defrule equal-ash-1-one
+         ;; BOZO maybe belongs in bitops?
+         (equal (equal (ash 1 n) 1)
+                (zip n))
+         :rule-classes ((:rewrite)
+                        (:rewrite :corollary
+                         (implies (zip n)
+                                  (equal (ash 1 n)
+                                         1))))
+         :enable (ihsext-inductions ihsext-recursive-redefs)))
 
-  ;;           (defrule l2
-  ;;             (implies (not (natp n))
-  ;;                      (not (unsigned-byte-p n x)))))))
+(local (defruled unsigned-byte-p-monotonic
+         (implies (and (unsigned-byte-p n x)
+                       (<= n m)
+                       (integerp m))
+                  (unsigned-byte-p m x))
+         :enable (unsigned-byte-p)
+         :prep-lemmas ;; bozo wish this was just :prepwork.
+         ((local (include-book "arithmetic/top" :dir :system))
+          (defrule l0
+            ;; Wow why doesn't ACL2 get this on its own??
+            (implies (and (< x (expt 2 n))
+                          (<= n m)
+                          (integerp n)
+                          (integerp m)
+                          (integerp x))
+                     (< x (expt 2 m)))
+            :in-theory (disable acl2::expt-is-increasing-for-base>1)
+            :use ((:instance acl2::expt-is-increasing-for-base>1
+                   (r 2) (i n) (j m)))))))
+
+(local (defruled signed-byte-p-monotonic
+         (implies (and (signed-byte-p n x)
+                       (<= n m)
+                       (integerp m))
+                  (signed-byte-p m x))
+         :enable (signed-byte-p)
+         :prep-lemmas
+         ((local (include-book "arithmetic/top" :dir :system))
+          (defrule l0
+            (implies (and (< x (expt 2 n))
+                          (<= n m)
+                          (integerp n)
+                          (integerp m)
+                          (integerp x))
+                     (< x (expt 2 m)))
+            :disable (acl2::expt-is-increasing-for-base>1)
+            :use ((:instance acl2::expt-is-increasing-for-base>1
+                   (r 2) (i n) (j m))))
+          (defrule l1
+            (implies (and (<= (- (expt 2 n)) x)
+                          (<= n m)
+                          (integerp n)
+                          (integerp m)
+                          (integerp x))
+                     (<= (- (expt 2 m)) x))
+            :disable (acl2::expt-is-increasing-for-base>1)
+            :use ((:instance acl2::expt-is-increasing-for-base>1
+                   (r 2) (i n) (j m)))))))
+
+(local (defrule unsigned-byte-p-of-loghead-same
+         ;; BOZO maybe belongs in bitops
+         (equal (unsigned-byte-p n (loghead n x))
+                (natp n))
+         :disable (unsigned-byte-p)
+         :prep-lemmas
+         ((defrule l1
+            (implies (natp n)
+                     (unsigned-byte-p n (loghead n x))))
+
+          (defrule l2
+            (implies (not (natp n))
+                     (not (unsigned-byte-p n x)))))))
 
 
 
@@ -276,31 +336,6 @@
     (implies (bigint-bounded-p x bound)
              (bigint-bounded-p x (bigbound-maybe-strengthen bound)))
     :enable bigint-bounded-p))
-
-
-(defsection-progn bigfn-bound-other
-  ;; Temporary stub, bozo fixme
-
-  (defstub bigfn-bound-other (* * *) => *)
-
-  (defaxiom bigbound-p-of-bigfn-bound-other
-    (bigbound-p (bigfn-bound-other fn args argbounds)))
-
-  (defaxiom bigfn-bound-other-correct
-    (implies (bigintlist-bounded-p (bigeval-list args env) argbounds)
-             (bigint-bounded-p (bigapply fn (bigeval-list args env))
-                               (bigfn-bound-other fn args argbounds))))
-
-  (defrule bigfn-bound-other-correct-alt
-    (implies (bigintlist-bounded-p (bigeval-list args env) argbounds)
-             (bigint-bounded-p (bigapply fn (bigeval-list args env))
-                               (bigfn-bound-other (fn-fix fn)
-                                                  (bigexprlist-fix args)
-                                                  argbounds)))
-    :disable bigfn-bound-other-correct
-    :use ((:instance bigfn-bound-other-correct
-           (fn (fn-fix fn))
-           (args (bigexprlist-fix args))))))
 
 
 (define bigint-nfix-bound ((arg1   bigexpr-p)
@@ -777,40 +812,6 @@
            :enable (signed-byte-p bitops::expt-2-is-ash)
            :do-not-induct t))
 
-  (local (defruled unsigned-byte-p-monotonic
-           (implies (and (unsigned-byte-p n x)
-                         (<= n m)
-                         (integerp m))
-                    (unsigned-byte-p m x))
-           :enable (unsigned-byte-p)
-           :prep-lemmas ;; bozo wish this was just :prepwork.
-           ((local (include-book "arithmetic/top" :dir :system))
-            (defrule l0
-              ;; Wow why doesn't ACL2 get this on its own??
-              (implies (and (< x (expt 2 n))
-                            (<= n m)
-                            (integerp n)
-                            (integerp m)
-                            (integerp x))
-                       (< x (expt 2 m)))
-              :in-theory (disable acl2::expt-is-increasing-for-base>1)
-              :use ((:instance acl2::expt-is-increasing-for-base>1
-                     (r 2) (i n) (j m)))))))
-
-  (local (defrule unsigned-byte-p-of-loghead-same
-           ;; BOZO maybe belongs in bitops
-           (equal (unsigned-byte-p n (loghead n x))
-                  (natp n))
-           :disable (unsigned-byte-p)
-           :prep-lemmas
-           ((defrule l1
-              (implies (natp n)
-                       (unsigned-byte-p n (loghead n x))))
-
-            (defrule l2
-              (implies (not (natp n))
-                       (not (unsigned-byte-p n x)))))))
-
   (local (defrule worst-case-bound-of-loghead-unsigned
            (implies (signed-byte-p size n)
                     (let ((max-int (+ -1 (ash 1 (+ -1 size)))))
@@ -997,7 +998,6 @@
   :returns (bound bigbound-p)
   :short "Infer static bounds for @(see bigint-loghead)."
   (declare (ignorable arg1 arg2))
-  :guard-debug t
   (b* (((bigbound bound1))
        ((bigbound bound2))
        ;; This is tricky and also important to get right, since we expect that
@@ -1032,6 +1032,46 @@
                   (bigint-bounded-p (bigeval arg2 env) bound2))
              (bigint-bounded-p (bigint-loghead (bigeval arg1 env) (bigeval arg2 env))
                                (bigint-loghead-bound arg1 bound1 arg2 bound2)))))
+
+
+(define bigint-logext-bound ((arg1   bigexpr-p)
+                             (bound1 bigbound-p)
+                             (arg2   bigexpr-p)
+                             (bound2 bigbound-p))
+  :returns (bound bigbound-p)
+  :short "Infer static bounds for @(see bigint-logext)."
+  (declare (ignorable arg1 arg2 bound1 bound2))
+  (b* (((bigbound bound1))
+       ((bigbound bound2))
+       ((when (and bound1.max (<= bound1.max 0)))
+        ;; Degenerate case: we want 0 or negative bits?  Logext is pretty weird
+        ;; in this case and returns either -1 or 0 based on the *least*
+        ;; significant bit of X.  We seem unlikely to know anything about the
+        ;; LSB of X per the bound.
+        (make-bigbound :size 1 :min -1 :max 0)))
+    (change-bigbound bound2
+                     :min nil
+                     :max nil))
+  ///
+  (local (defrule logext-when-degenerate
+           (implies (zp n)
+                    (equal (logext n a)
+                           (if (bit->bool (logcar a))
+                               -1
+                             0)))
+           :enable (logext**)))
+
+  (local (defrule logext-does-not-increase-size
+           (implies (signed-byte-p n x)
+                    (signed-byte-p n (logext m x)))
+           :enable (ihsext-recursive-redefs ihsext-inductions)))
+
+  (defrule bigint-logext-bound-correct
+    (implies (and (bigint-bounded-p (bigeval arg1 env) bound1)
+                  (bigint-bounded-p (bigeval arg2 env) bound2))
+             (bigint-bounded-p (bigint-logext (bigeval arg1 env) (bigeval arg2 env))
+                               (bigint-logext-bound arg1 bound1 arg2 bound2)))
+    :hints(("Goal" :in-theory (enable bigint-bounded-p)))))
 
 
 (define bigfn-bound-nth ((n         natp)
@@ -1092,9 +1132,20 @@
        (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds)))
          (bigint-lognot-bound arg1 bound1)))
 
-      ((bigint-nfix)
-       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds)))
-         (bigint-nfix-bound arg1 bound1)))
+      ((bigint-logior)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-logior-bound arg1 bound1 arg2 bound2)))
+
+      ((bigint-logand)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-logand-bound arg1 bound1 arg2 bound2)))
+
+      ((bigint-logxor)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-logxor-bound arg1 bound1 arg2 bound2)))
 
       ((bigint-equal)
        (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
@@ -1136,28 +1187,24 @@
             ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
          (bigint-minus-bound arg1 bound1 arg2 bound2)))
 
-      ((bigint-logand)
-       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
-            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
-         (bigint-logand-bound arg1 bound1 arg2 bound2)))
-
-      ((bigint-logior)
-       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
-            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
-         (bigint-logior-bound arg1 bound1 arg2 bound2)))
-
-      ((bigint-logxor)
-       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
-            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
-         (bigint-logxor-bound arg1 bound1 arg2 bound2)))
+      ((bigint-nfix)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds)))
+         (bigint-nfix-bound arg1 bound1)))
 
       ((bigint-loghead)
        (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
             ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
          (bigint-loghead-bound arg1 bound1 arg2 bound2)))
 
+      ((bigint-logext)
+       (b* (((mv arg1 bound1) (bigfn-bound-nth 0 args argbounds))
+            ((mv arg2 bound2) (bigfn-bound-nth 1 args argbounds)))
+         (bigint-logext-bound arg1 bound1 arg2 bound2)))
+
       (otherwise
-       (bigfn-bound-other fn args argbounds))))
+       ;; Not a known function, so bigapply just returns 0.
+       (progn$ (cw "Warning: unknown function ~x0~%" fn)
+               *bigbound-for-0*))))
   ///
   (defrule bigfn-bound-correct
     (implies (bigintlist-bounded-p (bigeval-list args env) argbounds)
@@ -1169,8 +1216,10 @@
               bigint-<-correct
               bigint-<=-correct
               bigint->-correct
-              bigint->=-correct
-              )))
+              bigint->=-correct)
+    :hints((and stable-under-simplificationp
+                ;; To solve the degenerate case of an unknown function
+                '(:in-theory (enable bigapply))))))
 
 
 (defines bigexpr-bound
