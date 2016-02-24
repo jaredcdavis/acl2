@@ -33,6 +33,7 @@
 (in-package "NATIVEARITH")
 (include-book "i64")
 (include-book "util")
+(include-book "std/util/defprojection" :dir :system)
 (local (std::add-default-post-define-hook :fix))
 
 (defflexsum smallvar
@@ -84,6 +85,11 @@ non-boolean symbols) and no subscripts are represented just with their name.
 Variables with more complex names or subscripts are represented essentially as
 @('(:var name . subscripts)').</p>"))
 
+(deflist smallvarlist
+  :elt-type smallvar
+  :true-listp t
+  :elementp-of-nil nil)
+
 (deftypes smallexpr
   :prepwork
   ((local (defthm smallvar-p-of-quote
@@ -103,8 +109,8 @@ Variables with more complex names or subscripts are represented essentially as
      :short "A variable."
      :cond (or (atom x)
                (smallvar-p x))
-     :fields ((name :acc-body x :type smallvar-p))
-     :ctor-body name)
+     :fields ((var :acc-body x :type smallvar-p))
+     :ctor-body var)
     (:const
      :short "A quoted constant."
      :cond (eq (car x) 'quote)
@@ -125,3 +131,26 @@ Variables with more complex names or subscripts are represented essentially as
   (deflist smallexprlist
     :elt-type smallexpr
     :true-listp t))
+
+(define smallexprs-from-smallvars ((x smallvarlist-p))
+  :returns (exprs smallexprlist-p)
+  :parents (smallexprlist)
+  :short "Identity function for converting @(see smallvar)s into @(see smallexpr)s."
+  :inline t
+  (mbe :logic (if (atom x)
+                  nil
+                (cons (make-smallexpr-var :var (car x))
+                      (smallexprs-from-smallvars (cdr x))))
+       :exec x)
+  :prepwork
+  ((local (in-theory (enable smallexpr-p
+                             smallexpr-kind
+                             smallexpr-var->var)))))
+
+(defsection smallexprs-from-smallvars-thms
+  :extension (smallexprs-from-smallvars)
+
+  (defprojection smallexprs-from-smallvars (x)
+    :already-definedp t
+    (make-smallexpr-var :var x)))
+

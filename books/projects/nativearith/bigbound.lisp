@@ -37,6 +37,7 @@
 (include-book "bigeval")
 (include-book "maybe-integerp")
 (include-book "std/util/defval" :dir :system)
+(local (include-book "arith"))
 (local (include-book "std/alists/top" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
@@ -57,12 +58,6 @@
                   (signed-byte-p (+ 1 (integer-length x)) x))
          :enable (ihsext-recursive-redefs
                   ihsext-inductions)))
-
-(local (defrule posp-when-signed-byte-p-size-forward
-         (implies (signed-byte-p size x)
-                  (posp size))
-         :rule-classes :forward-chaining
-         :enable signed-byte-p))
 
 (local (defrule equal-ash-1-zero
          ;; BOZO maybe belongs in bitops?
@@ -88,55 +83,6 @@
                                   (equal (ash 1 n)
                                          1))))
          :enable (ihsext-inductions ihsext-recursive-redefs)))
-
-(local (defruled unsigned-byte-p-monotonic
-         (implies (and (unsigned-byte-p n x)
-                       (<= n m)
-                       (integerp m))
-                  (unsigned-byte-p m x))
-         :enable (unsigned-byte-p)
-         :prep-lemmas ;; bozo wish this was just :prepwork.
-         ((local (include-book "arithmetic/top" :dir :system))
-          (defrule l0
-            ;; Wow why doesn't ACL2 get this on its own??
-            (implies (and (< x (expt 2 n))
-                          (<= n m)
-                          (integerp n)
-                          (integerp m)
-                          (integerp x))
-                     (< x (expt 2 m)))
-            :in-theory (disable acl2::expt-is-increasing-for-base>1)
-            :use ((:instance acl2::expt-is-increasing-for-base>1
-                   (r 2) (i n) (j m)))))))
-
-(local (defruled signed-byte-p-monotonic
-         (implies (and (signed-byte-p n x)
-                       (<= n m)
-                       (integerp m))
-                  (signed-byte-p m x))
-         :enable (signed-byte-p)
-         :prep-lemmas
-         ((local (include-book "arithmetic/top" :dir :system))
-          (defrule l0
-            (implies (and (< x (expt 2 n))
-                          (<= n m)
-                          (integerp n)
-                          (integerp m)
-                          (integerp x))
-                     (< x (expt 2 m)))
-            :disable (acl2::expt-is-increasing-for-base>1)
-            :use ((:instance acl2::expt-is-increasing-for-base>1
-                   (r 2) (i n) (j m))))
-          (defrule l1
-            (implies (and (<= (- (expt 2 n)) x)
-                          (<= n m)
-                          (integerp n)
-                          (integerp m)
-                          (integerp x))
-                     (<= (- (expt 2 m)) x))
-            :disable (acl2::expt-is-increasing-for-base>1)
-            :use ((:instance acl2::expt-is-increasing-for-base>1
-                   (r 2) (i n) (j m)))))))
 
 (local (defrule unsigned-byte-p-of-loghead-same
          ;; BOZO maybe belongs in bitops
@@ -336,6 +282,7 @@
     (implies (bigint-bounded-p x bound)
              (bigint-bounded-p x (bigbound-maybe-strengthen bound)))
     :enable bigint-bounded-p))
+
 
 
 (define bigint-nfix-bound ((arg1   bigexpr-p)

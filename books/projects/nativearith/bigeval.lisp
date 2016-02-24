@@ -40,6 +40,7 @@
 (defalist bigenv
   :key-type bigvar-p
   :val-type bigint-p
+  :count bigenv-count
   :true-listp t
   :parents (bigeval)
   :short "An alist mapping @(see bigvar)s to @(see bigint)s, often used as an
@@ -52,7 +53,6 @@
 
   (defthm bigvarlist-p-of-alist-keys-of-bigenv-fix
     (bigvarlist-p (alist-keys (bigenv-fix env)))))
-
 
 
 (define bigenv-lookup ((var bigvar-p) (env bigenv-p))

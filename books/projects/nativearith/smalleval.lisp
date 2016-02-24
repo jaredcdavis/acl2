@@ -147,12 +147,14 @@
     ;; This is really nice, but eventually we will probably want to complicate
     ;; it so that we can have short-circuit evaluation of IF, etc.
     (smallexpr-case x
-      :var (smallenv-lookup-fast x.name env)
+      :var (smallenv-lookup-fast x.var env)
       :const x.val
       :call (smallapply x.fn (smalleval-list x.args env))))
 
   (define smalleval-list ((x smallexprlist-p) (env smallenv-p))
     :returns (vals i64list-p)
+    :parents (smalleval)
+    :short "Evaluate a list of @(see smallexpr)s."
     :measure (smallexprlist-count x)
     (if (atom x)
         nil
@@ -160,12 +162,16 @@
             (smalleval-list (cdr x) env))))
   ///
   (verify-guards smalleval)
-  (deffixequiv-mutual smalleval)
+  (deffixequiv-mutual smalleval))
+
+
+(defsection smalleval-thms
+  :extension (smalleval)
 
   (defrule smalleval-of-make-smallexpr-var
-    (equal (smalleval (make-smallexpr-var :name name) env)
-           (smallenv-lookup-fast name env))
-    :expand ((smalleval (make-smallexpr-var :name name) env)))
+    (equal (smalleval (make-smallexpr-var :var var) env)
+           (smallenv-lookup-fast var env))
+    :expand ((smalleval (make-smallexpr-var :var var) env)))
 
   (defrule smalleval-of-make-smallexpr-const
     (equal (smalleval (make-smallexpr-const :val val) env)
@@ -175,30 +181,14 @@
   (defrule smalleval-of-make-smallexpr-call
     (equal (smalleval (make-smallexpr-call :fn fn :args args) env)
            (smallapply fn (smalleval-list args env)))
-    :expand ((smalleval (make-smallexpr-call :fn fn :args args) env)))
+    :expand ((smalleval (make-smallexpr-call :fn fn :args args) env))))
 
-  (defrule smalleval-list-when-atom
-    (implies (atom x)
-             (equal (smalleval-list x env)
-                    nil))
-    :expand ((smalleval-list x env)))
+(defsection smalleval-list-thms
+  :extension (smalleval-list)
 
-  (defrule smalleval-list-of-cons
-    (equal (smalleval-list (cons a x) env)
-           (cons (smalleval a env)
-                 (smalleval-list x env)))
-    :expand ((smalleval-list (cons a x) env)))
-
-  (defrule consp-of-smalleval-list
-    (equal (consp (smalleval-list x env))
-           (consp x))
-    :induct (len x))
-
-  (defrule len-of-smalleval-list
-    (equal (len (smalleval-list x env))
-           (len x))
-    :induct (len x)))
-
+  (defprojection smalleval-list (x env)
+    :already-definedp t
+    (smalleval x env)))
 
 
 

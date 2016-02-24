@@ -54,6 +54,8 @@
               do-not
               set-equiv
               two-nats-measure
+              repeat
+              all-equalp
 
               ;; BOZO consider adding to bitops-exports
               maybe-natp

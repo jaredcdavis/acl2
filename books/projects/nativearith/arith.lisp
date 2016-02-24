@@ -55,13 +55,19 @@
                   b))
   :enable bitp)
 
-(defthm signed-byte-p-when-bitp
+(defrule signed-byte-p-when-bitp
   (implies (and (syntaxp (quotep n))
                 (natp n)
                 (<= 2 n)
                 (bitp x))
            (signed-byte-p n x))
   :hints(("Goal" :in-theory (enable bitp))))
+
+(defrule posp-when-signed-byte-p-size-forward
+  (implies (signed-byte-p size x)
+           (posp size))
+  :rule-classes :forward-chaining
+  :enable signed-byte-p)
 
 
 (defrule zip-of-logcons
@@ -283,6 +289,54 @@
          :enable logcdr))
 
 
+(defruled unsigned-byte-p-monotonic
+  (implies (and (unsigned-byte-p n x)
+                (<= n m)
+                (integerp m))
+           (unsigned-byte-p m x))
+  :enable (unsigned-byte-p)
+  :prep-lemmas ;; bozo wish this was just :prepwork.
+  ((defrule l0
+     ;; Wow why doesn't ACL2 get this on its own??
+     (implies (and (< x (expt 2 n))
+                   (<= n m)
+                   (integerp n)
+                   (integerp m)
+                   (integerp x))
+              (< x (expt 2 m)))
+     :in-theory (disable acl2::expt-is-increasing-for-base>1)
+     :use ((:instance acl2::expt-is-increasing-for-base>1
+            (r 2) (i n) (j m))))))
+
+(defruled signed-byte-p-monotonic
+  (implies (and (signed-byte-p n x)
+                (<= n m)
+                (integerp m))
+           (signed-byte-p m x))
+  :enable (signed-byte-p)
+  :prep-lemmas
+  ((defrule l0
+     (implies (and (< x (expt 2 n))
+                   (<= n m)
+                   (integerp n)
+                   (integerp m)
+                   (integerp x))
+              (< x (expt 2 m)))
+     :disable (acl2::expt-is-increasing-for-base>1)
+     :use ((:instance acl2::expt-is-increasing-for-base>1
+            (r 2) (i n) (j m))))
+   (defrule l1
+     (implies (and (<= (- (expt 2 n)) x)
+                   (<= n m)
+                   (integerp n)
+                   (integerp m)
+                   (integerp x))
+              (<= (- (expt 2 m)) x))
+     :disable (acl2::expt-is-increasing-for-base>1)
+     :use ((:instance acl2::expt-is-increasing-for-base>1
+            (r 2) (i n) (j m))))))
+
+
 (define recursive-plus-base-case ((cin bitp)
                                   (a   integerp)
                                   (b   integerp))
@@ -489,11 +543,11 @@
     :induct (plus-ucarryout-n n cin a b)
     :expand ((:free (cin a b) (plus-ucarryout-n n cin a b))))
 
-  (defthm plus-ucarryout-n-of-logapp-n-left
+  (defrule plus-ucarryout-n-of-logapp-n-left
     (equal (plus-ucarryout-n n cin (logapp n a1 a2) b)
            (plus-ucarryout-n n cin a1 b)))
 
-  (defthm plus-ucarryout-n-of-logapp-n-right
+  (defrule plus-ucarryout-n-of-logapp-n-right
     (equal (plus-ucarryout-n n cin a (logapp n b1 b2))
            (plus-ucarryout-n n cin a b1))))
 
