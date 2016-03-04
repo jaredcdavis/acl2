@@ -610,22 +610,57 @@ getting N bits out.</p>")
                (equal new-val orig-val)))))
 
 
+zz
 
 ;; i-am-here
 
-;; (defines
+(deflist smallexprlists
+  :elt-type smallexprlist
+  :elementp-of-nil t)
 
-;;   (define bigexpr-compile ((x bigexpr-p) ...)
-;;          :returns (smallexprs (and (smallexprlist-p smallexprs)
-;;                                    (consp smallexprs))
-;;                               "A list of smallexprs, least significant to most significant.
-;;                           These implement the evaluations of @('x') under
-;;                           suitable environments.")
-;;          (bigexpr-case x
-;;            :var ...
-;;            :const (bigint-const-compile x.val)
-;;            :call ...))
-;;        (define bigexprlist-compile ((x bigexprlist-p) ...)
-;;          :returns (ans smallexprlists-p)
-;;          (if (
+(defsection-progn bigexpr-fn-compile-other
+  ;; Temporary stub, bozo fixme
+
+  (defstub bigexpr-fn-compile-other (fn bigargs smallargs bound) t)
+
+  (defaxiom smallexprlist-p-of-bigexpr-fn-compile
+    (smallexprlist-p (bigexpr-fn-compile-other fn bigargs smallargs bound)))
+
+  (defaxiom bigexpr-fn-compile-other-correct
+    (implies (bigenv-sizeok-p bigenv varsizes)
+             (b* ((orig-val (bigint->val (bigapply fn args)
+
+
+(define bigexpr-lognot-compile ((size      posp)
+                                (smallargs smallexprlists-p))
+  (if (eql size 0)
+      nil
+    
+
+
+
+
+(defines bigexpr-compile
+
+  (define bigexpr-compile ((x        bigexpr-p)
+                           (varsizes bigvarsizes-p))
+    :returns (smallexprs (and (smallexprlist-p smallexprs)
+                              (consp smallexprs)))
+    :measure (bigexpr-count x)
+    (b* ((x (bigexpr-fix x)))
+      (bigexpr-case x
+        :var   (smallexprs-from-smallvars (explode-bigvar-to-smallvars x.var varsizes))
+        :const (bigint-const-compile x.val)
+        :call  (b* ((bound          (bigexpr-bound x varsizes))
+                    (arg-smallexprs (bigexprlist-compile x.args varsizes)))
+                 (bigexpr-fn-compile x.fn arg-smallexprs bound)))))
+
+  (define bigexprlist-compile ((x        bigexprlist-p)
+                               (varsizes bigvarsizes-p))
+    :returns (ans smallexprlists-p)
+    :measure (bigexprlist-count x)
+    (if (atom x)
+        nil
+      (cons (bigexpr-compile (car x) varsizes)
+            (bigexprlist-compile (cdr x) varsizes)))))
 

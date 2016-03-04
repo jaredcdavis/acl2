@@ -34,6 +34,7 @@
 (include-book "smallops")
 (include-book "smallexpr")
 (include-book "smalleval")
+(include-book "smallvars")
 (include-book "bigint")
 (include-book "bigops")
 (include-book "bigexpr")

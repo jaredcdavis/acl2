@@ -30,21 +30,20 @@
 ;
 ; Original author: Jared Davis <jared@kookamara.com>
 
-
 ; Equality comparisons --------------------------------------------------------
 
 define i64 @narith_i64eql (i64 %a, i64 %b)
 {
-	%ans = icmp eq i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp eq i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 define i64 @narith_i64neq (i64 %a, i64 %b)
 {
-	%ans = icmp ne i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp ne i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 
@@ -52,30 +51,30 @@ define i64 @narith_i64neq (i64 %a, i64 %b)
 
 define i64 @narith_i64sle (i64 %a, i64 %b)
 {
-	%ans = icmp sle i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp sle i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 define i64 @narith_i64slt (i64 %a, i64 %b)
 {
-	%ans = icmp slt i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp slt i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 define i64 @narith_i64sge (i64 %a, i64 %b)
 {
-	%ans = icmp sge i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp sge i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 define i64 @narith_i64sgt (i64 %a, i64 %b)
 {
-	%ans = icmp sgt i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp sgt i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 
@@ -83,30 +82,30 @@ define i64 @narith_i64sgt (i64 %a, i64 %b)
 
 define i64 @narith_i64ule (i64 %a, i64 %b)
 {
-	%ans = icmp ule i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp ule i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 define i64 @narith_i64ult (i64 %a, i64 %b)
 {
-	%ans = icmp ult i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp ult i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 define i64 @narith_i64uge (i64 %a, i64 %b)
 {
-	%ans = icmp uge i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp uge i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 define i64 @narith_i64ugt (i64 %a, i64 %b)
 {
-	%ans = icmp ugt i64 %a, %b
-	%ext = zext i1 %ans to i64
-	ret i64 %ext
+    %ans = icmp ugt i64 %a, %b
+    %ext = zext i1 %ans to i64
+    ret i64 %ext
 }
 
 
@@ -114,32 +113,32 @@ define i64 @narith_i64ugt (i64 %a, i64 %b)
 
 define i64 @narith_i64bitnot (i64 %a)
 {
-	%ans = xor i64 %a, -1
-	ret i64 %ans
+    %ans = xor i64 %a, -1
+    ret i64 %ans
 }
 
 define i64 @narith_i64sminus (i64 %a)
 {
-	%ans = sub i64 0, %a
-	ret i64 %ans
+    %ans = sub i64 0, %a
+    ret i64 %ans
 }
 
 define i64 @narith_i64bitand (i64 %a, i64 %b)
 {
-	%ans = and i64 %a, %b
-	ret i64 %ans
+    %ans = and i64 %a, %b
+    ret i64 %ans
 }
 
 define i64 @narith_i64bitor (i64 %a, i64 %b)
 {
-	%ans = or i64 %a, %b
-	ret i64 %ans
+    %ans = or i64 %a, %b
+    ret i64 %ans
 }
 
 define i64 @narith_i64bitxor (i64 %a, i64 %b)
 {
-	%ans = xor i64 %a, %b
-	ret i64 %ans
+    %ans = xor i64 %a, %b
+    ret i64 %ans
 }
 
 define i64 @narith_i64plus (i64 %a, i64 %b)
@@ -152,27 +151,27 @@ declare {i64, i1} @llvm.uadd.with.overflow.i64(i64 %a, i64 %b)
 
 define i64 @narith_i64upluscarry (i64 %a, i64 %b)
 {
-	;; BOZO I don't know if this is a very good way to implement this
-	;; operation, but it is simple and seems likely to be something that
-	;; LLVM is designed to optimize.  It would probably be good to
-	;; eventually consider other approaches, but for now I just want to
-	;; get something working.
-	%res = call {i64, i1} @llvm.uadd.with.overflow.i64(i64 %a, i64 %b)
-	%carry = extractvalue {i64, i1} %res, 1
-	%ans = zext i1 %carry to i64
-	ret i64 %ans
+    ;; BOZO I don't know if this is a very good way to implement this
+    ;; operation, but it is simple and seems likely to be something that
+    ;; LLVM is designed to optimize.  It would probably be good to
+    ;; eventually consider other approaches, but for now I just want to
+    ;; get something working.
+    %res = call {i64, i1} @llvm.uadd.with.overflow.i64(i64 %a, i64 %b)
+    %carry = extractvalue {i64, i1} %res, 1
+    %ans = zext i1 %carry to i64
+    ret i64 %ans
 }
 
 define i64 @narith_i64minus (i64 %a, i64 %b)
 {
-	%ans = sub i64 %a, %b
-	ret i64 %ans
+    %ans = sub i64 %a, %b
+    ret i64 %ans
 }
 
 define i64 @narith_i64times (i64 %a, i64 %b)
 {
-	%ans = mul i64 %a, %b
-	ret i64 %ans
+    %ans = mul i64 %a, %b
+    ret i64 %ans
 }
 
 
@@ -180,36 +179,36 @@ define i64 @narith_i64times (i64 %a, i64 %b)
 
 define i64 @narith_i64sdiv (i64 %a, i64 %b)
 {
-	%b.zero = icmp eq i64 %b, 0
-	br i1 %b.zero, label %case.zero, label %case.nonzero
+    %b.zero = icmp eq i64 %b, 0
+    br i1 %b.zero, label %case.zero, label %case.nonzero
 
-    case.nonzero:
-        %a.intmin = icmp eq i64 %a, -9223372036854775808
-	%b.minus1 = icmp eq i64 %b, -1
-	%overflow = and i1 %a.intmin, %b.minus1
-	br i1 %overflow, label %case.overflow, label %case.usual
+  case.nonzero:
+    %a.intmin = icmp eq i64 %a, -9223372036854775808
+    %b.minus1 = icmp eq i64 %b, -1
+    %overflow = and i1 %a.intmin, %b.minus1
+    br i1 %overflow, label %case.overflow, label %case.usual
 
-    case.zero:
-	ret i64 0
+  case.zero:
+    ret i64 0
 
-    case.overflow:
-        ret i64 %a
+  case.overflow:
+    ret i64 %a
 
-    case.usual:
-	%ans = sdiv i64 %a, %b
-	ret i64 %ans
+  case.usual:
+    %ans = sdiv i64 %a, %b
+    ret i64 %ans
 }
 
 define i64 @narith_i64udiv (i64 %a, i64 %b)
 {
-	%b.zero = icmp eq i64 %b, 0
-	br i1 %b.zero, label %case.zero, label %case.nonzero
+    %b.zero = icmp eq i64 %b, 0
+    br i1 %b.zero, label %case.zero, label %case.nonzero
 
-    case.nonzero:
-        %ans = udiv i64 %a, %b
-	ret i64 %ans
+  case.nonzero:
+    %ans = udiv i64 %a, %b
+    ret i64 %ans
 
-    case.zero:
-	ret i64 0
+  case.zero:
+    ret i64 0
 }
 

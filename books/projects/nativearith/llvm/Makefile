@@ -4,6 +4,10 @@ CCFLAGS := -Wall
 OPT := opt
 OPTFLAGS := -O3
 LLC := llc
+ASM := as
+
+.PHONY: all
+all: main demo
 
 main: main.o libnarith_ops.so
 	$(CC) $(CCFLAGS) -o main main.o -L. -l narith_ops
@@ -17,15 +21,30 @@ main.s : main.c ops.h
 ops.s : ops.ll
 	$(OPT) $(OPTFLAGS) ops.ll | $(LLC) -o=ops.s
 
+ops.o : ops.s
+	$(ASM) ops.s -o ops.o
+
 libnarith_ops.so : ops.o
 	$(CC) -shared ops.o -o libnarith_ops.so
+
+demo: demo.c demo.o
+	$(CC) $(CCFLAGS) demo.c demo.o -o demo
+
+demo.s : demo.ll
+	$(OPT) $(OPTFLAGS) demo.ll -o=demo.ll.opt --time-passes
+	$(LLC) -o demo.s demo.ll.opt
+
+demo.o : demo.s
+	$(ASM) demo.s -o demo.o
+	ls -l demo.o
+
 
 .PHONY: run
 run:
 	@LD_LIBRARY_PATH=.:$(LD_LIBRARY_PATH) ./main
 
 clean:
-	rm -f main
+	rm -f main demo
 	rm -f libnarith_ops.so
 	rm -f *.o *.s
 	../../../build/clean.pl
