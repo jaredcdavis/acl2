@@ -68,6 +68,42 @@ operations, but so far we haven't had a good reason to do it that way.</p>")
 
 (local (xdoc::set-default-parents smallops))
 
+
+(define i64ite ((a i64-p :type (signed-byte 64))
+                (b i64-p :type (signed-byte 64))
+                (c i64-p :type (signed-byte 64)))
+  :returns (ans integerp :rule-classes :type-prescription)
+  :short "64-bit if-then-else, i.e., @('a ? b : c')."
+  :long "<p>We return @('b') if @('a') is nonzero, or @('c') otherwise.</p>
+
+  <p>This function is somewhat special because we generally intend for
+  @('i64ite') expressions to be evaluated in a lazy fashion.</p>
+
+  <p>Since @('i64ite') is a real function, this lazy evaluation won't occur if
+  you call it directly, or if you apply it directly with @(see smallapply).
+  However, note that @(see smalleval) has special handling so that we can avoid
+  evaluating either @('b') or @('c').  Similarly, our small expression compiler
+  treats @('i64ite') operations in a special way, to avoid computing whichever
+  branch is not taken.</p>"
+
+  :inline t
+  :split-types t
+  (mbe :logic
+       (b* ((a (logext 64 a))
+            (b (logext 64 b))
+            (c (logext 64 c)))
+         (if (not (eql a 0))
+             b
+           c))
+       :exec
+       (if (eql a 0) c b))
+  ///
+  (more-returns (ans integerp :rule-classes :type-prescription))
+  (local (in-theory (disable signed-byte-p)))
+  (defret i64-p-of-i64ite
+    (i64-p ans)))
+
+
 (defmacro def-i64-arith1 (name &key short long logic exec prepwork
                                guard-hints (inline 't) (fix 'logext) rest)
   `(define ,name ((a i64-p :type (signed-byte 64)))
@@ -202,6 +238,8 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
                 (the (unsigned-byte 64) (logand b (uint64-max))))
             1
           0))
+
+
 
 
 

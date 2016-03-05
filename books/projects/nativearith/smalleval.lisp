@@ -35,6 +35,7 @@
 (include-book "smallexpr")
 (include-book "std/util/defrule" :dir :system)
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
+(local (include-book "std/lists/len" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 
 (defalist smallenv
@@ -93,7 +94,8 @@
       (i64minus  (a b))
       (i64times  (a b))
       (i64sdiv   (a b))
-      (i64udiv   (a b))))
+      (i64udiv   (a b))
+      (i64ite    (a b c))))
 
   (defun smallapply-collect-args (n max)
     (declare (xargs :measure (nfix (- (nfix max) (nfix n)))))
@@ -141,15 +143,41 @@
     :short "Semantics @(see smallexpr)s.  Evaluates an expression under an
             environment that gives @(see i64) values to its variables,
             producing an @(see i64)."
+    :long "<p>Note that @('smalleval') is @(see memoize)d.</p>"
     :returns (val i64-p)
     :measure (smallexpr-count x)
     :verify-guards nil
-    ;; This is really nice, but eventually we will probably want to complicate
-    ;; it so that we can have short-circuit evaluation of IF, etc.
     (smallexpr-case x
       :var (smallenv-lookup-fast x.var env)
       :const x.val
-      :call (smallapply x.fn (smalleval-list x.args env))))
+      :call
+      (mbe :logic (smallapply x.fn (smalleval-list x.args env))
+           :exec (if (eq x.fn 'i64ite)
+                     ;; Short-circuit evaluation for i64ite operations.
+                     ;;
+                     ;; This is ugly.  It would just be:
+                     ;;
+                     ;;    (if (/= 0 (smalleval (first x.args) env)))
+                     ;;        (smalleval (second x.args) env)
+                     ;;      (smalleval (third x.args) env))
+                     ;;
+                     ;; But, in order to gracefully handle degenerate cases
+                     ;; where we have an ITE with not enough arguments, it has
+                     ;; to be uglier.
+                     ;;
+                     ;; In particular,
+                     ;;   - smalleval-list just returns however many values it
+                     ;;     is given,
+                     ;;   - smallapply will turn not enough arguments into
+                     ;;     zeroes.
+                     ;;
+                     ;; So the short story is that we have to do explicit arity
+                     ;; checks to properly coerce things to zeroes.
+                     (let ((a (if (consp x.args) (smalleval (first x.args) env) 0)))
+                       (if (not (eql a 0))
+                           (if (consp (cdr x.args)) (smalleval (second x.args) env) 0)
+                         (if (consp (cddr x.args)) (smalleval (third x.args) env) 0)))
+                   (smallapply x.fn (smalleval-list x.args env))))))
 
   (define smalleval-list ((x smallexprlist-p) (env smallenv-p))
     :returns (vals i64list-p)
@@ -161,9 +189,7 @@
       (cons (smalleval (car x) env)
             (smalleval-list (cdr x) env))))
   ///
-  (verify-guards smalleval)
   (deffixequiv-mutual smalleval))
-
 
 (defsection smalleval-thms
   :extension (smalleval)
@@ -191,9 +217,17 @@
     (smalleval x env)))
 
 
+;; Guards and memoization
 
+(local (defthm i64list-nth-of-smalleval-list
+         (equal (i64list-nth n (smalleval-list args env))
+                (if (< (nfix n) (len args))
+                    (smalleval (nth n args) env)
+                  0))
+         :hints(("Goal" :in-theory (enable i64list-nth)))))
 
+(verify-guards smalleval
+  :hints(("Goal" :in-theory (enable i64ite))))
 
-
-
-
+(memoize 'smalleval
+         :condition '(smallexpr-case x :call))
