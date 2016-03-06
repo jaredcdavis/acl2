@@ -36,7 +36,7 @@
 (local (std::add-default-post-define-hook :fix))
 
 (defsection oddexpr-check
-  :parents (lint)
+  :parents (vl-lint)
   :short "Check for odd expressions that might indicate precedence problems."
 
   :long "<p>This is some rough code for finding expressions that might have
@@ -72,7 +72,7 @@ non-@('nil') value.  And we can use this before resolving ranges, etc., which
 makes it useful for simple linting.</p>"
 
   (b* (((mv & size)
-        (vl-expr-selfsize x ss nil)))
+        (vl-expr-selfsize x ss (vl-elabscopes-init-ss ss))))
     size))
 
 (define vl-odd-binop-class

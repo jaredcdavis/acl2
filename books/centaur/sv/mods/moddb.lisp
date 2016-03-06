@@ -135,7 +135,7 @@ of three times each.)</p>"
 
 
 (defxdoc moddb
-  :parents (svex)
+  :parents (sv)
   :short "A database object that provides a unique numbering of all the wires in
           a module hierarchy."
   :long "<p>A moddb is a stobj that provides a fast method of enumerating wires
@@ -143,17 +143,22 @@ and a compact, high-performance mapping between these indices and their
 names/declarations.  It is used in @(see svex-compilation) to avoid more memory
 hungry methods of mapping hierarchical wire names to values.</p>
 
-<p>A moddb is a nested stobj structure with the following fields:</p>
+<p>A moddb is a nested stobj structure defined as follows:</p>
+
+@(def moddb)
+
+<p>where:</p>
 <ul>
-<li>@(see moddb->nmods) contains the number of modules in the database.</li>
-<li>@(see moddb->mods) is an array of @(see elab-mod) structures, which we
+<li>@('moddb->nmods') contains the number of modules in the database.</li>
+<li>@('moddb->mods') is an array of @(see elab-mod) structures, which we
 describe below, of which @('moddb->nmods') are valid.</li>
-<li>@(see moddb->modname-idxes) is a hash table mapping module names to indices.</li>
+<li>@('moddb->modname-idxes') is a hash table mapping module names to indices.</li>
 </ul>
 
-<p>@(csee moddb->mods) and @(see moddb->modname-idxes) constitute a two-way
-mapping between module names and module indices.  It is a requirement of a
-well-formed moddb that both of the following hold:</p>
+<p>Together, @('moddb->mods') and @('moddb->modname-idxes') constitute a
+two-way mapping between module names and module indices.  It is a requirement
+of a well-formed moddb that both of the following hold:</p>
+
 @({
   (implies (and (natp i) (< i (moddb->nmods moddb)))
            (equal (moddb->modname-idxes-get
@@ -169,7 +174,7 @@ well-formed moddb that both of the following hold:</p>
                   name))
  })
 
-<p>The @(see moddb->mods) field is an array of @(see elab-mod) stobjs.  Thus, a
+<p>The @('moddb->mods') field is an array of @(see elab-mod) stobjs.  Thus, a
 moddb is a nested stobj -- see @(see acl2::nested-stobjs).  An elab-mod is an
 abstract stobj; more detailed documentation of its accessors/updaters is in
 @(see elab-mod).  Generally speaking, an elab-mod has a name, an array of
@@ -184,13 +189,7 @@ instances.</p>
 <p>To create a moddb, users should always use @(see module->db) to put the
 dependencies of some module in a @(see modalist) into the database.  Any other
 updates to a moddb require careful consideration of well-formedness
-invariants.</p>
-
-<p>
-
-</p>
-
-")
+invariants.</p>")
 
 
 (defxdoc elab-mod
@@ -6055,7 +6054,12 @@ checked to see if it is a valid bitselect and returned as a separate value."
 
   (b* (((mv err & idx bitsel)
         (moddb-path->wireidx/decl path modidx moddb))
-       ((when err) (raise "~@0" err))
+       ((when err)
+        (b* (((stobj-get name)
+              ((elab-mod (moddb->modsi modidx moddb)))
+              (elab-mod->name elab-mod)))
+          (raise "Error looking up ~x1: ~@0~%from module: ~x2"
+                          err path name)))
        ((when bitsel) (raise "Didn't expect a bit select: ~x0" path)))
     idx)
   ///
@@ -6944,6 +6948,7 @@ checked to see if it is a valid bitselect and returned as a separate value."
           (and (not quiet) (cw "Warning! Module ~x0 not found in moddb.~%" name))
           (modalist-named->indexed (cdr x) moddb :quiet quiet))
          ((mv err1 first) (module-named->indexed mod modidx moddb))
+         (- (clear-memoize-table 'svex-named->indexed))
          ((mv err2 rest) (modalist-named->indexed (cdr x) moddb :quiet quiet)))
       (mv (or err1 err2) (cons (cons name first) rest)))
     ///
@@ -7216,9 +7221,10 @@ checked to see if it is a valid bitselect and returned as a separate value."
        ((wire xf) (elab-mod-wiretablei idx elab-mod))
        (widx (+ (lnfix idx) (lnfix offset)))
        (lhs (list (lhrange xf.width (lhatom-var
-                                     (address->svar
-                                      (make-address :path (make-path-wire :name xf.name)
-                                                    :index widx))
+                                     (make-svar :name widx)
+                                     ;; (address->svar
+                                     ;;  (make-address :path (make-path-wire :name xf.name)
+                                     ;;                :index widx))
                                      0))))
        (lhsarr (set-lhs widx lhs lhsarr)))
     ;; (cw "set ~x0 to ~x1~%" widx lhs)
@@ -7238,9 +7244,11 @@ checked to see if it is a valid bitselect and returned as a separate value."
                     (< (nfix n) (len lhsarr)))
                (b* (((wire xf) (elab-mod-wiretablei (- (nfix n) (nfix offset)) elab-mod)))
                  (list (lhrange xf.width (lhatom-var
-                                          (address->svar
-                                           (make-address :path (make-path-wire :name xf.name)
-                                                         :index (nfix n))) 0))))
+                                          (make-svar :name (nfix n))
+                                          ;; (address->svar
+                                          ;;  (make-address :path (make-path-wire :name xf.name)
+                                          ;;                :index (nfix n)))
+                                          0))))
              (lhs-fix (nth n lhsarr))))
     :hints (("goal" :induct t)
             (and stable-under-simplificationp
@@ -7510,20 +7518,30 @@ checked to see if it is a valid bitselect and returned as a separate value."
          (mod (modalist-lookup name modalist))
          ((unless mod)
           (mv nil (list name) nil nil))
-         (local-aliases (and mod (module->aliaspairs mod)))
-         (local-assigns (and mod (module->assigns mod)))
-         ;; (local-delays  (and mod (module->delays mod)))
-         ((mv varfails1 abs-aliases) (lhspairs->absindexed local-aliases scope moddb))
-         ((mv varfails2 abs-assigns) (assigns->absindexed local-assigns scope moddb))
-         ;; ((mv varfails3 abs-delays)  (svar-map->absindexed local-delays scope moddb))
-         ((mv varfails4 modfails rest-aliases rest-assigns)
-          (svex-modinsts->flatten 0 ninsts scope modalist moddb)))
-      (mv (append-without-guard varfails1 varfails2 varfails4)
-          modfails
-          (append-without-guard abs-aliases rest-aliases)
-          (append-without-guard abs-assigns rest-assigns)
-          ;; (append-without-guard abs-delays rest-delays)
-          )))
+         (local-aliases (module->aliaspairs mod))
+         (local-assigns (module->assigns mod)))
+            
+      (time$
+       (b* (;; (local-delays  (and mod (module->delays mod)))
+            ((mv varfails1 abs-aliases) (lhspairs->absindexed local-aliases scope moddb))
+            ((mv varfails2 abs-assigns) (assigns->absindexed local-assigns scope moddb))
+            ;; We're never going to come back to this particular place in the
+            ;; instantiation hierarchy -- i.e. we'll never call
+            ;; svex->absindexed again with the same scope argument, so these
+            ;; memoization tables aren't worth anything once we're done here.
+            (- (clear-memoize-table 'svex->absindexed))
+            ;; ((mv varfails3 abs-delays)  (svar-map->absindexed local-delays scope moddb))
+            ((mv varfails4 modfails rest-aliases rest-assigns)
+             (svex-modinsts->flatten 0 ninsts scope modalist moddb)))
+         (mv (append-without-guard varfails1 varfails2 varfails4)
+             modfails
+             (append-without-guard abs-aliases rest-aliases)
+             (append-without-guard abs-assigns rest-assigns)
+             ;; (append-without-guard abs-delays rest-delays)
+             ))
+       :msg "; svex-mod->flatten ~x0: ~st sec, ~sa bytes, ~x1 instances, ~x2 aliases, ~x3 assigns~%"
+       :args (list name ninsts (len local-aliases) (len local-assigns))
+       :mintime 1)))
 
   (define svex-modinsts->flatten ((n natp)
                                   (ninsts)

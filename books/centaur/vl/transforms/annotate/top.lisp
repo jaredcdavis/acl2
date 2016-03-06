@@ -36,14 +36,15 @@
 (include-book "portdecl-sign")
 (include-book "port-resolve")
 (include-book "udp-elim")
-(include-book "portcheck")
+(include-book "basicsanity")
+(include-book "increment-elim")
 (include-book "../../util/cwtime")
 
 (defsection annotate
   :parents (transforms)
   :short "Typically the first step after <see topic='@(url
-loader')'>loading</see> a design.  Applies several basic, preliminary
-transforms to normalize the design and check it for well-formedness."
+loader)'>loading</see> a design.  Applies several basic, preliminary transforms
+to normalize the design and check it for well-formedness."
 
   :long "<p>The @(see vl-design)s produced by VL's @(see loader) are not yet in
 a very finished or error-checked form.  The function @(see vl-annotate-design)
@@ -67,7 +68,8 @@ first step in any VL-based tool.</p>"
        (design (xf-cwtime (vl-design-make-implicit-wires design)))
        (design (xf-cwtime (vl-design-portdecl-sign design)))
        (design (xf-cwtime (vl-design-udp-elim design)))
-       (design (xf-cwtime (vl-design-portcheck design)))
+       (design (xf-cwtime (vl-design-basicsanity design)))
+       (design (xf-cwtime (vl-design-increment-elim design)))
        (design (xf-cwtime (vl-design-argresolve design)))
        (design (xf-cwtime (vl-design-type-disambiguate design))))
     design))

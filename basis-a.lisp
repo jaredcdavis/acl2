@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -1122,7 +1122,7 @@
                                    old-iprint-ar
 
 ; If we change the :order to < from :none, then we need to reverse iprint-alist
-; just below.  But first read the comment in disable-iprint-ar to see why we
+; just below.  But first read the comment in disable-iprint-ar to see why
 ; changing the :order from :none requires some thought.
 
                                    iprint-alist))))))
@@ -3893,7 +3893,7 @@
          (er hard! 'stobjs-out
              "Implementation error: Attempted to find stobjs-out for ~x0."
              fn))
-        (t (getprop fn 'stobjs-out '(nil) 'current-acl2-world w))))
+        (t (getpropc fn 'stobjs-out '(nil) w))))
 
 ; The ACL2 Record Facilities
 
@@ -4511,22 +4511,8 @@
           (formal-bindings (cdr vars)))))
 
 (defrec io-record
-
-; WARNING:  We rely on the shape of this record in io-record-forms.
-
-; Note: As of Version_3.4 we do not use any io-marker other than :ctx.  Earlier
-; versions might not have made any real use of those either, writing but not
-; reading them.
-
   (io-marker . form)
   t)
-
-(defmacro io-record-forms (io-records)
-
-; WARNING:  If you change this macro, consider changing (defrec io-record ...)
-; too.
-
-  `(strip-cdrs ,io-records))
 
 (defun push-io-record (io-marker form state)
   (f-put-global 'saved-output-reversed
@@ -4555,7 +4541,8 @@
                      (cursor-at-top 'nil cursor-at-top-argp)
                      (pop-up 'nil pop-up-argp)
                      (default-bindings 'nil)
-                     (chk-translatable 't))
+                     (chk-translatable 't)
+                     (io-marker 'nil))
 
 ; Typical use (io? error nil (mv col state) (x y) (fmt ...)), meaning execute
 ; the fmt statement unless 'error is on 'inhibit-output-lst.  The mv expression
@@ -4692,7 +4679,7 @@
                     :ld-prompt nil))))
      (t `(pprogn
           (cond ((saved-output-token-p ',token state)
-                 (push-io-record nil ; io-marker
+                 (push-io-record ,io-marker
                                  (list 'let
                                        (list ,@(formal-bindings vars))
                                        ',expansion)
@@ -4876,21 +4863,48 @@
                 :temp-touchable-fns ,temp-touchable-fns
                 :parallel-execution-enabled ,parallel-execution-enabled))))
 
-(defun warning1-body (ctx summary str alist state)
+(defun warning1-body (ctx summary str+ alist state)
+
+; Str+ is either a string or a pair (str . raw-alist), where raw-alist is to be
+; used in place of str and the input alist if we are in raw-warning-format
+; mode.
+
   (let ((channel (f-get-global 'proofs-co state)))
     (pprogn
      (if summary
          (push-warning summary state)
        state)
-     (mv-let
-      (col state)
-      (fmt "ACL2 Warning~#0~[~/ [~s1]~]"
-           (list (cons #\0 (if summary 1 0))
-                 (cons #\1 summary))
-           channel state nil)
-      (mv-let (col state)
-              (fmt-in-ctx ctx col channel state)
-              (fmt-abbrev str alist col channel state "~%~%"))))))
+     (cond
+      ((f-get-global 'raw-warning-format state)
+       (cond ((consp str+)
+              (fms "~y0"
+                   (list (cons #\0 (list :warning summary
+                                         (cons (list :ctx ctx)
+                                               (cdr str+)))))
+                   channel state nil))
+             (t
+              (fms "(:WARNING ~x0~t1~y2)~%"
+                   (list (cons #\0 summary)
+                         (cons #\1 10) ; (length "(:WARNING ")
+                         (cons #\2
+                               (list (cons :ctx ctx)
+                                     (cons :fmt-string str+)
+                                     (cons :fmt-alist alist))))
+                   channel state nil))))
+      (t (let ((str (cond ((consp str+)
+                           (assert$ (and (stringp (car str+))
+                                         (alistp (cdr str+)))
+                                    (car str+)))
+                          (t str+))))
+           (mv-let
+             (col state)
+             (fmt "ACL2 Warning~#0~[~/ [~s1]~]"
+                  (list (cons #\0 (if summary 1 0))
+                        (cons #\1 summary))
+                  channel state nil)
+             (mv-let (col state)
+               (fmt-in-ctx ctx col channel state)
+               (fmt-abbrev str alist col channel state "~%~%")))))))))
 
 (defmacro warning1-form (commentp)
 
@@ -4933,7 +4947,9 @@
 
   (warning1-form nil))
 
-(defmacro warning$ (&rest args)
+(defmacro warning$ (ctx summary str+ &rest fmt-args)
+
+; Warning: Keep this in sync with warning$-cw1.
 
 ; A typical use of this macro might be:
 ; (warning$ ctx "Loops" "The :REWRITE rule ~x0 loops forever." name) or
@@ -4945,20 +4961,20 @@
 ; warning is enabled.
 
   (list 'warning1
-        (car args)
+        ctx
 
 ; We seem to have seen a GCL 2.6.7 compiler bug, laying down bogus calls of
 ; load-time-value, when replacing (consp (cadr args)) with (and (consp (cadr
 ; args)) (stringp (car (cadr args)))).  But it seems fine to have the semantics
 ; of warning$ be that conses are quoted in the second argument position.
 
-        (if (consp (cadr args))
-            (kwote (cadr args))
-          (cadr args))
-        (caddr args)
+        (if (consp summary)
+            (kwote summary)
+          summary)
+        str+
         (make-fmt-bindings '(#\0 #\1 #\2 #\3 #\4
                              #\5 #\6 #\7 #\8 #\9)
-                           (cdddr args))
+                           fmt-args)
         'state))
 
 (defmacro warning-disabled-p (summary)
@@ -5170,7 +5186,7 @@
 ; nil) of course).
 
   (and (symbolp name)
-       (getprop name 'const nil 'current-acl2-world w)))
+       (getpropc name 'const nil w)))
 
 (defun fix-stobj-array-type (type wrld)
 
@@ -5488,7 +5504,7 @@
 
   (cond ((eq stobj 'state) 'state-p)
         ((not (symbolp stobj)) nil)
-        (wrld (caddr (getprop stobj 'stobj nil 'current-acl2-world wrld)))
+        (wrld (caddr (getpropc stobj 'stobj nil wrld)))
         (t
          #-acl2-loop-only
          (let ((d (get (the-live-var stobj)
@@ -5513,6 +5529,11 @@
               get-stobj-creator must not be called inside the ACL2 loop (as ~
               is the case here) with wrld = nil."
              `(get-stobj-creator ,stobj nil)))))
+
+(defmacro the$ (type val)
+  (cond ((eq type t)
+         val)
+        (t `(the ,type ,val))))
 
 (defun defstobj-field-fns-raw-defs (var flush-var inline n field-templates)
 
@@ -5641,13 +5662,14 @@
             (i ,var)
             (declare (type (and fixnum (integer 0 *)) i))
             ,@(and inline (list *stobj-inline-declare*))
-            (the ,array-etype
-                 (,vref (the ,simple-type (svref ,var ,n))
-                        (the (and fixnum (integer 0 *)) i))))
+            (the$ ,array-etype
+                  (,vref (the ,simple-type (svref ,var ,n))
+                         (the (and fixnum (integer 0 *)) i))))
            (,updater-name
             (i v ,var)
             (declare (type (and fixnum (integer 0 *)) i)
-                     (type ,array-etype v))
+                     ,@(and (not (eq array-etype t))
+                            `((type ,array-etype v))))
             ,@(and inline (list *stobj-inline-declare*))
             (progn
               #+hons (memoize-flush ,flush-var)
@@ -5655,9 +5677,11 @@
 ; See the long comment below for the updater in the scalar case, about
 ; supporting *1* functions.
 
-              (setf (,vref (the ,simple-type (svref ,var ,n))
+              (setf (,vref ,(if (eq simple-type t)
+                                `(svref ,var ,n)
+                              `(the ,simple-type (svref ,var ,n)))
                            (the (and fixnum (integer 0 *)) i))
-                    (the ,array-etype v))
+                    (the$ ,array-etype v))
               ,var))))
         ((eq scalar-type t)
          `((,accessor-name (,var)
@@ -5689,19 +5713,20 @@
           (not stobj-creator) ; scalar-type is t for stobj-creator
           `((,accessor-name (,var)
                             ,@(and inline (list *stobj-inline-declare*))
-                            (the ,scalar-type
-                                 (aref (the (simple-array ,scalar-type (1))
-                                            (svref ,var ,n))
-                                       0)))
+                            (the$ ,scalar-type
+                                  (aref (the (simple-array ,scalar-type (1))
+                                             (svref ,var ,n))
+                                        0)))
             (,updater-name (v ,var)
-                           (declare (type ,scalar-type v))
+                           ,@(and (not (eq scalar-type t))
+                                  `((declare (type ,scalar-type v))))
                            ,@(and inline (list *stobj-inline-declare*))
                            (progn
                              #+hons (memoize-flush ,flush-var)
                              (setf (aref (the (simple-array ,scalar-type (1))
                                               (svref ,var ,n))
                                          0)
-                                   (the ,scalar-type v))
+                                   (the$ ,scalar-type v))
                              ,var)))))))
      (defstobj-field-fns-raw-defs
        var flush-var inline (1+ n) (cdr field-templates))))))
@@ -5765,15 +5790,39 @@
                                 :initial-element ',init)
                   (defstobj-raw-init-fields (cdr field-templates)))))))))
 
+(defun defstobj-raw-init-setf-forms (var index raw-init-fields acc)
+  (cond ((endp raw-init-fields) acc) ; no need to reverse
+        (t (defstobj-raw-init-setf-forms
+             var
+             (1+ index)
+             (cdr raw-init-fields)
+             (cons `(setf (svref ,var ,index)
+                          ,(car raw-init-fields))
+                   acc)))))
+
 (defun defstobj-raw-init (template)
 
 ; This function generates the initialization code for the live object
 ; representing the stobj name.
 
-  (let ((field-templates (access defstobj-template template :field-templates)))
-    `(coerce ; GCL complains when VECTOR is called on more than 64 arguments.
-      (list ,@(defstobj-raw-init-fields field-templates))
-      'vector)))
+  (let* ((field-templates (access defstobj-template template :field-templates))
+         (raw-init-fields (defstobj-raw-init-fields field-templates))
+         (len (length field-templates)))
+    `(cond
+      ((< ,len call-arguments-limit)
+
+; This check is necessary because GCL complains when VECTOR is called on more
+; than 64 arguments.  Actually, the other code -- where LIST is called instead
+; of VECTOR -- is in principle just as problematic when field-templates is at
+; least as long as call-arguments-limit.  However, GCL has (through 2015 at
+; least) been forgiving when LIST is called with too many arguments (as per
+; call-arguments-limit).
+
+       (vector ,@raw-init-fields))
+      (t
+       (let ((v (make-array$ ,len)))
+         ,@(defstobj-raw-init-setf-forms 'v 0 raw-init-fields nil)
+         v)))))
 
 (defun defstobj-component-recognizer-calls (field-templates n var ans)
 
@@ -5826,7 +5875,7 @@
   (and x
        (symbolp x)
        (if (eq known-stobjs t)
-           (getprop x 'stobj nil 'current-acl2-world w)
+           (getpropc x 'stobj nil w)
          (member-eq x known-stobjs))))
 
 (defun translate-stobj-type-to-guard (x var wrld)
@@ -5945,7 +5994,7 @@
 (defun congruent-stobj-rep (name wrld)
   (assert$
    wrld ; use congruent-stobj-rep-raw if wrld is not available
-   (or (getprop name 'congruent-stobj-rep nil 'current-acl2-world wrld)
+   (or (getpropc name 'congruent-stobj-rep nil wrld)
        name)))
 
 (defun all-but-last (l)
@@ -6382,6 +6431,13 @@
 
                     ,@(cond ((eq st 'state)
                              '((*inside-with-local-state* t)
+                               (*wormholep*
+
+; We are in a local state, so it is irrelevant whether or not we are in a
+; wormhole, since (conceptually at least) the local state will be thrown away
+; after making changes to it.
+
+                                nil)
                                (*file-clock* *file-clock*)
                                (*t-stack* *t-stack*)
                                (*t-stack-length* *t-stack-length*)

@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -1088,11 +1088,10 @@
 
          (collect-terms-and-activations-lst (fargs term) ttree wrld ens
                                             trigger-terms activations))
-        (t (let ((rules (getprop (ffn-symb term)
-                                 'forward-chaining-rules
-                                 nil
-                                 'current-acl2-world
-                                 wrld)))
+        (t (let ((rules (getpropc (ffn-symb term)
+                                  'forward-chaining-rules
+                                  nil
+                                  wrld)))
 
 ; If the term has rules, we collect it and add any activations it
 ; triggers (though there may be none).  But first we see whether we've
@@ -3516,8 +3515,7 @@
 ; its level number.
 
   (cond ((flambdap fn) (max-level-no (lambda-body fn) wrld))
-        ((getprop fn 'level-no nil
-                  'current-acl2-world wrld))
+        ((getpropc fn 'level-no nil wrld))
         (t 0)))
 
 )
@@ -3532,8 +3530,7 @@
                  (sort-approved1-rating1 (lambda-body term) wrld fc vc)
                  (sort-approved1-rating1-lst (fargs term) wrld (1+ fc) vc)))
         ((or (eq (ffn-symb term) 'not)
-             (= (getprop (ffn-symb term) 'absolute-event-number 0
-                         'current-acl2-world wrld)
+             (= (getpropc (ffn-symb term) 'absolute-event-number 0 wrld)
                 0))
          (sort-approved1-rating1-lst (fargs term) wrld fc vc))
         (t (sort-approved1-rating1-lst (fargs term) wrld
@@ -5864,6 +5861,10 @@
         (t (built-in-clausep1 (cdr bic-alist) cl fns ens))))
 
 (defun possible-trivial-clause-p (cl)
+
+; Warning: Keep this list below of function names in sync with those in
+; tautologyp; see comment below.
+
   (if (null cl)
       nil
     (mv-let (not-flg atm)
@@ -5882,8 +5883,9 @@
 
 ; If we ever make 1+ and 1- functions again, they should go back on this list.
 
-                             zerop plusp minusp listp mv-list return-last
-                             wormhole-eval force case-split double-rewrite)
+                             zerop plusp minusp listp mv-list cons-with-hint
+                             return-last wormhole-eval force case-split
+                             double-rewrite)
                            atm)
                 (possible-trivial-clause-p (cdr cl))))))
 

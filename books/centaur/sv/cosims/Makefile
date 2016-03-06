@@ -71,11 +71,6 @@ FAILING_TEST_TARGETS := \
   for-nba/ok \
   task/ok \
   task2/ok \
-  alias1/ok \
-  alias2/ok \
-  alias3/ok \
-  alias4/ok \
-  bin_pow/ok \
   gates_bufif0/ok \
   gates_bufif1/ok \
   gates_notif0/ok \
@@ -90,8 +85,8 @@ FAILING_TEST_TARGETS := \
   inst_size1/ok \
   inst_size2/ok \
   inst_size3/ok \
-  inst_size4/ok
-
+  inst_size4/ok \
+  udp_wide1/ok
 
 SPECFILES := $(wildcard */spec.sv)
 TESTS := $(patsubst %/spec.sv,%,$(SPECFILES))
@@ -150,6 +145,9 @@ vcs : $(OUTDATAS_VCS)
 
 .PHONY: passing
 passing : $(PASSING_TESTS)
+
+.phony: failing
+failing: $(FAILING_TEST_TARGETS)
 
 all : $(TESTCERTS) ncv vcs
 

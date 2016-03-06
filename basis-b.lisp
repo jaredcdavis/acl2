@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -1176,33 +1176,33 @@
    (pprogn (f-put-global 'write-acl2x val state)
            (value val))))
 
-;                             CHECK SUMS
+;                             CHECKSUMS
 
 ; We begin by developing code to compute checksums for files, culminating in
 ; function check-sum.  (Later we will consider checksums for objects.)
 
 ; We can choose any two nonnegative integers for the following two
-; constants and still have a check-sum algorithm, provided, (a) that
+; constants and still have a checksum algorithm, provided, (a) that
 ; (< (* 127 *check-length-exclusive-maximum*) *check-sum-exclusive-maximum*)
 ; and provided (b) that (* 2 *check-sum-exclusive-maximum*) is of type
 ; (signed-byte 32).  The first condition assures that the intermediate
-; sum we obtain by adding to a running check-sum the product of a
+; sum we obtain by adding to a running checksum the product of a
 ; character code with the current location can be reduced modulo
 ; *check-sum-exclusive-maximum* by subtracting *check-sum-exclusive-maximum*.
 ; Choosing primes, as we do, may help avoid some loss of information
 ; due to cancellation.  Choosing primes that are smaller may lead to
-; check sums with less information.
+; checksums with less information.
 
 (defconst *check-sum-exclusive-maximum* 268435399
   "268435399 is the first prime below 2^28.  We use integers
-   modulo this number as check sums.")
+   modulo this number as checksums.")
 
 (defconst *check-length-exclusive-maximum* 2097143
   "2097143 is the first prime below 2^21.  We use integers
    modulo this number as indices into the stream we are
-   check summing.")
+   checksumming.")
 
-; We actually return check-sums which are in (mod
+; We actually return checksums which are in (mod
 ; *check-sum-exclusive-maximum*).
 
 (defconst *-check-sum-exclusive-maximum* (- *check-sum-exclusive-maximum*))
@@ -1247,11 +1247,11 @@
 
 (defun check-sum (channel state)
 
-; This function returns a check-sum on the characters in a stream.
+; This function returns a checksum on the characters in a stream.
 ; This function also checks that every character read is either
 ; #\Newline, #\Tab, or #\Space, or a printing Ascii character.  If the
 ; first value returned is a character, that character was not legal.
-; Otherwise, the first value returned is an integer, the check-sum.
+; Otherwise, the first value returned is an integer, the checksum.
 
   (check-sum1 0 *1-check-length-exclusive-maximum* channel state))
 
@@ -1404,16 +1404,13 @@
 ; there are situations where it becomes useful again.  It is the culmination of
 ; our first development of checksums for objects (as discussed above).
 
-; We return a check-sum on obj, using an algorithm similar to that of
+; We return a checksum on obj, using an algorithm similar to that of
 ; check-sum.  We return a non-integer as the first value if (and only if) the
 ; obj is not composed entirely of conses, symbols, strings, rationals, complex
 ; rationals, and characters. If the first value is not an integer, it is one of
 ; the offending objects encoutered.
 
-; We typically use this function to compute check sums of cert-obj records and
-; of objects of the form (cons expansion-alist ev-lst) where ev-lst is the list
-; of forms in a book, including the initial in-package, and expansion-alist
-; comes from make-event expansion.
+; We typically used this function to compute checksums for .cert files.
 
   (pprogn
    (extend-32-bit-integer-stack 2 0 state)
@@ -2078,7 +2075,7 @@
                               (plist-worldp w))))
   (cond ((flambdap fn)
          (lambda-formals fn))
-        (t (let ((temp (getprop fn 'formals t 'current-acl2-world w)))
+        (t (let ((temp (getpropc fn 'formals t w)))
              (cond ((eq temp t)
                     (er hard? 'formals
                         "Every function symbol is supposed to have a ~
@@ -2111,7 +2108,7 @@
                                   (symbolp fn))
                               (plist-worldp-with-formals w))))
   (cond ((flambdap fn) (length (lambda-formals fn)))
-        (t (let ((temp (getprop fn 'formals t 'current-acl2-world w)))
+        (t (let ((temp (getpropc fn 'formals t w)))
              (cond ((eq temp t) nil)
                    (t (length temp)))))))
 
@@ -2137,7 +2134,7 @@
        :guard
        (and (member-eq key *user-defined-functions-table-keys*)
             (symbolp val)
-            (not (eq (getprop val 'formals t 'current-acl2-world world)
+            (not (eq (getpropc val 'formals t world)
                      t))
             (all-nils (stobjs-out val world))))
 
@@ -2162,7 +2159,7 @@
     concl))
 
 (defun def-body (fn wrld)
-  (car (getprop fn 'def-bodies nil 'current-acl2-world wrld)))
+  (car (getpropc fn 'def-bodies nil wrld)))
 
 (defun body (fn normalp w)
 
@@ -2190,7 +2187,7 @@
                                                     :formals))
                                 (access def-body def-body :hyp)
                                 (access def-body def-body :concl))))
-        (t (getprop fn 'unnormalized-body nil 'current-acl2-world w))))
+        (t (getpropc fn 'unnormalized-body nil w))))
 
 (defun symbol-class (sym wrld)
 
@@ -2240,8 +2237,8 @@
 
   (declare (xargs :guard (and (symbolp sym)
                               (plist-worldp wrld))))
-  (or (getprop sym 'symbol-class nil 'current-acl2-world wrld)
-      (if (getprop sym 'theorem nil 'current-acl2-world wrld)
+  (or (getpropc sym 'symbol-class nil wrld)
+      (if (getpropc sym 'theorem nil wrld)
           :ideal
           :program)))
 
@@ -2306,7 +2303,7 @@
 
   (cond ((eq stobj 'state)
          'state-p)
-        (t (cadr (getprop stobj 'stobj nil 'current-acl2-world wrld)))))
+        (t (cadr (getpropc stobj 'stobj nil wrld)))))
 
 (defun stobj-recognizer-terms (known-stobjs wrld)
 
@@ -2427,7 +2424,7 @@
   (cond ((flambdap fn) *t*)
         ((or (not stobj-optp)
              (all-nils (stobjs-in fn w)) )
-         (getprop fn 'guard *t* 'current-acl2-world w))
+         (getpropc fn 'guard *t* w))
         (t
 
 ; If we have been told to optimize the stobj recognizers (stobj-optp =
@@ -2438,7 +2435,7 @@
 
          (optimize-stobj-recognizers
           (collect-non-x 'nil (stobjs-in fn w))
-          (or (getprop fn 'guard *t* 'current-acl2-world w)
+          (or (getpropc fn 'guard *t* w)
 
 ; Once upon a time we found a guard of nil, and it took awhile to track down
 ; the source of the ensuing error.
@@ -2475,7 +2472,7 @@
      (or (eq fn 'equal)
          (eq fn 'iff)
          (and (not (flambdap fn))
-              (getprop fn 'coarsenings nil 'current-acl2-world ,w)))))
+              (getpropc fn 'coarsenings nil ,w)))))
 
 (defun >=-len (x n)
   (declare (xargs :guard (and (integerp n) (<= 0 n))))
@@ -2831,7 +2828,7 @@
   (cond
    ((variablep term)
     (or (cdr (assoc term alist))
-        (and (getprop term 'stobj nil 'current-acl2-world wrld)
+        (and (getpropc term 'stobj nil wrld)
              term)))
    ((fquotep term)
     nil)
@@ -2893,7 +2890,7 @@
     (and st
          (symbolp st)
          (let ((accessor-names
-                (getprop st 'accessor-names nil 'current-acl2-world wrld)))
+                (getpropc st 'accessor-names nil wrld)))
            (and accessor-names
                 (< n (car (dimensions st accessor-names)))
                 (aref1 st accessor-names n))))))
@@ -3245,8 +3242,7 @@
                      (function-symbolp fn wrld))
                 (equal (arity fn wrld) n))
                ((and (symbolp fn)
-                     (getprop fn 'macro-body nil
-                              'current-acl2-world wrld))
+                     (getpropc fn 'macro-body nil wrld))
                 t)
                (t (and (true-listp fn)
                        (>= (length fn) 3)
@@ -3339,7 +3335,7 @@
 ; renew-name to be (renewal-mode .  old-sig) where renewal-mode is :erase,
 ; :overwrite, or :reclassifying-overwrite.
 
-  (let ((redefined (getprop name 'redefined nil 'current-acl2-world wrld)))
+  (let ((redefined (getpropc name 'redefined nil wrld)))
     (cond
      ((and (consp redefined)
            (eq (car redefined) :erase))
@@ -4112,43 +4108,72 @@
       #-acl2-loop-only
       (progn
         #+ccl
-        (ccl:set-lisp-heap-gc-threshold new-threshold)
+        (ccl:set-lisp-heap-gc-threshold ; CCL requires a fixnum.
+         (cond ((> new-threshold most-positive-fixnum)
+                (progn (cw "Requested value for set-gc-threshold$ must be a ~
+                            fixnum in CeCL, but ~x0 is greater than ~
+                            most-positive-fixnum (which is ~x1). Setting to ~
+                            most-positive-fixnum instead.~|"
+                           new-threshold most-positive-fixnum)
+                       most-positive-fixnum))
+               (t new-threshold)))
         #+(and ccl acl2-par)
         (progn (cw "Disabling the CCL Ephemeral GC for ACL2(p)~%")
                (ccl:egc nil))
         #+sbcl
         (setf (sb-ext:bytes-consed-between-gcs) (1- new-threshold))
         #+(and lispworks lispworks-64bit)
-        (progn
+        (let
+
+; In the case of 64-bit LispWorks, we set the threshold to at least 2^20 (1 MB)
+; for generation 3, since we believe that any smaller might not provide good
+; performance, and we set proportionally smaller thresholds for generations 1
+; and 2.
+
+            ((gen0-threshold
+
+; For generation 0, we want to reduce the generation-3 threshold by a factor
+; off 2^10.  The corresponding value for dividing the minimum new-threshold of
+; 2^20 would thus be 2^20/2^10 = 2^10.  However, LispWorks requires a larger
+; minimum value for system:set-gen-num-gc-threshold; since 2^13 was even too
+; small, we have chosen 2^14.  But we still attempt to divide new-threshold by
+; 2^10.
+
+              (max (expt 2 14) (floor new-threshold (expt 2 10))))
+             (gen1-threshold
+              (max (expt 2 17) (floor new-threshold (expt 2 3))))
+             (gen2-threshold
+              (max (expt 2 18) (floor new-threshold (expt 2 2))))
+             (gen3-threshold
+              (max (expt 2 20) new-threshold)))
+
           (when (< new-threshold (expt 2 20))
             (let ((state *the-live-state*))
 
 ; Avoid warning$-cw, since this function is called by LP outside the loop.
 
               (warning$ 'set-gc-threshold$ nil
-                        "Ignoring argument to set-gc-threshold$, ~x0, because ~
-                         it specifies a threshold of less than one megabyte.  ~
-                         Using default threshold of one megabyte.")))
+                        "Using default thresholds that are greater than the ~
+                         requested value ~x0, as follows for generations 0, ~
+                         1, 2 and 3, respectively: ~&1."
+                        new-threshold
+                        (list gen0-threshold
+                              gen1-threshold
+                              gen2-threshold
+                              gen3-threshold))))
 
 ; Calling set-gen-num-gc-threshold sets the GC threshold for the given
 ; generation of garbage.
 
-          (system:set-gen-num-gc-threshold 0
-                                           (max (expt 2 10)
-                                                (/ new-threshold (expt 2 10))))
-          (system:set-gen-num-gc-threshold 1
-                                           (max (expt 2 17)
-                                                (/ new-threshold (expt 2 3))))
-          (system:set-gen-num-gc-threshold 2
-                                           (max (expt 2 18)
-                                                (/ new-threshold (expt 2 2))))
+          (system:set-gen-num-gc-threshold 0 gen0-threshold)
+          (system:set-gen-num-gc-threshold 1 gen1-threshold)
+          (system:set-gen-num-gc-threshold 2 gen2-threshold)
 
 ; This call to set-blocking-gen-num accomplishes two things: (1) It sets the
 ; third generation as the "final" generation -- nothing can be promoted to
 ; generation four or higher.  (2) It sets the GC threshold for generation 3.
 
-          (system:set-blocking-gen-num 3 :gc-threshold (max (expt 2 20)
-                                                            new-threshold)))
+          (system:set-blocking-gen-num 3 :gc-threshold gen3-threshold))
         #-(or ccl sbcl (and lispworks lispworks-64bit))
         (when verbose-p
           (let ((state *the-live-state*))

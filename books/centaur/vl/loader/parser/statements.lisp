@@ -170,10 +170,14 @@
        (when (vl-is-some-token? '(:vl-pound :vl-atsign :vl-kwd-repeat))
          (delay := (vl-parse-delay-or-event-control)))
        (expr := (vl-parse-expression))
-       (return (vl-assignstmt (if (eq (vl-token->type type) :vl-equalsign)
-                                  :vl-blocking
-                                :vl-nonblocking)
-                              lvalue expr delay atts loc))))
+       (return (make-vl-assignstmt :type (if (eq (vl-token->type type) :vl-equalsign)
+                                             :vl-blocking
+                                           :vl-nonblocking)
+                                   :lvalue lvalue
+                                   :expr expr
+                                   :ctrl delay
+                                   :atts atts
+                                   :loc loc))))
 
 
 (defparser vl-parse-procedural-continuous-assignments (atts)
@@ -205,17 +209,21 @@
         (when (vl-is-some-token? '(:vl-kwd-assign :vl-kwd-force))
           (type := (vl-match))
           ((lvalue . expr) := (vl-parse-variable-assignment))
-          (return (vl-assignstmt (if (eq (vl-token->type type) :vl-kwd-assign)
-                                     :vl-assign
-                                   :vl-force)
-                                 lvalue expr nil atts
-                                 (vl-token->loc type))))
+          (return (make-vl-assignstmt :type (if (eq (vl-token->type type) :vl-kwd-assign)
+                                                :vl-assign
+                                              :vl-force)
+                                      :lvalue lvalue
+                                      :expr expr
+                                      :ctrl nil
+                                      :atts atts
+                                      :loc (vl-token->loc type))))
         (type := (vl-match-some-token '(:vl-kwd-deassign :vl-kwd-release)))
         (lvalue := (vl-parse-variable-lvalue))
-        (return (vl-deassignstmt (if (eq (vl-token->type type) :vl-kwd-deassign)
-                                     :vl-deassign
-                                   :vl-release)
-                                 lvalue atts))))
+        (return (make-vl-deassignstmt :type (if (eq (vl-token->type type) :vl-kwd-deassign)
+                                                :vl-deassign
+                                              :vl-release)
+                                      :lvalue lvalue
+                                      :atts atts))))
 
 
 (defparser vl-parse-task-enable (atts)
@@ -242,6 +250,7 @@
   :count strong
   (seq tokstream
 
+       (loc := (vl-current-loc))
        (hid := (vl-parse-hierarchical-identifier nil))
        (unless (vl-is-token? :vl-lparen)
          (:= (vl-match-token :vl-semi))
@@ -250,7 +259,8 @@
                                    :systemp nil
                                    :voidp nil
                                    :args nil
-                                   :atts atts)))
+                                   :atts atts
+                                   :loc loc)))
 
        (:= (vl-match)) ;; eat the (
 
@@ -279,7 +289,8 @@
                                  :systemp nil
                                  :voidp nil
                                  :args args
-                                 :atts atts))))
+                                 :atts atts
+                                 :loc loc))))
 
 
 (defparser vl-parse-system-task-enable (atts)
@@ -300,21 +311,26 @@
   :fails gracefully
   :count strong
   (seq tokstream
-        (id := (vl-match))
-        (when (vl-is-token? :vl-lparen)
-          (:= (vl-match))
-          (args := (vl-parse-1+-expressions-separated-by-commas))
-          (:= (vl-match-token :vl-rparen)))
-        (:= (vl-match-token :vl-semi))
-        (return
-         (make-vl-callstmt :id (make-vl-scopeexpr-end
-                                :hid (make-vl-hidexpr-end
-                                      :name (vl-sysidtoken->name id)))
-                           :voidp nil
-                           :typearg nil
-                           :systemp t
-                           :args args
-                           :atts atts))))
+       (loc := (vl-current-loc))
+       (id := (vl-match))
+       (when (vl-is-token? :vl-lparen)
+         (:= (vl-match))
+         ;; Bugfix 2016-02-18: the first expression is also optional, so if
+         ;; we see (), that's fine; don't parse any arguments.
+         (unless (vl-is-token? :vl-rparen)
+           (args := (vl-parse-1+-expressions-separated-by-commas)))
+         (:= (vl-match-token :vl-rparen)))
+       (:= (vl-match-token :vl-semi))
+       (return
+        (make-vl-callstmt :id (make-vl-scopeexpr-end
+                               :hid (make-vl-hidexpr-end
+                                     :name (vl-sysidtoken->name id)))
+                          :voidp nil
+                          :typearg nil
+                          :systemp t
+                          :args args
+                          :atts atts
+                          :loc loc))))
 
 
 
@@ -427,6 +443,7 @@
   (seq tokstream
        ;; This may be slightly too permissive, but is approximately
        ;;    [package_scope] identifier | hierarchical_identifier
+       (loc := (vl-current-loc))
        (id :s= (vl-parse-scoped-hid))
        (atts := (vl-parse-0+-attribute-instances))
        (unless (vl-is-token? :vl-lparen)
@@ -435,7 +452,8 @@
                                    :systemp nil
                                    :voidp nil
                                    :args nil
-                                   :atts atts)))
+                                   :atts atts
+                                   :loc loc)))
 
        (:= (vl-match)) ;; eat the (
        (when (vl-is-token? :vl-rparen)
@@ -446,7 +464,8 @@
                                    :systemp nil
                                    :voidp nil
                                    :args nil
-                                   :atts atts)))
+                                   :atts atts
+                                   :loc loc)))
 
        ;; BOZO we're supposed to match list_of_arguments, but it's more complex
        ;; than I want to try to support right now.  (It permits things like
@@ -460,7 +479,8 @@
                                  :systemp nil
                                  :voidp nil
                                  :args args
-                                 :atts atts)))
+                                 :atts atts
+                                 :loc loc)))
   ///
   (defthm vl-stmt-kind-of-vl-parse-tf-call
     (b* (((mv err stmt ?tokstream) (vl-parse-tf-call)))
@@ -493,12 +513,14 @@
        ;; prefer expressions and then fix it up in type-disambiguation.
        (when (vl-is-token? :vl-lparen)
          (:= (vl-match))
-         (arg1 := (vl-parse-expression-without-failure))
-         (when (not arg1)
-           (typearg := (vl-parse-simple-type)))
-         (when (vl-is-token? :vl-comma)
-           (:= (vl-match))
-           (args := (vl-parse-1+-expressions-separated-by-commas)))
+         ;; Bugfix 2016-02-18: add proper support for ().
+         (unless (vl-is-token? :vl-rparen)
+           (arg1 := (vl-parse-expression-without-failure))
+           (when (not arg1)
+             (typearg := (vl-parse-simple-type)))
+           (when (vl-is-token? :vl-comma)
+             (:= (vl-match))
+             (args := (vl-parse-1+-expressions-separated-by-commas))))
          (:= (vl-match-token :vl-rparen)))
        (return
         (let* ((fname (vl-sysidtoken->name fn))
@@ -509,7 +531,8 @@
                             :typearg typearg
                             :args (if arg1 (cons arg1 args) args)
                             :voidp nil
-                            :atts  nil))))
+                            :atts  nil
+                            :loc (vl-token->loc fn)))))
   ///
   (defthm vl-stmt-kind-of-vl-parse-system-tf-call
     (b* (((mv err stmt ?tokstream) (vl-parse-system-tf-call)))
@@ -896,13 +919,16 @@
   :guard (vl-atts-p atts)
   :measure (two-nats-measure (vl-tokstream-measure) 0)
   (seq tokstream
-       (:= (vl-match-token :vl-kwd-return))
+       (kwd := (vl-match-token :vl-kwd-return))
        (when (vl-is-token? :vl-semi)
          (:= (vl-match))
-         (return (make-vl-returnstmt :atts atts)))
+         (return (make-vl-returnstmt :atts atts
+                                     :loc (vl-token->loc kwd))))
        (val := (vl-parse-expression))
        (:= (vl-match-token :vl-semi))
-       (return (make-vl-returnstmt :val val :atts atts))))
+       (return (make-vl-returnstmt :val val
+                                   :atts atts
+                                   :loc (vl-token->loc kwd)))))
 
 (defprod vl-actionblock
   :short "Temporary structure for parsing assertion statements."
@@ -996,7 +1022,7 @@
 
 
 
-(defparsers parse-statements
+(defparsers vl-parse-statement
   :flag-local nil
 ;;  :measure-debug t
 
@@ -1071,7 +1097,7 @@
                                      'inside' case_inside_item {case_inside_item} 'endcase'
           })
 
-          <p>But BOZO we do not yet implement these."
+          <p>But BOZO we do not yet implement these.</p>"
     :guard (vl-atts-p atts)
     :measure (two-nats-measure (vl-tokstream-measure) 0)
     (seq tokstream
@@ -1920,7 +1946,7 @@
     :off prove
     :gag-mode :goals
     (make-event
-     `(defthm-parse-statements-flag vl-parse-statement-val-when-error
+     `(defthm-vl-parse-statement-flag vl-parse-statement-val-when-error
         ,(vl-val-when-error-claim vl-parse-case-item)
         ,(vl-val-when-error-claim vl-parse-1+-case-items)
         ,(vl-val-when-error-claim vl-parse-case-statement :args (atts))
@@ -1950,7 +1976,7 @@
   (with-output
     :off prove :gag-mode :goals
     (make-event
-     `(defthm-parse-statements-flag vl-parse-statement-warning
+     `(defthm-vl-parse-statement-flag vl-parse-statement-warning
         ,(vl-warning-claim vl-parse-case-item)
         ,(vl-warning-claim vl-parse-1+-case-items)
         ,(vl-warning-claim vl-parse-case-statement :args (atts))
@@ -1980,7 +2006,7 @@
   (with-output
     :off prove :gag-mode :goals
     (make-event
-     `(defthm-parse-statements-flag vl-parse-statement-progress
+     `(defthm-vl-parse-statement-flag vl-parse-statement-progress
         ,(vl-progress-claim vl-parse-case-item)
         ,(vl-progress-claim vl-parse-1+-case-items)
         ,(vl-progress-claim vl-parse-case-statement :args (atts))
@@ -2051,7 +2077,7 @@
   (with-output
     :off prove :gag-mode :goals
     (make-event
-     `(defthm-parse-statements-flag vl-parse-statement-type
+     `(defthm-vl-parse-statement-flag vl-parse-statement-type
 
         ,(vl-stmt-claim vl-parse-case-item
                         (vl-caselist-p val)

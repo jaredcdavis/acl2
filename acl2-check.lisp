@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -315,9 +315,9 @@ most-negative-fixnum = ~s."
 ; the symbol.  In fact, :UNIX is not a member of *features* in gcl; LISP:UNIX
 ; is.
 
-#-(or unix apple mswindows)
+#-(or unix mswindows)
 (error "This Common Lisp is unsuitable for ACL2 because~%~
-        neither :UNIX nor :APPLE nor :MSWINDOWS is a member of *features*.")
+        neither :UNIX nor :MSWINDOWS is a member of *features*.")
 
 (or (typep (1- array-dimension-limit) 'fixnum)
     (error "We assume that (1- ARRAY-DIMENSION-LIMIT) is a fixnum.  CLTL2 ~

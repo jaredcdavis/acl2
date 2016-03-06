@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -1219,11 +1219,10 @@
 ; Otherwise, translate11 guarantees that if (car form) is f, then it is an
 ; abbreviation for f$inline.
 
-                               (assert$ (getprop (car x) 'macro-body
-                                                 nil
-                                                 'current-acl2-world w)
-                                        (*1*-symbol (add-suffix (car form)
-                                                                *inline-suffix*))))
+                               (assert$
+                                (getpropc (car x) 'macro-body nil w)
+                                (*1*-symbol (add-suffix (car form)
+                                                        *inline-suffix*))))
                            args))))))
             ((eq fn 'mbe1-raw)
 
@@ -1259,6 +1258,8 @@
 ;     (declare (xargs :mode :program
 ;                     :stobjs st))
 ;     (lgc st))
+;
+;   (pgm st) ; no "@@@" in output
 
 ; Note that we do not give similar treatment to our evaluator (in particular,
 ; in ev-rec-return-last), since at the top level, we are not inside a function
@@ -1267,19 +1268,28 @@
 ; level, thus also not being sensitive to **1*-as-raw* for lexically
 ; apparent calls.  That's OK.
 
-             (let ((oneified-logic (oneify (cadddr x) fns w program-p))
-                   (oneified-exec (oneify (caddr x) fns w program-p)))
-               `(cond
-                 ((f-get-global 'safe-mode *the-live-state*)
-                  (,(*1*-symbol 'return-last)
-                   ,qfn
-                   ,oneified-exec
-                   ,oneified-logic))
-                 (t ,(if program-p
-                         oneified-exec
-                       `(if **1*-as-raw*
-                            ,oneified-exec
-                          ,oneified-logic))))))
+             (let* ((oneified-logic-body (oneify (cadddr x) fns w program-p))
+                    (oneified-exec-body (oneify (caddr x) fns w program-p))
+                    (logic-fn (and (not program-p) ; optimization
+                                   (acl2-gentemp "ONEIFY")))
+                    (exec-fn (acl2-gentemp "ONEIFY"))
+                    (logic-body (if program-p
+                                    oneified-logic-body
+                                  (list logic-fn))))
+               `(flet (,@(and (not program-p)
+                              `((,logic-fn () ,oneified-logic-body)))
+                       (,exec-fn () ,oneified-exec-body))
+                  (cond
+                   ((f-get-global 'safe-mode *the-live-state*)
+                    (,(*1*-symbol 'return-last)
+                     ,qfn
+                     (,exec-fn)
+                     ,logic-body))
+                   (t ,(if program-p
+                           `(,exec-fn)
+                         `(if **1*-as-raw*
+                              (,exec-fn)
+                            ,logic-body)))))))
             (t
 
 ; Since fn is not 'ec-call1-raw, the guard of return-last is automatically met
@@ -1416,7 +1426,7 @@
     (interface-er
      "Implementation error: Unexpected call of throw-or-attach in oneify:~%~x0"
      x))
-   ((and (getprop (car x) 'macro-body nil 'current-acl2-world w)
+   ((and (getpropc (car x) 'macro-body nil w)
          (not (member-eq (car x) fns)))
     (oneify (macroexpand1! x) fns w program-p))
    ((eq (car x) 'wormhole-eval)
@@ -1440,8 +1450,12 @@
    (t
     (let ((arg-forms (oneify-lst (cdr x) fns w program-p))
           (fn (cond ((and (eq program-p 'invariant-risk)
-                          (not (getprop (car x) 'invariant-risk nil
-                                        'current-acl2-world w)))
+                          (not (getpropc (car x) 'invariant-risk nil w)))
+
+; Oneify was called at the top level with program-p 'invariant-risk.  There is
+; no need for sub-functions with no invariant-risk to be called using their *1*
+; functions.
+
                      (car x))
                     (t (*1*-symbol (car x))))))
       (cons fn arg-forms)))))
@@ -1654,8 +1668,8 @@
 
                            (not (and stobj-flag
 ; But is it an abstract concrete stobj?
-                                     (getprop stobj-flag 'absstobj-info nil
-                                              'current-acl2-world wrld)))))
+                                     (getpropc stobj-flag 'absstobj-info nil
+                                               wrld)))))
           (fn (car def))
           (*1*fn (*1*-symbol fn))
           (cl-compliant-p-optimization
@@ -1745,7 +1759,7 @@
          ,(cons fn formals)))
       (t
        (let* ((invariant-risk
-               (getprop fn 'invariant-risk nil 'current-acl2-world wrld))
+               (getpropc fn 'invariant-risk nil wrld))
               (super-stobjs-in ; At a "leaf" of a stobj-based computation?
                (if stobj-flag
 
@@ -2087,12 +2101,8 @@
 ; only to stobj updaters and resize functions.
 
                                        (let ((stobjs-out
-                                              (getprop
-                                               fn
-                                               'stobjs-out
-                                               nil
-                                               'current-acl2-world
-                                               wrld)))
+                                              (getpropc fn 'stobjs-out nil
+                                                        wrld)))
                                          (cond
                                           ((and stobjs-out ; property is there
                                                 (all-nils stobjs-out))
@@ -2253,8 +2263,7 @@
                       (append
                        main-body-before-final-call
                        (cond
-                        ((and invariant-risk
-                              (eq defun-mode :program))
+                        (invariant-risk ; and (eq defun-mode :program)
                          (let ((check-invariant-risk-sym
 
 ; The serialize code seems to cause errors for a symbol with no package.
@@ -2314,7 +2323,7 @@
                                           (labels-form-for-*1*
                                            fn *1*fn formals
                                            (oneify body nil wrld
-                                                     'invariant-risk)
+                                                   'invariant-risk)
                                            declare-stobj-special
                                            ignore-vars ignorable-vars
                                            super-stobjs-in super-stobjs-chk
@@ -2815,8 +2824,8 @@
     (setq *deep-gstack* nil)
     (return-from dmr-string *dmr-delete-string*))
   (setf (fill-pointer *dmr-reusable-string*) 0)
-  (let* ((pstk-tokens (loop for x in *pstk-stack*
-                            with result = nil
+  (let* ((pstk-tokens (loop with result = nil
+                            for x in *pstk-stack*
                             do (push (cond ((eq (car x) 'waterfall)
                                             (car (nthcdr 8 x))) ; ctx
                                            ((eq (car x) 'ev-fncall)
@@ -6680,7 +6689,7 @@
 ; 'redefined property, which only happens just after the user has said that
 ; it's OK to redefine it.
 
-        ((getprop name 'redefined nil 'current-acl2-world wrld)
+        ((getpropc name 'redefined nil wrld)
          nil)
         (t
          (let ((reason
@@ -6960,6 +6969,11 @@
   (defun-overrides mfc-ap-fn (term mfc state forcep)
     (mfc-ap-raw term mfc state forcep)))
 
+#+ccl
+(defun stack-access-defeat-hook-default (fn)
+  (declare (xargs :guard (symbolp fn)))
+  (*1*-symbolp fn))
+
 (defun-one-output exit-boot-strap-mode ()
 
 ; We need not unwind the *acl2-unwind-protect-stack* because it must be nil for
@@ -6985,7 +6999,13 @@
   (checkpoint-world1 t (w *the-live-state*) *the-live-state*)
   #+hons
   (progn (initialize-never-memoize-ht)
-         (acl2h-init-memoizations)))
+         (acl2h-init-memoizations))
+  #+ccl
+  (when (boundp 'ccl::*stack-access-defeat-hook*)
+    (locally (declare (special ccl::*stack-access-defeat-hook*))
+             (setq ccl::*stack-access-defeat-hook*
+                   'stack-access-defeat-hook-default)))
+  nil)
 
 (defun-one-output ld-alist-raw (standard-oi ld-skip-proofsp ld-error-action)
   `((standard-oi . ,standard-oi)
@@ -7235,8 +7255,7 @@
                               (if *check-built-in-constants-debug*
                                   (list key :logic logic-val :raw raw-val)
                                 key)))
-                         (cond ((getprop key 'macro-body nil
-                                         'current-acl2-world wrld)
+                         (cond ((getpropc key 'macro-body nil wrld)
                                 (push x macro-result))
                                ((eq (symbol-class key wrld)
                                     :program)
@@ -7250,12 +7269,10 @@
                  (when (not (or (gethash key ht-logic)
                                 (assoc key *primitive-formals-and-guards* :test
                                        'eq)))
-                   (cond ((getprop key 'macro-body nil
-                                   'current-acl2-world wrld)
+                   (cond ((getpropc key 'macro-body nil wrld)
                           (push key macro-result))
                          (t (let ((c ; avoid symbol-class (defaults to :program)
-                                   (getprop key 'symbol-class nil
-                                            'current-acl2-world wrld)))
+                                   (getpropc key 'symbol-class nil wrld)))
                               (when c
                                 (let ((x
                                        (if *check-built-in-constants-debug*
@@ -7334,7 +7351,7 @@
                (set-difference-eq bad
                                   *boot-strap-invariant-risk-symbols*)))))
 
-(defun check-built-in-constants ()
+(defun check-built-in-constants (&aux (state *the-live-state*))
 
 ; Certain defconsts are problematic because they build in values that one
 ; cannot know until the system is built!  Getting their values right requires
@@ -7373,103 +7390,89 @@
               check-built-in-constants."))
     (cond
      ((not (equal *force-xrune*
-                  (fn-rune-nume 'force nil t (w *the-live-state*))))
+                  (fn-rune-nume 'force nil t (w state))))
       (interface-er str
                     '*force-xrune*
                     *force-xrune*
-                    (fn-rune-nume 'force nil t (w *the-live-state*)))))
+                    (fn-rune-nume 'force nil t (w state)))))
     (cond
-     ((not (equal *force-xnume* (fn-rune-nume 'force t t (w *the-live-state*))))
+     ((not (equal *force-xnume* (fn-rune-nume 'force t t (w state))))
       (interface-er str
                     '*force-xnume*
                     *force-xnume*
-                    (fn-rune-nume 'force t t (w *the-live-state*)))))
+                    (fn-rune-nume 'force t t (w state)))))
     (cond
      ((not
        (equal *immediate-force-modep-xnume*
-              (fn-rune-nume 'immediate-force-modep t t (w *the-live-state*))))
+              (fn-rune-nume 'immediate-force-modep t t (w state))))
       (interface-er str
                     '*immediate-force-modep-xnume*
                     *immediate-force-modep-xnume*
-                    (fn-rune-nume 'immediate-force-modep t t (w *the-live-state*)))))
+                    (fn-rune-nume 'immediate-force-modep t t (w state)))))
     (cond
      ((not
        (equal *tau-system-xnume*
-              (fn-rune-nume 'tau-system t t (w *the-live-state*))))
+              (fn-rune-nume 'tau-system t t (w state))))
       (interface-er str
                     '*tau-system-xnume*
                     *tau-system-xnume*
-                    (fn-rune-nume 'tau-system t t (w *the-live-state*)))))
+                    (fn-rune-nume 'tau-system t t (w state)))))
     (cond
      ((not
        (equal *tau-acl2-numberp-pair*
-              (getprop 'acl2-numberp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'acl2-numberp 'tau-pair)))
       (interface-er str
                     '*tau-acl2-numberp-pair*
                     *tau-acl2-numberp-pair*
-                    (getprop 'acl2-numberp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'acl2-numberp 'tau-pair))))
     (cond
      ((not
        (equal *tau-integerp-pair*
-              (getprop 'integerp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'integerp 'tau-pair)))
       (interface-er str
                     '*tau-integerp-pair*
                     *tau-integerp-pair*
-                    (getprop 'integerp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'integerp 'tau-pair))))
     (cond
      ((not
        (equal *tau-rationalp-pair*
-              (getprop 'rationalp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'rationalp 'tau-pair)))
       (interface-er str
                     '*tau-rationalp-pair*
                     *tau-rationalp-pair*
-                    (getprop 'rationalp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'rationalp 'tau-pair))))
     (cond
      ((not
        (equal *tau-natp-pair*
-              (getprop 'natp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'natp 'tau-pair)))
       (interface-er str
                     '*tau-natp-pair*
                     *tau-natp-pair*
-                    (getprop 'natp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'natp 'tau-pair))))
     (cond
      ((not
        (equal *tau-posp-pair*
-              (getprop 'posp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'posp 'tau-pair)))
       (interface-er str
                     '*tau-posp-pair*
                     *tau-posp-pair*
-                    (getprop 'posp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'posp 'tau-pair))))
     (cond
      ((not
        (equal *tau-minusp-pair*
-              (getprop 'minusp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'minusp 'tau-pair)))
       (interface-er str
                     '*tau-minusp-pair*
                     *tau-minusp-pair*
-                    (getprop 'minusp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'minusp 'tau-pair))))
     (cond
      ((not
        (equal *tau-booleanp-pair*
-              (getprop 'booleanp 'tau-pair nil
-                       'current-acl2-world (w *the-live-state*))))
+              (getpropc 'booleanp 'tau-pair)))
       (interface-er str
                     '*tau-booleanp-pair*
                     *tau-booleanp-pair*
-                    (getprop 'booleanp 'tau-pair nil
-                             'current-acl2-world (w *the-live-state*)))))
+                    (getpropc 'booleanp 'tau-pair))))
     (cond
      ((not
        (and (equal
@@ -7489,22 +7492,22 @@
        (equal *primitive-monadic-booleans*
               (collect-monadic-booleans
                (strip-cars *primitive-formals-and-guards*)
-               (ens *the-live-state*)
-               (w *the-live-state*))))
+               (ens state)
+               (w state))))
       (interface-er str
                     '*primitive-monadic-booleans*
                     *primitive-monadic-booleans*
                     (collect-monadic-booleans
                      (strip-cars *primitive-formals-and-guards*)
-                     (ens *the-live-state*)
-                     (w *the-live-state*)))))
+                     (ens state)
+                     (w state)))))
     (cond
-     ((not (getprop 'booleanp 'tau-pair nil 'current-acl2-world (w *the-live-state*)))
+     ((not (getpropc 'booleanp 'tau-pair))
       (interface-er
        "Our code for tau-term assumes that BOOLEANP is a tau predicate.  But ~
         it has no tau-pair property!")))
     (let ((good-lst (chk-initial-built-in-clauses *initial-built-in-clauses*
-                                                  (w *the-live-state*) nil nil)))
+                                                  (w state) nil nil)))
       (cond
        (good-lst
         (interface-er
@@ -7598,7 +7601,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ;       (error "Check failed!")))
     ))
 
-(defun-one-output check-none-ideal (trips acc)
+(defun-one-output check-none-ideal (trips acc &aux (state *the-live-state*))
   (cond
    ((null trips)
     (cond ((null acc) nil)
@@ -7629,11 +7632,9 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                  (nth 5 trip))))
       (cond ((and fn
                   (symbolp fn)
-                  (eq (symbol-class fn
-                                    (w *the-live-state*))
+                  (eq (symbol-class fn (w state))
                       :ideal)
-                  (not (eq (getprop fn 'non-executablep nil
-                                    'current-acl2-world (w *the-live-state*))
+                  (not (eq (getpropc fn 'non-executablep)
                            t)))
              (check-none-ideal (cdr trips) (cons fn acc)))
             (t (check-none-ideal (cdr trips) acc)))))))
@@ -8045,8 +8046,7 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
              (format t *acl2-error-msg*))
            (when (not (member-eq 'set-debugger-enable-fn
 ;                                (global-val 'untouchable-fns (w state))
-                                 (getprop 'untouchable-fns 'global-value nil
-                                          'current-acl2-world (w state))))
+                                 (getpropc 'untouchable-fns 'global-value)))
              (format t
                      "~%To enable breaks into the debugger (also see :DOC ~
                       acl2-customization):~&~s~&"
@@ -8299,11 +8299,25 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                                      (not (equal s ""))
                                      (not (equal (string-upcase s)
                                                  "NIL")))))
+              (book-hash-alistp-env
+
+; For now, we think of book-hash-keysp as a generalized Boolean.  But it will
+; be easy to view it as a list of keywords such as :BOOK-LENGTH, to indicate
+; that instead of a numeric checksum we will store an alist mapping keys to
+; values.  For now, a non-nil value of this variable will indicate that those
+; two specific keywords are to be mapped to the .lisp file's length in bytes
+; and write date, respectively.
+
+               (let ((s (getenv$-raw "ACL2_BOOK_HASH_ALISTP")))
+                 (and s
+                      (not (equal s ""))
+                      (not (equal (string-upcase s)
+                                  "NIL")))))
               (user-home-dir-path (our-user-homedir-pathname))
               (user-home-dir0 (and user-home-dir-path
                                    (our-truename user-home-dir-path
-                                                 "Note: Calling ~
-                                                    OUR-TRUENAME from LP.")))
+                                                 "Note: Calling OUR-TRUENAME ~
+                                                  from LP.")))
               (user-home-dir (and user-home-dir0
                                   (if (eql (char user-home-dir0
                                                  (1- (length user-home-dir0)))
@@ -8315,10 +8329,10 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
               (system-dir0 (let ((str (getenv$-raw "ACL2_SYSTEM_BOOKS")))
                              (and str
                                   (maybe-add-separator str)))))
-         (when (and save-expansion
-                    (not (equal (string-upcase save-expansion)
-                                "NIL")))
+         (when save-expansion
            (f-put-global 'save-expansion-file t *the-live-state*))
+         (when book-hash-alistp-env
+           (f-put-global 'book-hash-alistp t *the-live-state*))
          (when user-home-dir
            (f-put-global 'user-home-dir user-home-dir *the-live-state*))
          (when system-dir0 ; needs to wait for user-homedir-pathname
@@ -8457,6 +8471,42 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
 ;                   COMPILING, SAVING, AND RESTORING
 
+#+ccl
+(defun stack-access-defeat-hook-cert-ht ()
+
+; This function either returns nil or, if ccl::*stack-access-winners* is bound
+; to a hash-table, a hash-table whose keys are names of currently-known
+; "winners".  Each such name is the name of a function FN that is a key of
+; ccl::*stack-access-winners* such that FN is the current symbol-function of
+; FN.
+
+  (let ((ccl-ht
+         (and (boundp 'ccl::*stack-access-winners*)
+              (symbol-value 'ccl::*stack-access-winners*))))
+    (and (hash-table-p ccl-ht)
+         (let ((ht (make-hash-table :test 'eq)))
+           (maphash (lambda (key val)
+                      (when (and val
+                                 (symbolp val)
+                                 (fboundp val)
+                                 (eq key (symbol-function val)))
+                        (setf (gethash val ht) t)))
+                    ccl-ht)
+           ht))))
+
+#+ccl
+(defvar *stack-access-defeat-hook-cert-ht* nil)
+
+#+ccl
+(defun stack-access-defeat-hook-cert (fn)
+
+; This function assumes that *stack-access-defeat-hook-cert-ht* is bound to a
+; hash-table of names of "winners"; see function
+; stack-access-defeat-hook-cert-ht.
+
+  (and (symbolp fn)
+       (not (gethash fn *stack-access-defeat-hook-cert-ht*))))
+
 (defun acl2-compile-file (full-book-name os-expansion-filename)
 
 ; Full-book-name is a Unix-style pathname.  Os-expansion-filename is a pathname
@@ -8493,7 +8543,14 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; example where this binding reduced the .dx64fsl size from 13696271 to 24493.
 
            #+ccl (ccl::*save-source-locations* nil))
-       (compile-file os-expansion-filename :output-file ofile))
+       (cond
+        #+ccl
+        (*stack-access-defeat-hook-cert-ht*
+         (let ((ccl::*stack-access-defeat-hook*
+                'stack-access-defeat-hook-cert))
+           (declare (special ccl::*stack-access-defeat-hook*))
+           (compile-file os-expansion-filename :output-file ofile)))
+        (t (compile-file os-expansion-filename :output-file ofile))))
 
 ; Warning: Keep the following "compile on the fly" readtime conditional in sync
 ; with the one in initialize-state-globals.  Here, we avoid loading the
@@ -8910,11 +8967,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                                            (oneify-cltl-code
                                             (cadr (cddr trip)) ; defun-mode
                                             x
-                                            (getprop (car x)
-                                                     'stobj-function
-                                                     nil
-                                                     'current-acl2-world
-                                                     wrld)
+                                            (getpropc (car x) 'stobj-function
+                                                      nil wrld)
                                             wrld))))
                                 (cond (chan0 (push *1*def defs))
                                       (t (print-object$ *1*def chan
@@ -8989,7 +9043,10 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
   (let* ((os-full-book-name (pathname-unix-to-os full-book-name state))
          (os-full-book-name-compiled
-          (convert-book-name-to-compiled-name os-full-book-name state)))
+          (convert-book-name-to-compiled-name os-full-book-name state))
+         #+ccl
+         (*stack-access-defeat-hook-cert-ht*
+          (stack-access-defeat-hook-cert-ht)))
     (when (probe-file os-full-book-name-compiled)
       (delete-file os-full-book-name-compiled))
     (acl2-compile-file full-book-name expansion-filename)
@@ -9203,8 +9260,8 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
                         stobjs-out for ~x0."
                        fn))
         (t (let ((w (w *the-live-state*)))
-             (or (getprop fn 'stobjs-out nil 'current-acl2-world w)
-                 (and (getprop fn 'symbol-class nil 'current-acl2-world w)
+             (or (getpropc fn 'stobjs-out nil w)
+                 (and (getpropc fn 'symbol-class nil w)
                       '(nil)))))))
 
 ; The definition of fix-trace and its subfunction fix-trace-untrace can go
@@ -9345,7 +9402,11 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 
 ; See also the centaur/misc/memory-mgmt books.
 
-  (expt 2 30))
+  (min (expt 2 30)
+
+ ; CCL requires a fixnum for ccl::lisp-heap-gc-threshold.
+
+       most-positive-fixnum))
 
 (let ((physical-memory-cached-answer nil))
 (defun physical-memory () ; in KB
@@ -9371,8 +9432,12 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
 ; bytes before the next GC, unless the current memory usage is more than
 ; (3/4)G, in which case we allocate the minimum of (1/4)G.
 
-         (max (- *max-mem-usage* (ccl::%usedbytes))
-              *gc-min-threshold*)))
+         (min (max (- *max-mem-usage* (ccl::%usedbytes))
+                   *gc-min-threshold*)
+
+; CCL requires a fixnum for ccl::lisp-heap-gc-threshold.
+
+              most-positive-fixnum)))
 
 ; Now set the "threshold" to the number of bytes computed above (unless that
 ; would be a no-op).
@@ -9405,11 +9470,16 @@ Missing functions (use *check-built-in-constants-debug* = t for verbose report):
           (min (floor memsize 8)
                (expt 2 31)))
     (setq *gc-min-threshold* ; no change if we were here already
-          (cond ((null threshold) (floor *max-mem-usage* 4))
-                ((posp threshold) threshold)
-                (t (error "The GC threshold must be a positive integer, but ~
-                           ~s is not!"
-                          threshold))))
+          (min (cond ((null threshold)
+                      (floor *max-mem-usage* 4))
+                     ((posp threshold) threshold)
+                     (t (error "The GC threshold must be a positive integer, ~
+                                but ~s is not!"
+                               threshold)))
+
+ ; CCL requires a fixnum for ccl::lisp-heap-gc-threshold.
+
+               most-positive-fixnum))
     (ccl::set-lisp-heap-gc-threshold *gc-min-threshold*)
     (ccl::use-lisp-heap-gc-threshold)
     nil))

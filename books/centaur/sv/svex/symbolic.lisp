@@ -281,12 +281,14 @@ into @(see acl2::aig)s, to support symbolic simulation with @(see acl2::gl).")
     (%         a4vec-remainder      (x y)                   "modulus")
     (<         a4vec-<              (x y)                   "less than")
     (clog2     a4vec-clog2          (x)                     "ceiling of log2")
+    (pow       a4vec-pow            (x y)                   "exponentiation")
     (==        a3vec-==             ((3v x) (3v y))         "equality")
     (===       a4vec-===            (x y)                   "case equality")
     (==?       a4vec-wildeq         (x y)                   "wildcard equality")
     (safer-==? a4vec-wildeq-safe    (x y)                   "wildcard equality (monotonic version)")
     (==??      a4vec-symwildeq      (x y)                   "symmetric wildcard equality")
     (?         a3vec-?              ((3v test) (3vp then) (3vp else)) "if-then-else")
+    (?*        a3vec-?*             ((3v test) (3vp then) (3vp else)) "if-then-else")
     (bit?      a3vec-bit?           ((3v test) (3vp then) (3vp else)) "bitwise if-then-else")))
 
 #||
@@ -496,6 +498,7 @@ into @(see acl2::aig)s, to support symbolic simulation with @(see acl2::gl).")
                                               4vec-reduction-and
                                               4vec-reduction-or
                                               4vec-?
+                                              4vec-?*
                                               4vec-bit?
                                               4vec-==)
                                   (;; len-of-svexlist-eval

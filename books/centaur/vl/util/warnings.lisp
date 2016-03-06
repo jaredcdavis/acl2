@@ -392,8 +392,31 @@ particular interest.</p>"
                   :rule-classes :type-prescription))
    :ctor-body (if args (cons msg args) msg)))
 
-(defmacro vmsg (msg &rest args)
-  `(make-vl-msg :msg ,msg :args (list . ,args)))
+(defsection vmsg
+  :parents (warnings)
+  :short "Similar to @(see acl2::msg); constructs a @(see vl-msg) that can be used
+          with @('~@') directives in VL's @(see formatted-printing) routines."
+  :long "@(def vmsg)"
+
+  (defmacro vmsg (msg &rest args)
+    `(make-vl-msg :msg ,msg :args (list . ,args))))
+
+(define vmsg-binary-concat ((x1 (or (not x1) (vl-msg-p x1)))
+                            (x2 (or (not x2) (vl-msg-p x2))))
+  :returns (msg (and (iff (vl-msg-p msg) (or x1 x2))
+                     (iff msg (or x1 x2))))
+  (if x1
+      (if x2
+          (vmsg "~@0~%@~1" x1 x2)
+        (vl-msg-fix x1))
+    (and x2 (vl-msg-fix x2))))
+
+(defmacro vmsg-concat (x y &rest rst)
+  (xxxjoin 'vmsg-binary-concat (cons x (cons y rst))))
+
+(add-macro-alias vmsg-concat vmsg-binary-concat)
+(add-binop vmsg-concat vmsg-binary-concat)
+
 
 
 (define vl-warning-add-ctx ((x vl-warning-p)

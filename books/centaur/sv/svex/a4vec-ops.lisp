@@ -128,8 +128,8 @@ vectors.</p>")
 
 
 (defsection a4vec-0
-  :short "@(call a4vec-0) return an @(see a4vec) that evaluates to @(see
-4vec-0) under every environment."
+  :short "@(call a4vec-0) return an @(see a4vec) that evaluates to 0 under
+every environment."
   :long "@(def a4vec-0)"
 
   (defmacro a4vec-0 ()
@@ -767,6 +767,51 @@ are no Z bits, we can avoid building AIGs to do unfloating.</p>"
     (equal (a4vec-eval (a4vec-clog2 x) env)
            (4vec-clog2 (a4vec-eval x env)))
     :hints(("Goal" :in-theory (enable 4vec-clog2)))))
+
+
+(define a4vec-pow ((base a4vec-p)
+                   (exp a4vec-p))
+  :short "Symbolic version of @(see 4vec-pow)."
+  :returns (res a4vec-p)
+  (a4vec-ite (aig-and (a2vec-p base)
+                      (a2vec-p exp))
+             (b* ((base (a4vec->lower base))
+                  (exp  (a4vec->lower exp)))
+               (a4vec-ite (aig-or (aig-not (aig-<-ss exp nil))     ;; exp >= 0
+                                  (aig-or (aig-=-ss base '(t nil)) ;; base == 1
+                                          (aig-=-ss base '(t))))   ;; base == -1
+                          (b* ((pow (aig-expt-su base exp)))
+                            (a4vec pow pow))
+                          (a4vec-ite (aig-=-ss base 0)
+                                     (a4vec-x)
+                                     (a4vec nil nil))))
+             (a4vec-x))
+  ///
+  (local (defthm expt-b-0
+           (equal (expt b 0) 1)
+           :hints(("Goal" :in-theory (enable expt)))))
+
+  (local (defthm expt-neg1-n
+           (equal (expt -1 n)
+                  (- 1 (* 2 (logcar n))))
+           :hints(("Goal" :in-theory (enable expt)))))
+
+  (local (defthm logcar-of-aig-list->s
+           (equal (logcar (aig-list->s x env))
+                  (bool->bit (aig-eval (car x) env)))
+           :hints(("Goal" :in-theory (enable aig-list->s)))))
+
+  (local (defthm logcar-of-aig-list->u
+           (equal (logcar (aig-list->u x env))
+                  (bool->bit (aig-eval (car x) env)))
+           :hints(("Goal" :in-theory (enable aig-list->u)))))
+
+  (defthm a4vec-pow-correct
+    (equal (a4vec-eval (a4vec-pow base exp) env)
+           (4vec-pow (a4vec-eval base env)
+                     (a4vec-eval exp env)))
+    :hints(("Goal" :in-theory (enable 4vec-pow)))))
+                  
 
 
 (define a3vec-== ((x a4vec-p) (y a4vec-p))
@@ -1424,6 +1469,98 @@ are no Z bits, we can avoid building AIGs to do unfloating.</p>"
                             (a4vec-eval z env))))
     :hints(("Goal" :in-theory (enable 3vec-? 3vec-p))
            (bitops::logbitp-reasoning))))
+
+(define a3vec-?* ((x a4vec-p)
+                 (y a4vec-p)
+                 y3p
+                 (z a4vec-p)
+                 z3p)
+  :short "Symbolic version of @(see 3vec-?*)."
+  :returns (res a4vec-p)
+
+  ;; ~test.upper --> false
+  ;; test.lower --> true
+  ;; otherwise x.
+  ;;
+  ;; ans upper:
+  ;; ( ( testfalse & elses.upper)       ;; test is false --> else
+  ;;   | ( testtrue & thens.upper) )    ;; test is true --> then
+  ;; | ( (~testfalse & ~testtrue)
+  ;;      & (elses.upper | thens.upper | elses.lower | thens.lower)
+  ;;      )
+  ;;
+  ;; ans lower:
+  ;; ( testfalse & elses.lower)       ;; test is false --> else
+  ;;   | ( testtrue & thens.lower)    ;; test is true --> then
+  ;;   | ( (~testfalse & ~testtrue)
+  ;;        & elses.upper & thens.upper & elses.lower & thens.lower )
+
+
+  (b* (((a4vec a) x)
+       ((a4vec b) y)
+       ((a4vec c) z)
+       ;; common subexpressions between the two
+       (a=1 (aig-not (aig-iszero-s a.lower)))
+       (a=0 (aig-iszero-s a.upper))
+       (a=x (aig-nor a=1 a=0))
+
+       ;; upper
+       (boolcase (aig-logior-ss (aig-ite-bss-fn a=1 b.upper nil)
+                                (aig-ite-bss-fn a=0 c.upper nil)))
+       (upper (aig-logior-ss
+               boolcase
+               (aig-ite-bss a=x
+                            (aig-logior-ss (aig-logior-ss b.upper c.upper)
+                                           (aig-logxor-ss
+                                            (if y3p nil b.lower) ;; implied by not b.upper
+                                            (if z3p nil c.lower)))
+                            nil)))
+
+       ;; lower
+       (boolcase (aig-logior-ss (aig-ite-bss-fn a=1 b.lower nil)
+                                (aig-ite-bss-fn a=0 c.lower nil)))
+       (lower (aig-logior-ss
+               boolcase
+               (aig-ite-bss a=x
+                            (aig-logand-ss (aig-logand-ss b.lower c.lower)
+                                           (aig-lognot-s
+                                            (aig-logxor-ss
+                                             (if y3p '(t) b.upper)
+                                             (if z3p '(t) c.upper))))
+                            nil))))
+    (a4vec upper lower))
+  ///
+  (local (in-theory (disable iff not acl2::zip-open)))
+  (local (in-theory (disable bitops::logand-natp-type-2
+                             bitops::logand-natp-type-1
+                             bitops::logior-natp-type
+                             bitops::logand->=-0-linear-2
+                             bitops::logand->=-0-linear-1
+                             bitops::upper-bound-of-logand
+                             aig-list->s
+                             bitops::logbitp-when-bit
+                             bitops::logbitp-nonzero-of-bit
+                             bitops::logbitp-when-bitmaskp
+                             bitops::lognot-negp
+                             bitops::lognot-natp
+                             bitops::logior-<-0-linear-2
+                             bitops::logior-<-0-linear-1
+                             bitops::lognot-<-const
+                             acl2::aig-env-lookup)))
+
+
+  (defthm a3vec-?*-correct
+    (implies (and (case-split (implies y3p (3vec-p (a4vec-eval y env))))
+                  (case-split (implies z3p (3vec-p (a4vec-eval z env))))
+                  (3vec-p (a4vec-eval x env)))
+             (equal (a4vec-eval (a3vec-?* x y y3p z z3p) env)
+                    (3vec-?* (a4vec-eval x env)
+                            (a4vec-eval y env)
+                            (a4vec-eval z env))))
+    :hints(("Goal" :in-theory (enable 3vec-?* 3vec-p))
+           (bitops::logbitp-reasoning)
+           (and stable-under-simplificationp
+                '(:bdd (:vars nil))))))
 
 (define a3vec-bit? ((x a4vec-p)
                     (y a4vec-p)

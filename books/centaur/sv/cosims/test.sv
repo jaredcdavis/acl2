@@ -30,7 +30,7 @@
 
 module test ();
 
-   localparam nCycles = 1024;
+   localparam nCycles = 1040;
 
   reg [127:0] inputs [nCycles-1:0];
   reg [127:0] outputs [nCycles-1:0];
@@ -53,10 +53,11 @@ module test ();
        in = inputs[i];
        #2;
        clk = 1;
-       #5;
-       clk = 0;
        #3;
        outputs[i] = out;
+       #2;
+       clk = 0;
+       #3;
      end
      $writememb(`outfile, outputs);
    end

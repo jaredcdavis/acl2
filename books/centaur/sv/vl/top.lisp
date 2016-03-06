@@ -49,11 +49,9 @@
 (local (include-book "centaur/vl/util/arithmetic" :dir :system))
 (local (include-book "centaur/misc/arith-equivs" :dir :system))
 
-(defxdoc vl-svex.lisp :parents (vl-design->svex-design))
-(local (xdoc::set-default-parents vl-svex.lisp))
+(local (xdoc::set-default-parents sv::vl-to-svex))
 
 (define vl-simplify-svex
-  :parents (svex)
   :short "Core transformation sequence for using VL to generate SVEX modules."
   ((design vl-design-p)
    (config vl-simpconfig-p)
@@ -94,7 +92,6 @@
        (good          (xf-cwtime (vl-design-eliminitial good)))
        ;;(- (sneaky-save :pre-unparam good))
        (good          (xf-cwtime (vl-design-elaborate good)))
-       (good          (xf-cwtime (vl-design-post-unparam-hook good)))
        ((mv good bad) (xf-cwtime (vl-design-propagate-errors* good bad)))
 
 
@@ -184,7 +181,6 @@
 (define vl-to-svex-main ((topmods string-listp)
                          (x vl-design-p)
                          (config vl-simpconfig-p))
-  :parents (svex)
   :short "Turn a VL design into an SVEX hierarchical design, with a list of top modules."
   :guard-debug t
   :returns (mv err
@@ -196,7 +192,9 @@
        ;; Annotate and simplify the design, to some extent.  This does
        ;; unparametrization and expr sizing, but not e.g. expr splitting or
        ;; occforming.
-       (x (cwtime (vl-annotate-design x)))
+       (x (if (vl-simpconfig->already-annotated config)
+              x
+            (cwtime (vl-annotate-design x))))
        ;; [Jared] I pulled addnames out of annotate because it interfered with
        ;; certain linter checks.  (In particular for detecting duplicate things
        ;; we don't really want to be adding names to unnamed blocks, etc.)
@@ -247,7 +245,6 @@
 (define vl-design->svex-design ((topmod stringp)
                                 (x vl-design-p)
                                 (config vl-simpconfig-p))
-  :parents (svex)
   :short "Turn a VL design into an SVEX hierarchical design."
   :guard-debug t
   :returns (mv err

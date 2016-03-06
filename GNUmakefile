@@ -1,7 +1,7 @@
 #  -*- Fundamental -*- 
 
-# ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-# Copyright (C) 2015, Regents of the University of Texas
+# ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+# Copyright (C) 2016, Regents of the University of Texas
 
 # This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 # (C) 1997 Computational Logic, Inc.  See the documentation topic NOTES-2-0.
@@ -175,12 +175,17 @@ PREFIX =
 PREFIXsaved_acl2 = ${PREFIX}saved_acl2${ACL2_SUFFIX}
 PREFIXosaved_acl2 = ${PREFIX}osaved_acl2${ACL2_SUFFIX}
 
-# One may define ACL2_SAFETY to provide a safety setting.  We recommend
+# One may define ACL2_SAFETY and/or (only useful for CCL) ACL2_STACK_ACCESS
+# to provide a safety or :stack-access setting.  We recommend
 # ACL2_SAFETY = 3
 # for careful error checking.  This can cause significant slowdown and for
 # some Lisp implementations, the regression might not even complete.  For
 # CCL we have had success with safety 3.
+# NOTE: The use of ACL2_STACK_ACCESS relies on recognition by CCL of the
+# :stack-access keyword for optimize expressions, hence will only have
+# effect for CCL versions starting with 16678.
 ACL2_SAFETY =
+ACL2_STACK_ACCESS =
 
 # Set ACL2_COMPILER_DISABLED, say with ACL2_COMPILER_DISABLED=t, to
 # build the image with (SET-COMPILER-ENABLED NIL STATE), thus
@@ -194,6 +199,12 @@ ACL2_COMPILER_DISABLED =
 
 # See *acl2-egc-on* for an explanation of the following variable.
 ACL2_EGC_ON =
+
+# The following supplies a value for *acl2-exit-lisp-hook*, which
+# should be a symbol in the "COMMON-LISP-USER" package.  For example,
+# for CCL consider:
+# make ACL2_EXIT_LISP_HOOK='acl2-exit-lisp-ccl-report'.
+ACL2_EXIT_LISP_HOOK =
 
 # The following is not advertised.  It allows more symbol allocation
 # when ACL2 package is created; if specified, its value should be a
@@ -276,6 +287,9 @@ acl2r.lisp:
 	if [ "$(ACL2_SAFETY)" != "" ] ; then \
 	echo "(defparameter *acl2-safety* $(ACL2_SAFETY))" >> acl2r.lisp ;\
 	fi
+	if [ "$(ACL2_STACK_ACCESS)" != "" ] ; then \
+	echo "(defparameter *acl2-stack-access* $(ACL2_STACK_ACCESS))" >> acl2r.lisp ;\
+	fi
 	if [ "$(ACL2_SIZE)" != "" ] ; then \
 	echo '(or (find-package "ACL2") (#+(and gcl (not ansi-cl)) defpackage:defpackage #-(and gcl (not ansi-cl)) defpackage "ACL2" (:size $(ACL2_SIZE)) (:use)))' >> acl2r.lisp ;\
 	fi
@@ -284,6 +298,9 @@ acl2r.lisp:
 	fi
 	if [ "$(ACL2_EGC_ON)" != "" ] ; then \
 	echo '(DEFPARAMETER *ACL2-EGC-ON* $(ACL2_EGC_ON))' >> acl2r.lisp ;\
+	fi
+	if [ "$(ACL2_EXIT_LISP_HOOK)" != "" ] ; then \
+	echo '(DEFPARAMETER *ACL2-EXIT-LISP-HOOK* (QUOTE $(ACL2_EXIT_LISP_HOOK)))' >> acl2r.lisp ;\
 	fi
 
 .PHONY: chmod_image
@@ -371,7 +388,7 @@ compile:
 	@$(MAKE) check_compile_ok
 
 .PHONY: copy-distribution
-copy-distribution:
+copy-distribution: acl2r.lisp
 # WARNING: Execute this from an ACL2 source directory.
 # You must manually rm -r ${DIR} before this or it will fail without doing
 # any damage.
@@ -379,7 +396,6 @@ copy-distribution:
 # match what lisp returns from truename.
 	rm -f workxxx
 	rm -f workyyy
-	rm -f acl2r.lisp
 	echo '(load "init.lisp")' > workxxx
 	echo '(acl2::copy-distribution "workyyy" "${CURDIR}" "${DIR}")' >> workxxx
 	echo '(acl2::exit-lisp)' >> workxxx
@@ -396,7 +412,8 @@ copy-distribution:
 #TAGS:
 #	@echo 'Skipping building of a tags table.'
 
-TAGS:   acl2.lisp acl2-check.lisp acl2-fns.lisp acl2-init.lisp ${sources}
+# We include acl2r.lisp so that we build ACL2(h) and not ACL2(c).
+TAGS:   acl2.lisp acl2-check.lisp acl2-fns.lisp acl2-init.lisp ${sources} acl2r.lisp
 	rm -f TAGS
 	rm -f workxxx
 	echo '(load "init.lisp")' > workxxx
@@ -475,6 +492,7 @@ init: acl2-proclaims.lisp
 	$(MAKE) do_saved
 	rm -f workxxx
 	$(MAKE) chmod_image
+	@echo "Successfully built $(ACL2_WD)/${PREFIXsaved_acl2}."
 
 # The following "proofs" target assumes that files for the specified LISP have
 # been compiled.  We use :load-acl2-proclaims nil so that we don't
@@ -867,7 +885,7 @@ endif
 
 # Simple targets that ignore variables not mentioned below,
 # including: ACL2_SUFFIX, PREFIX, ACL2_SAFETY, ACL2_COMPILER_DISABLED,
-# ACL2_EGC_ON, and ACL2_SIZE:
+# ACL2_EGC_ON, ACL2_SIZE, and ACL2_EXIT_LISP_HOOK:
 
 saved_acl2: $(ACL2_DEPS)
 	echo "Making ACL2 on $(LISP)"

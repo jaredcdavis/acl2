@@ -43,7 +43,7 @@
 ; -----------------------------------------------------------------------------
 
 (defxdoc-raw ts-queue
-  :parents (server)
+  :parents (vl-server)
   :short "Primitive thread-safe, shared queue."
 
   :long "<p>Note that when using this queue, there is no way for the producer
@@ -121,7 +121,7 @@ estimate.  This is because the length of the queue can change immediately after
 ; -----------------------------------------------------------------------------
 
 (defxdoc-raw vls-transdb
-  :parents (server)
+  :parents (vl-server)
   :short "Translations database for the VL Server."
 
   :long "<p>At a first approximation, the translation database acts like an
@@ -169,6 +169,21 @@ a bleeding edge zip.</p>")
   (load-queue  (make-ts-queue)))
 
 (defparameter *vls-transdb* (make-vls-transdb))
+
+#||
+
+;; For interactive debugging:
+
+(in-package "VL")
+(ld `((defconst *data* ',(car (vls-transdb-loaded *vls-transdb*)))))
+(lp)
+(defconst *design*
+  (progn$ (cw "~%*** Loading design ~s0 into *design* ***~%" (car *data*))
+          (vls-data->orig (cdr *data*))))
+
+;; Then go off and explore it however.
+
+||#
 
 
 

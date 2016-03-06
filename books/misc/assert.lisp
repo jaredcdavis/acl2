@@ -41,7 +41,8 @@
  })
 
  <p>Also see @(see assert!-stobj), which is an analogous utility for assertions
- that return @('stobj')s.</p>")
+ that return @('stobj')s.  Also see @(see must-fail) and @(see must-succeed)
+ for other tests that certain commands fail or succeed.</p>")
 
 (defxdoc assert!-stobj
   :parents (assert$ errors)
@@ -49,7 +50,7 @@
   :long "<p>See @(see assert!).  The only difference between @('assert!-stobj')
  and @('assert!') is that for @('assert!-stobj'), the assertion should evaluate
  to multiple values @('(mv val st)'), where @('val') is an ordinary value and
- @('st') is a @(see stobj).</p>")
+ @('st') is a user-defined @(see stobj) (not @(tsee state)).</p>")
 
 (defun assert!-body (assertion form)
 

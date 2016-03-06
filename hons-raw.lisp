@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -1816,7 +1816,8 @@
     (when *hl-addr-limit-should-clear-memo-tables*
       (clear-memoize-tables))
 
-    (hl-hspace-hons-wash hs)
+    (time$ (hl-hspace-hons-wash hs)
+           :msg "; Hons-wash: ~st sec, ~sa bytes~%")
 
     (format note-stream "; Hons-Note: After ADDR-LIMIT actions, ~:D used of ~:D slots.~%"
             (hash-table-count (hl-hspace-addr-ht hs))
@@ -2262,7 +2263,6 @@
 ; alists that are bound to them.  This weaker criterion means that the progn
 ; below is adequate.
 
-
 (defun hl-slow-alist-warning (name)
   ;; Name is the name of the function wherein we noticed a problem.
   (let ((action (get-slow-alist-action *the-live-state*)))
@@ -2270,8 +2270,8 @@
       (format *error-output* "
 *****************************************************************
 Fast alist discipline violated in ~a.
-See the documentation for fast alists for how to fix the problem,
-or suppress this warning message with~%  ~a~%
+See :DOC slow-alist-warning.  You can suppress this warning with
+~a.
 ****************************************************************~%"
               name
               '(set-slow-alist-action nil))

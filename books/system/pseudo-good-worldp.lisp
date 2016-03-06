@@ -713,8 +713,13 @@
 
           (or (null cert-annotations)
               (cert-annotationsp cert-annotations t))
-          (or (integerp chk-sum)
-              (eq chk-sum nil))))
+          (case-match chk-sum
+            (((':BOOK-LENGTH . book-length)
+              (':BOOK-WRITE-DATE . book-write-date))
+             (and (natp book-length)
+                  (natp book-write-date)))
+            (& (or (integerp chk-sum)
+                   (eq chk-sum nil))))))
     (& nil)))
 
 (defun pseudo-include-book-alist-entry-listp (x local-markers-allowedp)
@@ -1369,26 +1374,16 @@
 ; This is a list of fully elaborated rule classes as returned by translate-rule-classes.
 ; For the present purposes we just check that it is an alist mapping keywords to keyword alists.
 
-(defun keyword-alistp (x)
-
-; A keyword alist is an even length true list in which the elements in the even
-; (0-based) positions are keywords, (:key1 val1 :key2 val2 ...).
-
-  (cond ((atom x) (null x))
-        ((atom (cdr x)) nil)
-        (t (and (keywordp (car x))
-                (keyword-alistp (cddr x))))))
-
-(defun keyword-to-keyword-alist-alistp (x)
+(defun keyword-to-keyword-value-list-alistp (x)
   (cond ((atom x) (null x))
         (t (and (consp (car x))
                 (keywordp (car (car x)))
-                (keyword-alistp (cdr (car x)))
-                (keyword-to-keyword-alist-alistp (cdr x))))))
+                (keyword-value-listp (cdr (car x)))
+                (keyword-to-keyword-value-list-alistp (cdr x))))))
 
 (defun classesp (sym val)
   (declare (ignore sym))
-  (keyword-to-keyword-alist-alistp val))
+  (keyword-to-keyword-value-list-alistp val))
 
 
 ;-----------------------------------------------------------------

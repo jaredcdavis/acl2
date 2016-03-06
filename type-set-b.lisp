@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -179,8 +179,7 @@
               (symbolp (cadr x)))
          (car
           (assoc-equal-cdr x
-                           (getprop (cadr x) 'runic-mapping-pairs nil
-                                    'current-acl2-world wrld))))
+                           (getpropc (cadr x) 'runic-mapping-pairs nil wrld))))
         (t nil)))
 
 ; Essay on Fake-Runes
@@ -247,16 +246,16 @@
 
   (car
    (assoc-equal-cdr rune
-                    (getprop (base-symbol rune) 'runic-mapping-pairs nil
-                             'current-acl2-world wrld))))
+                    (getpropc (base-symbol rune) 'runic-mapping-pairs nil
+                              wrld))))
 
 (defun frunic-mapping-pair (rune wrld)
 
 ; Rune must be a rune in wrld.  We return its mapping pair.
 
   (assoc-equal-cdr rune
-                   (getprop (base-symbol rune) 'runic-mapping-pairs nil
-                            'current-acl2-world wrld)))
+                   (getpropc (base-symbol rune) 'runic-mapping-pairs nil
+                             wrld)))
 
 (defun fn-rune-nume (fn nflg xflg wrld)
 
@@ -270,7 +269,7 @@
 ; return nil for all combinations of the flags.
 
   (let* ((runic-mapping-pairs
-          (getprop fn 'runic-mapping-pairs nil 'current-acl2-world wrld))
+          (getpropc fn 'runic-mapping-pairs nil wrld))
          (pair (if xflg (cadr runic-mapping-pairs) (car runic-mapping-pairs))))
     (if nflg (car pair) (cdr pair))))
 
@@ -369,10 +368,10 @@
 
   (cond ((symbolp x)
          (cond
-          ((getprop (deref-macro-name x macro-aliases) 'runic-mapping-pairs nil
-                    'current-acl2-world wrld)
+          ((getpropc (deref-macro-name x macro-aliases)
+                     'runic-mapping-pairs nil wrld) 
            t)
-          (t (not (eq (getprop x 'theory t 'current-acl2-world wrld) t)))))
+          (t (not (eq (getpropc x 'theory t wrld) t)))))
         ((and (consp x)
               (null (cdr x))
               (symbolp (car x)))
@@ -404,9 +403,7 @@
 
 ; Do not use the function macro-args below, as it can cause a hard error!
 
-              (not (eq (getprop (car lst) 'macro-args
-                                t
-                                'current-acl2-world wrld)
+              (not (eq (getpropc (car lst) 'macro-args t wrld)
                        t)))
          (prog2$ (cw "~|~%**NOTE**:  The name ~x0 is a macro.  See :DOC ~
                       add-macro-alias if you want it to be associated with a ~
@@ -420,10 +417,9 @@
                          name
                          (cond ((and (symbolp name)
                                      (or (body name nil wrld)
-                                         (getprop name 'theorem nil
-                                                  'current-acl2-world wrld)
-                                         (getprop name 'defchoose-axiom nil
-                                                  'current-acl2-world wrld)))
+                                         (getpropc name 'theorem nil wrld)
+                                         (getpropc name 'defchoose-axiom nil
+                                                   wrld)))
                                 " (though there is a theorem with that name)")
                                (t ""))))
                    (theoryp!1 (cdr lst) t macro-aliases wrld)))))
@@ -552,9 +548,10 @@
               (eq (base-symbol rune) (cadr (cdr (car mapping-pairs)))))
          (find-mapping-pairs-tail1 rune mapping-pairs))
         (t (find-mapping-pairs-tail1 rune
-                                     (getprop (base-symbol rune)
-                                              'runic-mapping-pairs nil
-                                              'current-acl2-world wrld)))))
+                                     (getpropc (base-symbol rune)
+                                               'runic-mapping-pairs
+                                               nil
+                                               wrld)))))
 
 (defun augment-runic-theory1 (lst mapping-pairs wrld ans)
 
@@ -620,9 +617,8 @@
   (cond
    ((null lst) ans)
    ((symbolp (car lst))
-    (let ((temp (getprop (deref-macro-name (car lst) macro-aliases)
-                         'runic-mapping-pairs nil
-                         'current-acl2-world wrld)))
+    (let ((temp (getpropc (deref-macro-name (car lst) macro-aliases)
+                          'runic-mapping-pairs nil wrld)))
       (cond
        ((and temp
              (eq (car (cdr (car temp))) :DEFINITION)
@@ -650,19 +646,19 @@
         (convert-theory-to-unordered-mapping-pairs1
          (cdr lst) macro-aliases wrld
          (augment-runic-theory1
-          (reverse (getprop (car lst) 'theory
-                            `(:error ,*bad-runic-designator-string*)
-                            'current-acl2-world wrld))
+          (reverse (getpropc (car lst) 'theory
+                             `(:error ,*bad-runic-designator-string*)
+                             wrld))
           nil
           wrld
           ans))))))
    ((null (cdr (car lst)))
     (convert-theory-to-unordered-mapping-pairs1
      (cdr lst) macro-aliases wrld
-     (cons (cadr (getprop (deref-macro-name (car (car lst)) macro-aliases)
-                          'runic-mapping-pairs
-                          `(:error ,*bad-runic-designator-string*)
-                          'current-acl2-world wrld))
+     (cons (cadr (getpropc (deref-macro-name (car (car lst)) macro-aliases)
+                           'runic-mapping-pairs
+                           `(:error ,*bad-runic-designator-string*)
+                           wrld))
            ans)))
    (t (convert-theory-to-unordered-mapping-pairs1
        (cdr lst) macro-aliases wrld
@@ -1102,8 +1098,7 @@
 ; because the call of ev-fncall-w below disallows the use of attachments (last
 ; parameter, aok, is nil).
 
-              (not (getprop (ffn-symb term) 'constrainedp nil
-                            'current-acl2-world wrld)))
+              (not (getpropc (ffn-symb term) 'constrainedp nil wrld)))
          (mv-let
           (erp val)
           (pstk
@@ -1267,76 +1262,98 @@
              (inv-rec (cdr table-entry))
              (theory-inv (access theory-invariant-record inv-rec :tterm)))
         (mv-let
-         (erp okp latches)
-         (ev theory-inv
-             (list (cons 'ens ens)
-                   (cons 'state (coerce-state-to-object state)))
-             state
-             nil
-             nil t)
-         (declare (ignore latches))
-         (cond
-          (erp (let ((msg (msg
-                           "Theory invariant ~x0 could not be evaluated on ~
-                            the theory produced by ~@1.  Theory invariant, ~
-                            ~P32, produced the error message:~%~@4~@5"
+          (erp okp latches)
+          (ev theory-inv
+              (list (cons 'ens ens)
+                    (cons 'state (coerce-state-to-object state)))
+              state
+              nil
+              nil t)
+          (declare (ignore latches))
+          (cond
+           (erp (let* ((produced-by-msg
+                        (cond ((eq theory-expr :from-hint)
+                               "an :in-theory hint")
+                              ((eq theory-expr :install)
+                               "the current event")
+                              (t (msg "~x0" theory-expr))))
+                       (theory-invariant-term
+                        (access theory-invariant-record inv-rec
+                                :untrans-term))
+                       (msg (msg
+                             "Theory invariant ~x0 could not be evaluated on ~
+                             the theory produced by ~@1.  Theory invariant, ~
+                             ~P32, produced the error message:~%~@4~@5"
+                             inv-name
+                             produced-by-msg
+                             (term-evisc-tuple nil state)
+                             theory-invariant-term
+                             okp ; error message
+                             (if (access theory-invariant-record inv-rec :error)
+                                 "~|This theory invariant violation causes an ~
+                                 error."
+                               ""))))
+                  (mv-let@par
+                   (errp-acc state)
+                   (cond
+                    ((access theory-invariant-record inv-rec :error)
+                     (mv-let@par (erp val state)
+                                 (er@par soft ctx "~@0" msg)
+                                 (declare (ignore erp val))
+                                 (mv@par t state)))
+                    (t (pprogn@par (warning$@par ctx "Theory"
+                                     `("~@0"
+                                       (:error-msg ,okp)
+                                       (:produced-by-msg ,produced-by-msg)
+                                       (:theory-invariant-name ,inv-name)
+                                       (:theory-invariant-term
+                                        ,theory-invariant-term))
+                                     msg)
+                                   (mv@par errp-acc state))))
+                   (chk-theory-invariant1@par theory-expr ens
+                                              (cdr invariant-alist)
+                                              errp-acc ctx state))))
+           (okp (chk-theory-invariant1@par theory-expr ens (cdr invariant-alist)
+                                           errp-acc ctx state))
+           (t (let* ((produced-by-msg
+                      (cond ((eq theory-expr :from-hint)
+                             "an :in-theory hint")
+                            ((eq theory-expr :install)
+                             "the current event")
+                            (t (msg "~x0" theory-expr))))
+                     (theory-invariant-term
+                      (access theory-invariant-record inv-rec
+                              :untrans-term))
+                     (msg (msg
+                           "Theory invariant ~x0 failed on the theory ~
+                            produced by ~@1.  Theory invariant ~x0 is ~P32.~@4"
                            inv-name
-                           (cond ((eq theory-expr :from-hint)
-                                  "an :in-theory hint")
-                                 ((eq theory-expr :install)
-                                  "the current event")
-                                 (t (msg "~x0" theory-expr)))
+                           produced-by-msg
                            (term-evisc-tuple nil state)
-                           (access theory-invariant-record inv-rec
-                                   :untrans-term)
-                           okp
+                           theory-invariant-term
                            (if (access theory-invariant-record inv-rec :error)
                                "~|This theory invariant violation causes an ~
-                                error."
-                             ""))))
-                 (mv-let@par
-                  (errp-acc state)
-                  (cond
-                   ((access theory-invariant-record inv-rec :error)
-                    (mv-let@par (erp val state)
-                                (er@par soft ctx "~@0" msg)
-                                (declare (ignore erp val))
-                                (mv@par t state)))
-                   (t (pprogn@par (warning$@par ctx "Theory" "~@0" msg)
-                                  (mv@par errp-acc state))))
-                  (chk-theory-invariant1@par theory-expr ens
-                                             (cdr invariant-alist)
-                                             errp-acc ctx state))))
-          (okp (chk-theory-invariant1@par theory-expr ens (cdr invariant-alist)
-                                          errp-acc ctx state))
-          (t (let ((msg (msg
-                         "Theory invariant ~x0 failed on the theory produced ~
-                          by ~@1.  Theory invariant ~x0 is ~P32.~@4"
-                         inv-name
-                         (cond ((eq theory-expr :from-hint)
-                                "an :in-theory hint")
-                               ((eq theory-expr :install)
-                                "the current event")
-                               (t (msg "~x0" theory-expr)))
-                         (term-evisc-tuple nil state)
-                         (access theory-invariant-record inv-rec :untrans-term)
-                         (if (access theory-invariant-record inv-rec :error)
-                             "~|This theory invariant violation causes an ~
                                error."
-                           ""))))
-               (mv-let@par
-                (errp-acc state)
-                (cond
-                 ((access theory-invariant-record inv-rec :error)
-                  (mv-let@par (erp val state)
-                              (er@par soft ctx "~@0" msg)
-                              (declare (ignore erp val))
-                              (mv@par t state)))
-                 (t (pprogn@par (warning$@par ctx "Theory" "~@0" msg)
-                                (mv@par errp-acc state))))
-                (chk-theory-invariant1@par theory-expr ens
-                                           (cdr invariant-alist)
-                                           errp-acc ctx state))))))))))
+                             ""))))
+                (mv-let@par
+                 (errp-acc state)
+                 (cond
+                  ((access theory-invariant-record inv-rec :error)
+                   (mv-let@par (erp val state)
+                               (er@par soft ctx "~@0" msg)
+                               (declare (ignore erp val))
+                               (mv@par t state)))
+                  (t (pprogn@par (warning$@par ctx "Theory"
+                                   `("~@0"
+                                     (:produced-by-msg ,produced-by-msg)
+                                     (:theory-invariant-name ,inv-name)
+                                     (:theory-invariant-term
+                                      ,theory-invariant-term))
+                                   msg)
+                                 (mv@par errp-acc state))))
+                 (chk-theory-invariant1@par theory-expr ens
+                                            (cdr invariant-alist)
+                                            errp-acc ctx state))))))))))
 
 (defun@par chk-theory-invariant (theory-expr ens ctx state)
 
@@ -1720,8 +1737,7 @@
 ; (with-acl2-lock
 ;  *acl2-par-arrays-lock*
 
-  (let* ((ges1 (getprop varname 'global-value nil
-                        'current-acl2-world wrld))
+  (let* ((ges1 (getpropc varname 'global-value nil wrld))
          (theory-array (access enabled-structure ges1 :theory-array))
          (name (access enabled-structure ges1 :array-name)))
 
@@ -1754,7 +1770,7 @@
   (if (endp stobj-names)
       t
     (let* ((st (car stobj-names))
-           (ar (getprop st 'accessor-names nil 'current-acl2-world wrld)))
+           (ar (getpropc st 'accessor-names nil wrld)))
       (prog2$ (or (null ar)
                   (prog2$ (flush-compress st)
                           (compress1 st ar)))
@@ -2920,7 +2936,7 @@
 
 ; If we ever make 1+ and 1- functions again, they should go back on this list.
 
-    synp plusp minusp listp return-last mv-list
+    synp plusp minusp listp return-last mv-list cons-with-hint
 
 ; We added the-error for Version_4.0 (replaced by the-check after Version_6.1).
 ; Before that change, but after changing constraint-info to avoid calling
@@ -5883,8 +5899,10 @@
   (((cnt-s . cnt-f) . (stack-s . stack-f))
    xrune-stack
    xrunep
+   totals
    .
-   totals)
+   old-accp-info ; previous accp-info, supporting accumulated-persistence-oops
+   )
   t)
 
 ; Cnt-s is the total number of lemmas tried that have led to a successful
@@ -6239,9 +6257,30 @@
                                           :stack-s nil
                                           :stack-f nil
                                           :xrunep ,collect-hyp-and-conc-xrunes
-                                          :totals '(nil))
+                                          :totals '(nil)
+                                          :old-accp-info
+                                          (let ((info (wormhole-data whs)))
+                                            (cond (info
+; We avoid holding on to every past structure; one seems like enough.
+                                                   (change accp-info info
+                                                           :old-accp-info
+                                                           nil))
+                                                  (t nil))))
                                   nil)))
           nil)))))
+
+(defmacro accumulated-persistence-oops ()
+  (wormhole-eval
+   'accumulated-persistence
+   '(lambda (whs)
+      (let* ((info (wormhole-data whs))
+             (old (and info
+                       (access accp-info info :old-accp-info))))
+        (cond (old (set-wormhole-data whs old))
+              (t (prog2$ (cw "No change: Unable to apply ~
+                              accumulated-persistence-oops.~|")
+                         whs)))))
+   nil))
 
 (defmacro set-accumulated-persistence (flg)
   `(accumulated-persistence ,flg))
@@ -6674,18 +6713,21 @@
              '(lambda (whs)
                 (set-wormhole-entry-code whs :ENTER))
              ',(cons sortkey display)
-             '(pprogn
-               (io? temporary nil state
-                    nil
-                    (fms "~@0"
-                         (list (cons #\0
-                                     (show-accumulated-persistence-phrase
-                                      (f-get-global 'wormhole-input state)
-                                      (wormhole-data
-                                       (f-get-global 'wormhole-status state)))))
-                         *standard-co*
-                         state nil))
-               (value :q))
+             '(state-global-let*
+               ((print-base 10 set-print-base)
+                (print-radix nil set-print-radix))
+               (pprogn
+                (io? temporary nil state
+                     nil
+                     (fms "~@0"
+                          (list (cons #\0
+                                      (show-accumulated-persistence-phrase
+                                       (f-get-global 'wormhole-input state)
+                                       (wormhole-data
+                                        (f-get-global 'wormhole-status state)))))
+                          *standard-co*
+                          state nil))
+                (value :q)))
              :ld-prompt  nil
              :ld-missing-input-ok nil
              :ld-pre-eval-filter :all
@@ -7585,13 +7627,14 @@
 ; one, change that one!
 
                      (mv-let
-                      (ts2 ttree2)
+                      (ts2 ttree2 extended-p)
                       (type-set-with-rules
-                       (getprop fn 'type-prescriptions nil 'current-acl2-world w)
+                       (getpropc fn 'type-prescriptions nil w)
                        x force-flg
                        dwp ; see comment in rewrite-atm about "use of dwp"
                        type-alist ancestors ens w
-                       *ts-unknown* ttree pot-lst pt backchain-limit)
+                       *ts-unknown* ttree pot-lst pt backchain-limit nil)
+                      (declare (ignore extended-p))
                       (mv (ts-intersection ts ts2) ttree2))))))))
         ((eq fn 'if)
 
@@ -7707,14 +7750,15 @@
 ; WARNING:  There is another call of type-set-with-rules above, in the
 ; recog-tuple case.  If you change this one, change that one!
 
-         (mv-let (ts1 ttree1)
+         (mv-let (ts1 ttree1 extended-p)
                  (type-set-with-rules
-                  (getprop fn 'type-prescriptions nil 'current-acl2-world w)
+                  (getpropc fn 'type-prescriptions nil w)
                   x force-flg
                   dwp ; see comment in rewrite-atm about "use of dwp"
                   type-alist ancestors ens w
                   *ts-unknown* ttree
-                  pot-lst pt backchain-limit)
+                  pot-lst pt backchain-limit nil)
+                 (declare (ignore extended-p))
                  (type-set-finish x ts0 ttree0 ts1 ttree1
                                   type-alist)))))))))
 
@@ -8237,7 +8281,7 @@
             pot-lst pt backchain-limit))))
 
 (defun type-set-with-rule (tp term force-flg dwp type-alist ancestors ens w
-                              ttree pot-lst pt backchain-limit)
+                              ttree pot-lst pt backchain-limit extended-p)
 
 ; We apply the type-prescription, tp, to term, if possible, and return a
 ; type-set, an extended type-alist and a ttree.  If the rule is inapplicable,
@@ -8262,68 +8306,77 @@
       (unify-ans
        (with-accumulated-persistence
         (access type-prescription tp :rune)
-        (ts type-alist-out ttree-out)
+        (ts type-alist-out ttree-out extended-p-out)
         (not (ts= *ts-unknown* ts))
-        (let* ((hyps (access type-prescription tp :hyps))
-               (type-alist
-                (cond
-                 ((null hyps) type-alist)
-                 (t (extend-type-alist-with-bindings unify-subst
-                                                     force-flg
-                                                     nil ; dwp
-                                                     type-alist
-                                                     ancestors
-                                                     ens w
+        (let ((hyps (access type-prescription tp :hyps)))
+          (mv-let
+            (type-alist extended-p)
+            (cond
+             ((or (null hyps)
+                  extended-p)
+              (mv type-alist extended-p))
+             (t (mv (extend-type-alist-with-bindings
+                     unify-subst
+                     force-flg
+                     nil ; dwp
+                     type-alist
+                     ancestors
+                     ens w
 
 ; We lie here by passing in the nil tag-tree, so that we can avoid
 ; contaminating the resulting type-alist with a copy of ttree.  We'll make sure
 ; that ttree gets into the answer returned by type-alist-with-rules, which is
 ; the only function that calls type-set-with-rule.
 
-                                                     nil
-                                                     pot-lst pt
-                                                     backchain-limit)))))
-          (mv-let
-           (relieve-hyps-ans type-alist ttree)
-           (type-set-relieve-hyps (access type-prescription tp :rune)
-                                  term
-                                  hyps
-                                  (access type-prescription tp
-                                          :backchain-limit-lst)
-                                  force-flg
-                                  nil ; dwp
-                                  unify-subst
-                                  type-alist
-                                  ancestors
-                                  ens w
+                     nil
+                     pot-lst pt
+                     backchain-limit)
+                    t)))
+            (mv-let
+              (relieve-hyps-ans type-alist ttree)
+              (type-set-relieve-hyps (access type-prescription tp :rune)
+                                     term
+                                     hyps
+                                     (access type-prescription tp
+                                             :backchain-limit-lst)
+                                     force-flg
+                                     nil ; dwp
+                                     unify-subst
+                                     type-alist
+                                     ancestors
+                                     ens w
 
 ; We pass in nil here to avoid contaminating the type-alist returned by this
 ; call of type-set-relieve-hyps.
 
-                                  nil
-                                  ttree
-                                  pot-lst pt backchain-limit 1)
-           (cond
-            (relieve-hyps-ans
-             (with-accumulated-persistence
-              (access type-prescription tp :rune)
-              (ts type-alist ttree)
-              (ts= ts *ts-unknown*)
-              (type-set-with-rule1 unify-subst
-                                   (access type-prescription tp :vars)
-                                   force-flg
-                                   nil ; dwp
-                                   type-alist ancestors ens w
-                                   (access type-prescription tp :basic-ts)
-                                   (push-lemma
-                                    (access type-prescription tp :rune)
-                                    ttree)
-                                   pot-lst pt backchain-limit)
-              :conc
-              hyps))
-            (t (mv *ts-unknown* type-alist ttree)))))))
-      (t (mv *ts-unknown* type-alist ttree)))))
-   (t (mv *ts-unknown* type-alist ttree))))
+                                     nil
+                                     ttree
+                                     pot-lst pt backchain-limit 1)
+              (cond
+               (relieve-hyps-ans
+                (mv-let
+                  (ts type-alist ttree)
+                  (with-accumulated-persistence
+                   (access type-prescription tp :rune)
+                   (ts type-alist ttree)
+                   (ts= ts *ts-unknown*)
+                   (type-set-with-rule1
+                    unify-subst
+                    (access type-prescription tp :vars)
+                    force-flg
+                    nil ; dwp
+                    type-alist ancestors ens w
+                    (access type-prescription tp :basic-ts)
+                    (push-lemma
+                     (access type-prescription tp :rune)
+                     ttree)
+                    pot-lst pt backchain-limit)
+                   :conc
+                   hyps)
+                  (mv ts type-alist ttree extended-p)))
+               (t (mv *ts-unknown* type-alist ttree extended-p))))))))
+      (t (mv *ts-unknown* type-alist ttree nil)))))
+   (t (mv *ts-unknown* type-alist ttree nil))))
 
 (defun type-set-with-rule1 (alist vars force-flg dwp type-alist ancestors ens w
                                   basic-ts ttree pot-lst pt backchain-limit)
@@ -8363,7 +8416,7 @@
                                 pot-lst pt backchain-limit))))
 
 (defun type-set-with-rules (tp-lst term force-flg dwp type-alist ancestors ens
-                            w ts ttree pot-lst pt backchain-limit)
+                            w ts ttree pot-lst pt backchain-limit extended-p)
 
 ; We try to apply each type-prescription in tp-lst, intersecting
 ; together all the type sets we get and accumulating all the ttrees.
@@ -8377,8 +8430,7 @@
      (type-set-primitive term force-flg dwp type-alist ancestors ens w ttree
                          pot-lst pt backchain-limit)
      (let ((ts2 (ts-intersection ts1 ts)))
-       (mv ts2 (if (ts= ts2 ts) ttree ttree1)))))
-
+       (mv ts2 (if (ts= ts2 ts) ttree ttree1) extended-p))))
    ((ts-subsetp ts
                 (access type-prescription (car tp-lst) :basic-ts))
 
@@ -8394,13 +8446,13 @@
 
     (type-set-with-rules (cdr tp-lst)
                          term force-flg dwp type-alist ancestors ens w ts ttree
-                         pot-lst pt backchain-limit))
+                         pot-lst pt backchain-limit extended-p))
    (t
      (mv-let
-       (ts1 type-alist1 ttree1)
+       (ts1 type-alist1 ttree1 extended-p)
        (type-set-with-rule (car tp-lst)
                            term force-flg dwp type-alist ancestors ens w ttree
-                           pot-lst pt backchain-limit)
+                           pot-lst pt backchain-limit extended-p)
        (let ((ts2 (ts-intersection ts1 ts)))
          (type-set-with-rules (cdr tp-lst)
                               term force-flg dwp type-alist1 ancestors ens w
@@ -8409,7 +8461,7 @@
                                        (equal type-alist type-alist1))
                                   ttree
                                   ttree1)
-                              pot-lst pt backchain-limit))))))
+                              pot-lst pt backchain-limit extended-p))))))
 
 ;; RAG - I added an entry for floor1, which is the only primitive
 ;; non-recognizer function we added for the reals.  [Ruben added entries for
@@ -10511,12 +10563,30 @@
                 pot-lst pt
                 (backchain-limit w :ts)))
 
+(defun type-set-bc (x force-flg dwp type-alist ens w ttree pot-lst pt
+                      ts-backchain-limit)
+
+; See type-set-rec.
+
+  (type-set-rec x force-flg dwp type-alist
+                nil ; ancestors
+                ens w ttree
+                pot-lst pt
+                ts-backchain-limit))
+
 (defun assume-true-false (x xttree force-flg dwp type-alist ens w pot-lst pt
                             ignore0)
   (assume-true-false-rec x xttree force-flg dwp type-alist
                          nil ; ancestors
                          ens w pot-lst pt ignore0
                          (backchain-limit w :ts)))
+
+(defun assume-true-false-bc (x xttree force-flg dwp type-alist ens w pot-lst pt
+                               ignore0 ts-backchain-limit)
+  (assume-true-false-rec x xttree force-flg dwp type-alist
+                         nil ; ancestors
+                         ens w pot-lst pt ignore0
+                         ts-backchain-limit))
 
 (defun ok-to-force-ens (ens)
   (and (enabled-numep *force-xnume* ens)
@@ -11322,7 +11392,8 @@
         (t (and (variablep (car lst))
                 (all-variablep (cdr lst))))))
 
-(defun normalize-with-type-set (term iff-flg type-alist ens wrld ttree)
+(defun normalize-with-type-set (term iff-flg type-alist ens wrld ttree
+                                     ts-backchain-limit)
 
 ; The args to this function are as in normalize, below.  We return a
 ; term and a ttree.  The term is equivalent (mod iff-flg and
@@ -11331,7 +11402,8 @@
 
   (mv-let
    (ts new-ttree)
-   (type-set term nil nil type-alist ens wrld ttree nil nil)
+   (type-set-bc term nil nil type-alist ens wrld ttree nil nil
+                ts-backchain-limit)
    (let ((new-term
           (cond ((ts-intersectp ts *ts-nil*)
                  (cond
@@ -11354,7 +11426,7 @@
 ; since normalize can recur on a lambda-body whose variables are not the
 ; variables of the top-level environment.
 
-(defun normalize (term iff-flg type-alist ens wrld ttree)
+(defun normalize (term iff-flg type-alist ens wrld ttree ts-backchain-limit)
 
 ; This function normalizes the if structure of term, simplifying with
 ; type-set reasoning as it goes.  We return two results, a term and a
@@ -11376,7 +11448,8 @@
 
   (cond
    ((variablep term)
-    (normalize-with-type-set term iff-flg type-alist ens wrld ttree))
+    (normalize-with-type-set term iff-flg type-alist ens wrld ttree
+                             ts-backchain-limit))
    ((fquotep term)
     (mv (cond ((and iff-flg (not (equal term *nil*))) *t*)
               (t term))
@@ -11384,7 +11457,8 @@
    ((flambda-applicationp term)
     (mv-let (normal-args ttree)
             (normalize-lst (fargs term) nil
-                           type-alist ens wrld ttree)
+                           type-alist ens wrld ttree
+                           ts-backchain-limit)
 
 ; We normalize the body of the lambda (under a type-alist determined
 ; from the normalized arguments).  But we leave a lambda application
@@ -11404,8 +11478,8 @@
                                  ens
                                  wrld
                                  nil nil
-                                 (backchain-limit wrld :ts)))
-                               ens wrld ttree)
+                                 ts-backchain-limit))
+                               ens wrld ttree ts-backchain-limit)
                     (mv (mcons-term
                          (list 'lambda
                                (lambda-formals (ffn-symb term))
@@ -11415,19 +11489,22 @@
    ((eq (ffn-symb term) 'if)
     (mv-let
      (t1 ttree)
-     (normalize (fargn term 1) t type-alist ens wrld ttree)
+     (normalize (fargn term 1) t type-alist ens wrld ttree ts-backchain-limit)
      (let ((t2 (fargn term 2))
            (t3 (fargn term 3)))
        (mv-let
         (mbt mbf tta fta ttree1)
-        (assume-true-false t1 nil
-                           nil ; see note above on force-flg
-                           nil type-alist ens wrld nil nil nil)
+        (assume-true-false-bc t1 nil
+                              nil ; see note above on force-flg
+                              nil type-alist ens wrld nil nil nil
+                              ts-backchain-limit)
         (cond
          (mbt (normalize t2 iff-flg type-alist ens wrld
-                         (cons-tag-trees ttree1 ttree)))
+                         (cons-tag-trees ttree1 ttree)
+                         ts-backchain-limit))
          (mbf (normalize t3 iff-flg type-alist ens wrld
-                         (cons-tag-trees ttree1 ttree)))
+                         (cons-tag-trees ttree1 ttree)
+                         ts-backchain-limit))
 
 ; If mbt and mbf are both nil, then ttree1 is nil and we ignore it
 ; below.  (Actually, we use the same variable name to hold a different
@@ -11440,11 +11517,12 @@
             (normalize (mcons-term* 'if t11
                                     (mcons-term* 'if t12 t2 t3)
                                     (mcons-term* 'if t13 t2 t3))
-                       iff-flg type-alist ens wrld ttree)))
+                       iff-flg type-alist ens wrld ttree ts-backchain-limit)))
          (t (mv-let (t2 ttree)
-                    (normalize t2 iff-flg tta ens wrld ttree)
+                    (normalize t2 iff-flg tta ens wrld ttree ts-backchain-limit)
                     (mv-let (t3 ttree)
-                            (normalize t3 iff-flg fta ens wrld ttree)
+                            (normalize t3 iff-flg fta ens wrld ttree
+                                       ts-backchain-limit)
                             (cond ((equal t2 t3)
                                    (mv t2 ttree))
                                   ((and (equal t1 t2)
@@ -11464,10 +11542,11 @@
                                     (iff-flg (mv t1 ttree))
                                     (t
                                      (mv-let (ts1 ttree1)
-                                             (type-set
+                                             (type-set-bc
                                               t1 ; see note above on force-flg
                                               nil nil type-alist ens wrld nil
-                                              nil nil)
+                                              nil nil
+                                              ts-backchain-limit)
                                              (cond
                                               ((ts-subsetp ts1 *ts-boolean*)
                                                (mv t1 (cons-tag-trees ttree1
@@ -11479,7 +11558,7 @@
     (t
      (mv-let (normal-args ttree)
              (normalize-lst (fargs term) nil
-                            type-alist ens wrld ttree)
+                            type-alist ens wrld ttree ts-backchain-limit)
              (let ((term (cons-term (ffn-symb term)
                                     normal-args)))
                (cond
@@ -11494,28 +11573,32 @@
                                   (cond (not-ident (mv *nil*
                                                        (cons-tag-trees ttree1
                                                                        ttree)))
-                                        (t (distribute-first-if term iff-flg
-                                                                type-alist ens
-                                                                wrld
-                                                                ttree)))))))
+                                        (t (distribute-first-if
+                                            term iff-flg
+                                            type-alist ens
+                                            wrld
+                                            ttree
+                                            ts-backchain-limit)))))))
                 (t (distribute-first-if term iff-flg type-alist ens wrld
-                                        ttree))))))))
+                                        ttree ts-backchain-limit))))))))
 
-(defun normalize-lst (args iff-flg type-alist ens wrld ttree)
+(defun normalize-lst (args iff-flg type-alist ens wrld ttree
+                           ts-backchain-limit)
   (cond ((null args) (mv nil ttree))
         (t (mv-let (normal-arg ttree)
-                   (normalize (car args) iff-flg type-alist ens wrld ttree)
+                   (normalize (car args) iff-flg type-alist ens wrld ttree
+                              ts-backchain-limit)
                    (mv-let (normal-args ttree)
                            (normalize-lst (cdr args) iff-flg type-alist ens
-                                          wrld ttree)
+                                          wrld ttree ts-backchain-limit)
                            (mv (cons normal-arg normal-args) ttree))))))
 
 (defun normalize-or-distribute-first-if (term iff-flg type-alist ens wrld
-                                              ttree)
+                                              ttree ts-backchain-limit)
   (cond
    ((or (variablep term)
         (fquotep term))
-    (normalize term iff-flg type-alist ens wrld ttree))
+    (normalize term iff-flg type-alist ens wrld ttree ts-backchain-limit))
    ((eq (ffn-symb term) 'equal)
     (cond ((equal (fargn term 1) (fargn term 2))
            (mv *t* ttree))
@@ -11524,11 +11607,14 @@
                                 wrld)
                      (cond (not-ident (mv *nil* (cons-tag-trees ttree1 ttree)))
                            (t (distribute-first-if term iff-flg type-alist ens
-                                                   wrld ttree)))))))
+                                                   wrld ttree
+                                                   ts-backchain-limit)))))))
    (t
-    (distribute-first-if term iff-flg type-alist ens wrld ttree))))
+    (distribute-first-if term iff-flg type-alist ens wrld ttree
+                         ts-backchain-limit))))
 
-(defun distribute-first-if (term iff-flg type-alist ens wrld ttree)
+(defun distribute-first-if (term iff-flg type-alist ens wrld ttree
+                                 ts-backchain-limit)
 
 ; Term is known to be a non-variable non-quotep term in which all the
 ; args are in normal form.  We look for an if among its arguments and
@@ -11562,14 +11648,15 @@
                (subcor-var (formals (ffn-symb term) wrld)
                            (fargs term)
                            (body (ffn-symb term) t wrld))
-               iff-flg type-alist ens wrld ttree))
+               iff-flg type-alist ens wrld ttree ts-backchain-limit))
              (t
 
 ; In this case the fn isn't expandable.  So we just take advantage of
 ; whatever type info we have and quit.
 
               (normalize-with-type-set term iff-flg
-                                       type-alist ens wrld ttree))))
+                                       type-alist ens wrld ttree
+                                       ts-backchain-limit))))
 
 ; And here is the code after which this function was named.  We have
 ; found an if-expr in the args of term at location n.  Since that if
@@ -11586,9 +11673,10 @@
            (t (let ((t1 (fargn if-expr 1)))
                 (mv-let
                  (mbt mbf tta fta ttree1)
-                 (assume-true-false t1 nil
-                                    nil ; see note above on force-flg
-                                    nil type-alist ens wrld nil nil nil)
+                 (assume-true-false-bc t1 nil
+                                       nil ; see note above on force-flg
+                                       nil type-alist ens wrld nil nil nil
+                                       ts-backchain-limit)
                  (cond
                   (mbt
                    (normalize-or-distribute-first-if
@@ -11597,7 +11685,8 @@
                                                   n
                                                   (fargs term)))
                     iff-flg type-alist ens wrld
-                    (cons-tag-trees ttree1 ttree)))
+                    (cons-tag-trees ttree1 ttree)
+                    ts-backchain-limit))
                   (mbf
                    (normalize-or-distribute-first-if
                     (cons-term (ffn-symb term)
@@ -11605,7 +11694,8 @@
                                                   n
                                                   (fargs term)))
                     iff-flg type-alist ens wrld
-                    (cons-tag-trees ttree1 ttree)))
+                    (cons-tag-trees ttree1 ttree)
+                    ts-backchain-limit))
                   (t
                    (mv-let
                     (t2 ttree)
@@ -11615,7 +11705,7 @@
                                  (fargn if-expr 2)
                                  n
                                  (fargs term)))
-                     iff-flg tta ens wrld ttree)
+                     iff-flg tta ens wrld ttree ts-backchain-limit)
                     (mv-let
                      (t3 ttree)
                      (normalize-or-distribute-first-if
@@ -11624,7 +11714,7 @@
                                   (fargn if-expr 3)
                                   n
                                   (fargs term)))
-                      iff-flg fta ens wrld ttree)
+                      iff-flg fta ens wrld ttree ts-backchain-limit)
                      (cond ((equal t2 t3) (mv t2 ttree))
                            ((and (equal t1 t2)
                                  (equal t3 *nil*))
@@ -11635,8 +11725,8 @@
                              (iff-flg (mv t1 ttree))
                              (t (mv-let
                                  (ts1 ttree1)
-                                 (type-set t1 nil nil type-alist ens wrld nil
-                                           nil nil)
+                                 (type-set-bc t1 nil nil type-alist ens wrld
+                                              nil nil nil ts-backchain-limit)
                                  (cond
                                   ((ts-subsetp ts1 *ts-boolean*)
                                    (mv t1 (cons-tag-trees ttree1 ttree)))
@@ -11695,6 +11785,3 @@
 
 (defun ens (state)
   (f-get-global 'global-enabled-structure state))
-
-(defmacro git (sym prop)
-  `(getprop ,sym ,prop nil 'current-acl2-world (w state)))

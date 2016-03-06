@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -1032,8 +1032,7 @@
                     (pc-single-step-primitive instr state)))
            (meta
             (cond ((and (not (f-get-global 'in-verify-flg state))
-                        (not (getprop (car instr) 'predefined nil
-                                      'current-acl2-world (w state))))
+                        (not (getpropc (car instr) 'predefined nil (w state))))
                    (er soft 'proof-checker
                        "You may only invoke a user-defined proof-checker meta ~
                         command, such as ~x0, when you are inside the ~

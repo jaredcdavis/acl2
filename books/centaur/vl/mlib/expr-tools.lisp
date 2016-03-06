@@ -404,10 +404,9 @@
 
 (defsection vl-one-bit-constants
   :short "Already-sized, one-bit constants."
-
-  :long "<p>Care should be taken when using these constants because they are
-already annotated with their final widths and types, and @(see
-expression-sizing) is a very complex topic.</p>"
+  :long "<p>The names of these constants are historic relics from a time when
+VL's expressions had size annotations.  We should probably get rid of these, it
+looks like they are now mainly used in @(see udp-elim).</p>"
 
   (defconst |*sized-1'b0*|
     (hons-copy (make-vl-literal
@@ -937,8 +936,8 @@ construct fast alists binding identifiers to things, etc.</p>"
 (define vl-valuerange->subexprs ((x vl-valuerange-p))
   :returns (subexprs vl-exprlist-p)
   (vl-valuerange-case x
-    :single (list x.expr)
-    :range  (vl-range->subexprs x.range))
+    :valuerange-single (list x.expr)
+    :valuerange-range  (list x.low x.high))
   ///
   (defret vl-exprlist-count-of-vl-valuerange->subexprs
     (<= (vl-exprlist-count subexprs)
@@ -954,8 +953,9 @@ construct fast alists binding identifiers to things, etc.</p>"
   :returns (new-x vl-valuerange-p)
   :verify-guards nil
   (vl-valuerange-case x
-    :single (vl-expr->valuerange (car subexprs))
-    :range (vl-range->valuerange (vl-range-update-subexprs x.range subexprs)))
+    :valuerange-single (make-vl-valuerange-single :expr (first subexprs))
+    :valuerange-range (make-vl-valuerange-range :low (first subexprs)
+                                                :high (second subexprs)))
   ///
   (verify-guards vl-valuerange-update-subexprs
     :hints ((and stable-under-simplificationp
@@ -1200,11 +1200,11 @@ construct fast alists binding identifiers to things, etc.</p>"
 (define vl-expr->subexprs ((x vl-expr-p))
   :returns (subexprs vl-exprlist-p)
   (vl-expr-case x
-    :vl-index
-    (append-without-guard (vl-scopeexpr->subexprs x.scope)
-                          x.indices
-                          (vl-partselect->subexprs x.part))
-
+    :vl-special nil
+    :vl-literal nil
+    :vl-index (append-without-guard (vl-scopeexpr->subexprs x.scope)
+                                    x.indices
+                                    (vl-partselect->subexprs x.part))
     :vl-unary (list x.arg)
     :vl-binary (list x.left x.right)
     :vl-qmark (list x.test x.then x.else)
@@ -1219,8 +1219,7 @@ construct fast alists binding identifiers to things, etc.</p>"
                :otherwise (list x.expr))
     :vl-inside (cons x.elem (vl-valuerangelist->subexprs x.set))
     :vl-tagged (and x.expr (list x.expr))
-    :vl-pattern (vl-assignpat->subexprs x.pat)
-    :otherwise nil)
+    :vl-pattern (vl-assignpat->subexprs x.pat))
   ///
   (defret vl-exprlist-count-of-vl-expr->subexprs
     (< (vl-exprlist-count subexprs)
@@ -1534,8 +1533,10 @@ construct fast alists binding identifiers to things, etc.</p>"
                     (append (vl-expr-varnames (car x))
                             (vl-exprlist-varnames (cdr x)))
                   nil)
-         :exec (with-local-nrev
-                 (vl-exprlist-varnames-nrev x nrev))))
+         :exec (if (atom x)
+                   nil
+                 (with-local-nrev
+                   (vl-exprlist-varnames-nrev x nrev)))))
   ///
   (defthm true-listp-of-vl-expr-varnames
     (true-listp (vl-expr-varnames x))
@@ -1682,8 +1683,10 @@ expression, with repetition.</p>"
                      (append (vl-expr-ops (car x))
                              (vl-exprlist-ops (cdr x)))
                    nil)
-         :exec (with-local-nrev
-                 (vl-exprlist-ops-nrev x nrev))))
+         :exec (if (atom x)
+                   nil
+                 (with-local-nrev
+                   (vl-exprlist-ops-nrev x nrev)))))
    ///
    (defthm true-listp-of-vl-expr-ops
      (true-listp (vl-expr-ops x))
@@ -1831,7 +1834,9 @@ throughout the expression, with repetition.  The resulting list may contain any
                     (append (vl-expr-values (car x))
                             (vl-exprlist-values (cdr x)))
                   nil)
-         :exec (with-local-nrev (vl-exprlist-values-nrev x nrev))))
+         :exec (if (atom x)
+                   nil
+                 (with-local-nrev (vl-exprlist-values-nrev x nrev)))))
   ///
   (defthm true-listp-of-vl-expr-values
     (true-listp (vl-expr-values x))

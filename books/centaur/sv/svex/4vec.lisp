@@ -103,8 +103,7 @@ to explicitly replicate/extend comparison results.</p>
 <p>It is critical that these functions support efficient symbolic simulation
 with @(see gl).  However, the logical definitions of these functions are
 typically not relevant to this, because we use a custom translation from @(see
-expressions) into @(see acl2::aig)s; see @(see svex-symbolic-evaluation) for
-details.</p>")
+expressions) into @(see acl2::aig)s; see @(see bit-blasting) for details.</p>")
 
 (xdoc::defpointer boolean-convention 4vec-operations)
 
@@ -1414,6 +1413,60 @@ affect this operation and update the docs accordingly once it's fixed.</p>"
            (elses 4vec))))
 
 
+(define 3vec-?* ((test 4vec-p)
+                (then 4vec-p)
+                (else 4vec-p))
+  :parents (3vec-operations)
+  :returns (choice 4vec-p)
+  :short "Atomic if-then-else of @(see 4vec)s, with a @(see 3vec) test.  Has
+the property that when branches are equal, the result is equal to the branch,
+regardless of the test."
+
+  :long "<p>The difference between this and @(see 3vec-?) is that when the test is X and the branches are both Z, here we return Z whereas @(see 3vec-?) returns X.</p>"
+
+  (b* (((4vec test))
+       ((when (eql test.upper 0)) ;; test is false
+        (4vec-fix else))
+       ((when (not (eql test.lower 0))) ;; test is true
+        (4vec-fix then))
+       ;; otherwise, test is X
+       ((4vec then))
+       ((4vec else)))
+    ;; Truth table for case where test is X:
+    ;; e\t   1  0  X  Z --> upper:     lower:
+    ;; 1     1  X  X  X     1 1 1 1    1 0 0 0
+    ;; 0     X  0  X  X     1 0 1 1    0 0 0 0
+    ;; X     X  X  X  X     1 1 1 1    0 0 0 0
+    ;; Z     X  X  X  Z     1 1 1 0    0 0 0 1
+    (4vec ;; upper is set unless both are 0 or both are Z - meaning, unless
+          ;; both have upper == 0 and lower equal.
+     (logior then.upper else.upper (logxor then.lower else.lower))
+     ;; lower is set if both are 1 or both are Z -- meaning, both lowers are 1
+     ;; and uppers are equal.
+     (logand (logeqv then.upper else.upper) then.lower else.lower)))
+
+  ///
+  (deffixequiv 3vec-?*))
+
+;; (defconst *zx10* (make-4vec :upper #b0110 :lower #b1010))
+;; (3vec-?* (4vec-x) *zx10* *zx10*)
+
+
+(define 4vec-?* ((test 4vec-p) (then 4vec-p) (else 4vec-p))
+  :returns (choice 4vec-p)
+  :short "Atomic if-then-else of @(see 4vec)s.   Has the property that when branches
+          are equal, the result is equal to the branch, regardless of the
+          test."
+
+  (3vec-?* (3vec-fix test) then else)
+  ///
+  (deffixequiv 4vec-?*
+    :args ((test 3vec)
+           (then 4vec)
+           (else 4vec))))
+
+
+
 
 ;; ---------- BOZO could generally use better documentation below here ---------
 
@@ -1518,7 +1571,9 @@ bb cc dd'), which are then reversed.</p>"
         (loghead nbits x))
        (next-nbits (- nbits blocksz))
        (rest (rev-blocks next-nbits blocksz (ash x (- blocksz)))))
-    (logapp next-nbits rest (loghead blocksz x))))
+    (logapp next-nbits rest (loghead blocksz x)))
+  ///
+  (deffixequiv rev-blocks))
 
 (define rev-block-index ((i natp)
                          (nbits natp)
@@ -1648,6 +1703,34 @@ an unknown.</p>"
   (deffixequiv 4vec-clog2
     :args ((a 2vecnatx))
     :hints(("Goal" :in-theory (enable 2vecnatx-fix)))))
+
+
+(local (defthm expt-neg1-integerp
+         (integerp (expt -1 n))
+         :hints (("goal" :in-theory (enable expt)))))
+
+(define 4vec-pow ((base 4vec-p) (exp 4vec-p))
+  :short "Power operator (** in SystemVerilog)."
+  :long "<p>See Table 11-4 in IEEE System Verilog Spec.</p>"
+  :returns (res 4vec-p)
+  (if (and (2vec-p base)
+           (2vec-p exp))
+      (b* ((base (2vec->val base))
+           (exp (2vec->val exp))
+           ((when (or (natp exp)
+                      (eql base 1)
+                      (eql base -1)))
+            (2vec (expt base exp)))
+           ((when (eql base 0)) (4vec-x))) ;; 0 to negative power
+        (2vec 0)) ;; a <= -2 or a >= 2, b negative.
+    (4vec-x))
+  ///
+  (deffixequiv 4vec-pow
+    :args ((base 2vecx) (exp 2vecx))
+    :hints(("Goal" :in-theory (enable 2vecx-fix)))))
+
+
+
 
 ;;ANNA: Converting 4vec-p / 4veclist-p to string(s) of 0s, 1s, Xs, and Zs
 ;;MSB first

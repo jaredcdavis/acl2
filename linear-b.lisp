@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -302,8 +302,7 @@
 ; because the call of ev-fncall below disallows the use of attachments (last
 ; parameter, aok, is nil).
 
-              (not (getprop (ffn-symb term) 'constrainedp nil
-                            'current-acl2-world wrld)))
+              (not (getpropc (ffn-symb term) 'constrainedp nil wrld)))
          (mv-let
           (erp val latches)
           (pstk

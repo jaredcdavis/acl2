@@ -1,5 +1,5 @@
-; ACL2 Version 7.1 -- A Computational Logic for Applicative Common Lisp
-; Copyright (C) 2015, Regents of the University of Texas
+; ACL2 Version 7.2 -- A Computational Logic for Applicative Common Lisp
+; Copyright (C) 2016, Regents of the University of Texas
 
 ; This version of ACL2 is a descendent of ACL2 Version 1.9, Copyright
 ; (C) 1997 Computational Logic, Inc.  See the documentation topic NOTE-2-0.
@@ -672,19 +672,6 @@
 
   (value :q))
 
-(defun macro-minimal-arity1 (lst)
-  (declare (xargs :guard (true-listp lst)))
-  (cond ((endp lst) 0)
-        ((lambda-keywordp (car lst))
-         0)
-        (t (1+ (macro-minimal-arity1 (cdr lst))))))
-
-(defun macro-minimal-arity (sym default wrld)
-  (let ((args (getprop sym 'macro-args default 'current-acl2-world wrld)))
-    (macro-minimal-arity1 (if (eq (car args) '&whole)
-                              (cddr args)
-                            args))))
-
 (defun ld-read-keyword-command (key state)
 
 ; ld supports the convention that when a keyword :key is typed
@@ -736,7 +723,7 @@
              (wrld (w state))
              (len (cond ((function-symbolp sym wrld)
                          (length (formals sym wrld)))
-                        ((getprop sym 'macro-body nil 'current-acl2-world wrld)
+                        ((getpropc sym 'macro-body nil wrld)
                          (macro-minimal-arity
                           sym
                           `(:error "See LD-READ-KEYWORD-COMMAND.")
@@ -2533,13 +2520,14 @@
 ; process-embedded-events, and back from it in the case that the caller is
 ; 'certify-book.
 
-; We also changed the use of check-sum so that we don't include the
-; expansion-alist with the events from the actual book.  For calls of
-; check-sum-obj on event lists that support the handling of certificates, we
-; now use only the events from the book ev-lst and no longer include events in
-; the expansion-alist.  Instead, we rely on the check-sum of the cert-obj,
-; which is still incorporated in the certificate, for ensuring that we have the
-; right expansion-alist.
+; We also changed checksum usage so that we don't include the expansion-alist
+; with the events from the actual book.  For calls of check-sum-obj on event
+; lists that support the handling of certificates, we now use only the events
+; from the book ev-lst and no longer include events in the expansion-alist.
+; Instead, we rely on the checksum of the cert-obj, which is still
+; incorporated in the certificate, for ensuring that we have the right
+; expansion-alist.  Notice however that this extra security disappears when
+; state global 'book-hash-alistp is true.
 
 #-acl2-loop-only
 (defun-one-output compiled-function-p! (fn)
@@ -2574,7 +2562,7 @@
       (value (er hard ctx
                  "Implementation error: Compile-function called when ~x0."
                  '(not (eq (f-get-global 'compiler-enabled state) t)))))
-     ((eq (getprop fn 'formals t 'current-acl2-world wrld)
+     ((eq (getpropc fn 'formals t wrld)
           t)
       (er soft ctx
           "~x0 is not a defined function in the current ACL2 world."
@@ -2880,10 +2868,10 @@
                        (:defaxioms-okp t)
                        (:skip-proofs-okp t))
                      nil)))
-       (let* ((old-chk-sum
+       (let* ((old-book-hash
 
 ; The assoc-equal just below is of the form (full-book-name user-book-name
-; familiar-name cert-annotations . ev-lst-chk-sum).
+; familiar-name cert-annotations . book-hash).
 
                (cddddr (assoc-equal full-book-name
                                     (global-val 'include-book-alist
@@ -2892,71 +2880,58 @@
 
 ; We include the expansion-alist only if the book appears to be certified.
 
-               (and old-chk-sum
+               (and old-book-hash
                     (and cert-obj
                          (access cert-obj cert-obj :expansion-alist))))
               (cmds (and cert-obj
-                         (access cert-obj cert-obj :cmds)))
-              (ev-lst-chk-sum
-               (check-sum-cert cmds expansion-alist ev-lst)))
-         (cond
-          ((not (integerp ev-lst-chk-sum))
-
-; This error should never arise because check-sum-obj is only called on
-; something produced by read-object, which checks that the object is ACL2
-; compatible.  And if it somehow did happen, it is presumably not because of
-; the expansion-alist, which must be well-formed since it is in the book's
-; certificate.
-
-           (er soft ctx
-               "The file ~x0 is not a legal list of embedded event forms ~
-                   because it contains an object, ~x1, which check sum was ~
-                   unable to handle."
-               full-book-name ev-lst-chk-sum))
-          ((and old-chk-sum
-                (not (equal ev-lst-chk-sum old-chk-sum)))
-           (er soft ctx
-               "When the certified book ~x0 was included, its check sum ~
-                   was ~x1.  The check sum for ~x0 is now ~x2.  The file has ~
-                   thus been modified since it was last included and we ~
-                   cannot now recover the events that created the current ~
-                   logical world."
-               full-book-name
-               old-chk-sum
-               ev-lst-chk-sum))
-          (t (mv-let (changedp fixed-cmds)
-               (make-include-books-absolute-lst
-                (append
-                 cmds
-                 (cons (assert$
+                         (access cert-obj cert-obj :cmds))))
+         (er-let* ((ev-lst-book-hash
+                    (book-hash old-book-hash full-book-name cmds
+                               expansion-alist ev-lst state)))
+           (cond
+            ((and old-book-hash
+                  (not (equal ev-lst-book-hash old-book-hash)))
+             (er soft ctx
+                 "When the certified book ~x0 was included, its book-hash was ~
+                  ~x1.  The book-hash for ~x0 is now ~x2.  The file has thus ~
+                  been modified since it was last included and we cannot now ~
+                  recover the events that created the current logical world."
+                 full-book-name
+                 old-book-hash
+                 ev-lst-book-hash))
+            (t (mv-let (changedp fixed-cmds)
+                 (make-include-books-absolute-lst
+                  (append
+                   cmds
+                   (cons (assert$
 
 ; We want to execute the in-package here.  But we don't need to restore the
 ; package, as that is done with a state-global-let* binding in puff-fn1.
 
-                        (and (consp (car ev-lst))
-                             (eq (caar ev-lst) 'in-package))
-                        (car ev-lst))
-                       (subst-by-position expansion-alist
-                                          (cdr ev-lst)
-                                          1)))
-                (directory-of-absolute-pathname full-book-name)
-                (cbd)
-                (list* 'in-package
-                       'defpkg
-                       (primitive-event-macros))
-                t ctx state)
-               (declare (ignore changedp))
-               (value `((set-cbd ,(get-directory-of-file full-book-name))
-                        ,@fixed-cmds
-                        (maybe-install-acl2-defaults-table
-                         ',(table-alist 'acl2-defaults-table wrld)
-                         state)
+                          (and (consp (car ev-lst))
+                               (eq (caar ev-lst) 'in-package))
+                          (car ev-lst))
+                         (subst-by-position expansion-alist
+                                            (cdr ev-lst)
+                                            1)))
+                  (directory-of-absolute-pathname full-book-name)
+                  (cbd)
+                  (list* 'in-package
+                         'defpkg
+                         (primitive-event-macros))
+                  t ctx state)
+                 (declare (ignore changedp))
+                 (value `((set-cbd ,(get-directory-of-file full-book-name))
+                          ,@fixed-cmds
+                          (maybe-install-acl2-defaults-table
+                           ',(table-alist 'acl2-defaults-table wrld)
+                           state)
 
 ; It is tempting to reset the cbd here, but instead -- in case there is an
 ; error above -- we handle this issue with a state-global-let* binding in
 ; puff-fn1.
 
-                        ,@final-cmds))))))))))
+                          ,@final-cmds)))))))))))
 
 (defun puff-command-block1 (wrld immediate ans ctx state)
 
@@ -3322,7 +3297,7 @@
 ; the region that is puffable, we puff it, and we iterate.  We stop when no
 ; command in the region is puffable.  This function uses
 ; revert-world-on-error because it is possible that the attempt to puff some
-; command will cause an error (e.g., because some book's check sum no longer
+; command will cause an error (e.g., because some book's book-hash no longer
 ; agrees with include-book-alist).
 
 ; At one time we called revert-world-on-error here.  But we expect this
@@ -4109,9 +4084,9 @@
             (throw-raw-ev-fncall ev-fncall-val))
            (t
             (let* ((linearp (eq (car rune) :linear))
-                   (lemmas (getprop (ffn-symb target)
-                                    (if linearp 'linear-lemmas 'lemmas)
-                                    nil 'current-acl2-world wrld))
+                   (lemmas (getpropc (ffn-symb target)
+                                     (if linearp 'linear-lemmas 'lemmas)
+                                     nil wrld))
                    (lemma (if linearp
                               (find-runed-linear-lemma rune lemmas)
                             (find-runed-lemma rune lemmas))))
@@ -4433,27 +4408,51 @@
 ; (defmacro av (form)
 ;   `(all-vars-untrans ',form state))
 
-(defun trans-eval-lst (lst ctx state aok)
-  (cond ((endp lst)
-         (value :invisible))
-        (t (er-progn (trans-eval (car lst) ctx state aok)
-                     (trans-eval-lst (cdr lst) ctx state aok)))))
+(defun print-saved-output-lst (io-record-lst io-markers stop-markers ctx state)
+  (cond
+   ((endp io-record-lst)
+    (value :invisible))
+   (t
+    (let ((io-marker (access io-record (car io-record-lst)
+                             :io-marker)))
+      (cond
+       ((member-equal io-marker stop-markers)
+        (value :invisible))
+       ((or (eq io-markers :all)
+            (member-equal io-marker io-markers))
+        (er-progn (trans-eval (access io-record (car io-record-lst)
+                                      :form)
+                              ctx state t)
+                  (print-saved-output-lst (cdr io-record-lst)
+                                          (if stop-markers
+                                              :all ; print till we're stopped
+                                            io-markers)
+                                          stop-markers
+                                          ctx
+                                          state)))
+       (t (print-saved-output-lst (cdr io-record-lst) io-markers stop-markers
+                                  ctx state)))))))
 
-(defun print-saved-output (inhibit-output-lst gag-mode state)
-  (let ((saved-output
-         (reverse (io-record-forms (f-get-global 'saved-output-reversed
-                                                 state))))
+(defun print-saved-output (inhibit-output-lst gag-mode io-markers stop-markers
+                                              state)
+
+; Normally io-markers is :all, indicating the set of all io-markers; but
+; instead it can be a list of io-markers.
+
+  (let ((saved-output (reverse (f-get-global 'saved-output-reversed
+                                             state)))
         (channel (standard-co state))
-        (ctx  'print-saved-output))
+        (ctx 'print-saved-output))
     (cond
      ((or (null saved-output)
           (and (null (cdr saved-output))
-               (eq (access io-record
-                           (car (f-get-global 'saved-output-reversed state))
+               (eq (access io-record (car saved-output)
                            :io-marker)
                    :ctx)))
       (er-progn (if saved-output
-                    (trans-eval (car saved-output) ctx state t)
+                    (trans-eval (access io-record (car saved-output)
+                                        :form)
+                                ctx state t)
                   (value nil))
                 (pprogn (fms "There is no saved output to print.  ~
                               See :DOC set-saved-output.~|"
@@ -4480,16 +4479,45 @@
                                      state))
                      (state-global-let*
                       ((saved-output-p nil))
-                      (trans-eval-lst saved-output ctx state t)))))))))))
+                      (print-saved-output-lst saved-output io-markers
+                                              stop-markers ctx state)))))))))))
 
-(defmacro pso ()
-  '(print-saved-output '(proof-tree) nil state))
+(defun convert-io-markers-lst (io-markers acc)
+  (cond ((endp io-markers) acc)
+        (t (convert-io-markers-lst (cdr io-markers)
+                                   (cons (if (stringp (car io-markers))
+                                             (parse-clause-id (car io-markers))
+                                           (car io-markers))
+                                         acc)))))
 
-(defmacro psog ()
-  '(print-saved-output '(proof-tree) t state))
+(defun convert-io-markers (io-markers)
+  (cond ((member-eq io-markers '(nil :all))
+         io-markers)
+        ((and io-markers
+              (atom io-markers))
+         (convert-io-markers-lst (list io-markers) nil))
+        (t (convert-io-markers-lst io-markers nil))))
 
-(defmacro pso! ()
-  '(print-saved-output nil nil state))
+(defmacro pso (&optional (io-markers ':all)
+                         stop-markers)
+  `(print-saved-output '(proof-tree) nil
+                       (convert-io-markers ,io-markers)
+                       (convert-io-markers ,stop-markers)
+                       state))
+
+(defmacro psog (&optional (io-markers ':all)
+                          stop-markers)
+  `(print-saved-output '(proof-tree) t
+                       (convert-io-markers ,io-markers)
+                       (convert-io-markers ,stop-markers)
+                       state))
+
+(defmacro pso! (&optional (io-markers ':all)
+                          stop-markers)
+  `(print-saved-output nil nil
+                       (convert-io-markers ,io-markers)
+                       (convert-io-markers ,stop-markers)
+                       state))
 
 (defmacro set-saved-output (save-flg inhibit-flg)
   (let ((save-flg-original save-flg)
@@ -4553,6 +4581,13 @@
                flg)))
     `(f-put-global 'raw-proof-format ,flg state)))
 
+(defmacro set-raw-warning-format (flg)
+  (declare (xargs :guard (member-equal flg '(t 't nil 'nil))))
+  (let ((flg (if (atom flg)
+                 (list 'quote flg)
+               flg)))
+    `(f-put-global 'raw-warning-format ,flg state)))
+
 (defmacro set-print-clause-ids (flg)
   (declare (xargs :guard (member-equal flg '(t 't nil 'nil))))
   (let ((flg (if (atom flg)
@@ -4605,7 +4640,10 @@
 (defmacro wof (filename form) ; Acronym: With Output File
   `(with-standard-co-and-proofs-co-to-file ,filename ,form))
 
-(defmacro psof (filename)
+(defmacro psof (filename
+                &optional
+                (io-markers ':all)
+                (stop-markers 'nil))
   (declare (xargs :guard (or (stringp filename)
                              (and (consp filename)
                                   (consp (cdr filename))
@@ -4619,7 +4657,7 @@
                enabled, because in that case most prover output is printed to ~
                *standard-co* (using wormholes), so cannot be redirected."))
          (t (wof ,(if (consp filename) (cadr filename) filename)
-                 (pso)))))
+                 (pso ,io-markers ,stop-markers)))))
 
 (defun set-gag-mode-fn (action state)
 
