@@ -272,7 +272,6 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :returns (ans booleanp :rule-classes :type-prescription)
   :parents (bigint-<)
   :short "Boolean-valued version of @(see bigint-<)."
-  :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
        ((bigint b))
        ((when (and a.endp b.endp))
@@ -306,7 +305,6 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :parents (bigint-<=)
   :short "Boolean-valued version of @(see bigint-<=)."
   :returns (ans booleanp :rule-classes :type-prescription)
-  :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
        ((bigint b))
        ((when (and a.endp b.endp))
@@ -340,7 +338,6 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :parents (bigint->)
   :short "Boolean-valued version of @(see bigint->)."
   :returns (ans booleanp :rule-classes :type-prescription)
-  :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
        ((bigint b))
        ((when (and a.endp b.endp))
@@ -374,7 +371,6 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :parents (bigint->=)
   :short "Boolean-valued version of @(see bigint->=)."
   :returns (ans booleanp :rule-classes :type-prescription)
-  :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
        ((bigint b))
        ((when (and a.endp b.endp))
@@ -448,7 +444,6 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :short "Determines the carry chain out for adding CIN+A+B by first
           computing CIN+A, then bringing in B afterward."
   :returns (cout bitp)
-  :verbosep t
   (b* ((cin     (bfix cin))
        (afirst  (i64-fix afirst))
        (bfirst  (i64-fix bfirst))
