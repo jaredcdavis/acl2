@@ -110,7 +110,8 @@ Variables with more complex names or subscripts are represented essentially as
      :cond (or (atom x)
                (smallvar-p x))
      :fields ((var :acc-body x :type smallvar-p))
-     :ctor-body var)
+     :ctor-body var
+     :count-incr 2)
     (:const
      :short "A quoted constant."
      :cond (eq (car x) 'quote)
@@ -118,7 +119,8 @@ Variables with more complex names or subscripts are represented essentially as
                  (i64-p (second x))
                  (not (cddr x)))
      :fields ((val :acc-body (second x) :type i64))
-     :ctor-body (hons 'quote (hons val nil)))
+     :ctor-body (hons 'quote (hons val nil))
+     :count-incr 1)
     (:call
      :short "A function applied to some expressions."
      :fields ((fn   :acc-body (car x) :type fn)
@@ -131,6 +133,19 @@ Variables with more complex names or subscripts are represented essentially as
   (deflist smallexprlist
     :elt-type smallexpr
     :true-listp t))
+
+(defthm smallexprlist-count-of-args
+  (< (smallexprlist-count (smallexpr-call->args x))
+     (smallexpr-count x))
+  :rule-classes :linear
+  ;; Gross hints, but it's nice for the count to unconditionally decrease
+  ;; when we visit the arguments to an expression.
+  :hints(("Goal" :in-theory (enable smallexpr-count
+                                    smallexprlist-count
+                                    smallexpr-kind
+                                    smallvar-p
+                                    smallexpr-call->args))))
+
 
 (define smallexprs-from-smallvars ((x smallvarlist-p))
   :returns (exprs smallexprlist-p)

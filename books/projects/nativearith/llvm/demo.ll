@@ -177,7 +177,7 @@ define i64 @narith_i64times (i64 %a, i64 %b)
 
 ; Division --------------------------------------------------------------------
 
-define i64 @narith_i64sdiv (i64 %a, i64 %b)
+define i64 @narith_i64sdiv (i64 %a, i64 %b) noinline
 {
     %b.zero = icmp eq i64 %b, 0
     br i1 %b.zero, label %case.zero, label %case.nonzero
@@ -287,7 +287,7 @@ define i64 @demo_circuit (i64* noalias nocapture align 8 %in,
 
     %in6 = load i64* %in6.addr, align 8
     %in7 = load i64* %in7.addr, align 8
-    %ans3 = call i64 @narith_i64plus (i64 %in6, i64 %in7)
+    %ans3 = call i64 @narith_i64plus (i64 %in6,i64 %in7)
     store i64 %ans3, i64* %out3.addr, align 8, !nontemporal !{i32 1}
 
     %in8 = load i64* %in8.addr, align 8
@@ -349,6 +349,10 @@ define i64 @demo_circuit (i64* noalias nocapture align 8 %in,
 }
 
 
+
+
+
+
 ; So that's probably all we need for loads and stores.  But we may also
 ; want to implement something for branching.  As a particular example,
 ; consider a circuit that is to compute
@@ -386,19 +390,19 @@ define i64 @demo_circuit2 (i64* noalias nocapture align 8 %in)
 
     %a1 = load i64* %a1.addr, align 8
     %b1 = load i64* %b1.addr, align 8
-    %sum1 = call i64 @narith_i64plus (i64 %a1, i64 %b1)
+    %sum1 = call i64 @narith_i64sdiv (i64 %a1, i64 %b1)
 
     %a2 = load i64* %a2.addr, align 8
     %b2 = load i64* %b2.addr, align 8
-    %sum2 = call i64 @narith_i64plus (i64 %a2, i64 %b2)
+    %sum2 = call i64 @narith_i64sdiv (i64 %a2, i64 %b2)
 
     %a3 = load i64* %a3.addr, align 8
     %b3 = load i64* %b3.addr, align 8
-    %sum3 = call i64 @narith_i64plus (i64 %a3, i64 %b3)
+    %sum3 = call i64 @narith_i64sdiv (i64 %a3, i64 %b3)
 
     %a4 = load i64* %a3.addr, align 8
     %b4 = load i64* %b3.addr, align 8
-    %sum4 = call i64 @narith_i64plus (i64 %a4, i64 %b4)
+    %sum4 = call i64 @narith_i64sdiv (i64 %a4, i64 %b4)
 
     %sel1 = load i64* %sel1.addr, align 8
     %sel2 = load i64* %sel2.addr, align 8
@@ -620,7 +624,174 @@ define i64 @demo_circuit3 (i64* noalias nocapture align 8 %in)
 
     %a5 = load i64* %a5.addr, align 8
     %tmp1 = call i64 @narith_i64plus(i64 %w, i64 %a5)
+
+;    %two = add i64 0, 2
+
     %ret = call i64 @narith_i64times(i64 %tmp1, i64 2)
 
     ret i64 %ret
 }
+
+
+
+; So what is this really?
+;
+;  w = sel1 ? a1 + b1
+;    : sel2 ? a2 + b2
+;    : sel3 ? a3 + b3
+;    : a4 + b4
+;
+;  return (w + a5) * 2
+;
+;
+; It's really something like:
+;
+;   n1 = a1 + b1;
+;   n2 = a2 + b2;
+;   n3 = a3 + b3;
+;   n4 = a4 + b4;
+;   n5 = sel3 ? n3 : n4;
+;   n6 = sel2 ? n2 : n5;
+;   w = sel1 ? n1 : n6;
+;   n8 = w + a5;
+;   ret = n8 * 2;
+;
+; Let's change this so that instead of a3 + b3, the sel3 case returns a1 + b1.
+; That is,
+;
+;  w = sel1 ? a1 + b1
+;    : sel2 ? a2 + b2
+;    : sel3 ? a1 + b1
+;    : a4 + b4
+;
+;  return (w + a5) * 2
+;
+; In other words:
+;
+;   n1 = a1 + b1;
+;   n2 = a2 + b2;
+;                                ; n3 goes away
+;   n4 = a4 + b4;
+;   n5 = sel3 ? n1 : n4;
+;   n6 = sel2 ? n2 : n5;
+;   w = sel1 ? n1 : n6;
+;   n8 = w + a5;
+;   ret = n8 * 2;
+;
+; Now can we get a nice jumping structure that computes n1 exactly when it is needed?
+;
+; Let's change it even more, to:
+
+;  w = sel1 ? a1 * b1
+;    : sel2 ? a2 + b2
+;    : sel3 ? a1 * b1
+;    : a4 + b4
+;
+;  return (w + a5) + 2
+;
+; In other words:
+;
+;   n1 = a1 * b1;
+;   n2 = a2 + b2;
+;   n4 = a4 + b4;
+;   n5 = sel3 ? n1 : n4;
+;   n6 = sel2 ? n2 : n5;
+;   w = sel1 ? n1 : n6;
+;   n8 = w + a5;
+;   ret = n8 + 2;
+;
+; And we want to get a program with just one multiply.
+; So this works to get just one multiply, but it does it in the prelude before
+; any of the branches:
+
+
+define i64 @demo_circuit4 (i64* noalias nocapture align 8 %in)
+{
+    %sel1.addr = getelementptr i64* %in, i32 0
+    %sel2.addr = getelementptr i64* %in, i32 1
+    %sel3.addr = getelementptr i64* %in, i32 2
+    %a1.addr = getelementptr i64* %in, i32 3
+    %a2.addr = getelementptr i64* %in, i32 4
+    %a3.addr = getelementptr i64* %in, i32 5
+    %a4.addr = getelementptr i64* %in, i32 6
+    %a5.addr = getelementptr i64* %in, i32 7
+    %b1.addr = getelementptr i64* %in, i32 8
+    %b2.addr = getelementptr i64* %in, i32 9
+    %b3.addr = getelementptr i64* %in, i32 10
+    %b4.addr = getelementptr i64* %in, i32 11
+
+    %a1 = load i64* %a1.addr, align 8
+    %b1 = load i64* %b1.addr, align 8
+    %n1 = call i64 @narith_i64times (i64 %a1, i64 %b1)
+
+    %a2 = load i64* %a2.addr, align 8
+    %b2 = load i64* %b2.addr, align 8
+    %n2 = call i64 @narith_i64plus (i64 %a2, i64 %b2)
+
+    %a4 = load i64* %a3.addr, align 8
+    %b4 = load i64* %b3.addr, align 8
+    %n4 = call i64 @narith_i64plus (i64 %a4, i64 %b4)
+
+    %sel1 = load i64* %sel1.addr, align 8
+    %sel2 = load i64* %sel2.addr, align 8
+    %sel3 = load i64* %sel3.addr, align 8
+    %n5 = call i64 @narith_ite (i64 %sel3, i64 %n1, i64 %n4)
+    %n6 = call i64 @narith_ite (i64 %sel2, i64 %n2, i64 %n5)
+    %w = call i64 @narith_ite (i64 %sel1, i64 %n1, i64 %n6)
+
+    %a5 = load i64* %a5.addr, align 8
+    %n8 = call i64 @narith_i64plus(i64 %w, i64 %a5)
+    %ret = call i64 @narith_i64plus(i64 %n8, i64 2)
+
+    ret i64 %ret
+}
+
+; define i64 @demo_circuit4b (i64* noalias nocapture align 8 %in)
+; {
+;     %sel1.addr = getelementptr i64* %in, i32 0
+;     %sel2.addr = getelementptr i64* %in, i32 1
+;     %sel3.addr = getelementptr i64* %in, i32 2
+;     %a1.addr = getelementptr i64* %in, i32 3
+;     %a2.addr = getelementptr i64* %in, i32 4
+;     %a3.addr = getelementptr i64* %in, i32 5
+;     %a4.addr = getelementptr i64* %in, i32 6
+;     %a5.addr = getelementptr i64* %in, i32 7
+;     %b1.addr = getelementptr i64* %in, i32 8
+;     %b2.addr = getelementptr i64* %in, i32 9
+;     %b3.addr = getelementptr i64* %in, i32 10
+;     %b4.addr = getelementptr i64* %in, i32 11
+
+;     %sel1 = load i64* %sel1.addr, align 8
+;     %test1 = icmp ne i64 %sel1, 0
+;     br i1 %test1, label %case.case1, label %case.notcase1
+
+
+
+;     %sel2 = load i64* %sel2.addr, align 8
+;     %sel3 = load i64* %sel3.addr, align 8
+
+
+;     %a1 = load i64* %a1.addr, align 8
+;     %b1 = load i64* %b1.addr, align 8
+;     %n1 = call i64 @narith_i64times (i64 %a1, i64 %b1)
+
+;     %a2 = load i64* %a2.addr, align 8
+;     %b2 = load i64* %b2.addr, align 8
+;     %n2 = call i64 @narith_i64plus (i64 %a2, i64 %b2)
+
+;     %a4 = load i64* %a3.addr, align 8
+;     %b4 = load i64* %b3.addr, align 8
+;     %n4 = call i64 @narith_i64plus (i64 %a4, i64 %b4)
+
+;     %n5 = call i64 @narith_ite (i64 %sel3, i64 %n1, i64 %n4)
+;     %n6 = call i64 @narith_ite (i64 %sel2, i64 %n2, i64 %n5)
+;     %w = call i64 @narith_ite (i64 %sel1, i64 %n1, i64 %n6)
+
+;     %a5 = load i64* %a5.addr, align 8
+;     %n8 = call i64 @narith_i64plus(i64 %w, i64 %a5)
+;     %ret = call i64 @narith_i64plus(i64 %n8, i64 2)
+
+;     ret i64 %ret
+; }
+
+

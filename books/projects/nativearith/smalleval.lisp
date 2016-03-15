@@ -34,6 +34,7 @@
 (include-book "smallops")
 (include-book "smallexpr")
 (include-book "std/util/defrule" :dir :system)
+(include-book "std/util/defval" :dir :system)
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "std/lists/len" :dir :system))
 (local (std::add-default-post-define-hook :fix))
@@ -75,7 +76,10 @@
 
 (defsection smallapply
 
-  (defconst *smalloptable*
+  (defval *smalloptable*
+    :short "The known @(see smallexpr) functions and their arguments."
+    :long "<p>This is used to create @(see smallapply), @(see
+           *smallops-to-llvm*), and so on.</p>"
     '((i64bitnot (a))
       (i64sminus (a))
       (i64eql    (a b))
