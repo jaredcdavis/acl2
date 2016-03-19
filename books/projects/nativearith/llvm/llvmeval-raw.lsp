@@ -32,31 +32,57 @@
 
 (in-package "NATIVEARITH")
 
-(include-book "centaur/quicklisp/cffi" :dir :system)
+; When we compile and load shared libraries, we'll stick them into a registry
+; so we know what they are and that they're already available.
 
-:q
+(defstruct llvm-registry-entry
+  ;; Single entry in the registry of LLVM libraries
+  (asm)   ;; The llvmasm object
+  (lisp-fn)    ;; Name of the Lisp function we've generated (a gensym)
+  )
 
-;; (cffi:define-foreign-library libops
-;;                              (:unix (:or "libnarith_ops.so"))
-;;                              (t (:default "libnarith_ops")))
-
-;; (let ((cffi:*foreign-library-directories*
-;;        (list "/home/jared/xb/acl2/books/projects/nativearith/llvm/")))
-;;   (cffi:use-foreign-library libops))
+(defparameter *llvm-asm-registry*
+  ;; Binds fnname to its registry entry.
+  (make-hash-table))
 
 
-;; (cffi:define-foreign-library libfoo
-;;                              (:unix "libfoo.so")
-;;                              (t (:default "libfoo")))
 
-;; (let ((cffi:*foreign-library-directories*
-;;        (list "/home/jared/xb/acl2/books/projects/nativearith/llvm/narith_tmp/")))
-;;   (cffi:use-foreign-library libfoo))
+; TODO:
+;;  -- set up llvm-load-shared-library to gensym a lisp function name
+;;     and installs the thing into the registry (based on code that works below)
+;;  -- add new function that lets you run an assembly by looking up its
+;;     name in the registry and applying it to some stobj arrays
 
-;; cool this works!
 
-;; We can probably avoid this memcpy overhead -- look at the CFFI manual's section
-;; on "optimizing type translators".
+(defun llvm-load-shared-library (tmpdir asm state)
+  "Returns (mv errmsg? state)"
+  (unless (acl2::live-state-p state)
+    (error "llvm-load-shared-library requires a live state."))
+
+  (let* ((fnname (llvmasm->fnname asm))
+         (look   (gethash fnname *llvm-asm-registry*)))
+    (cond (look
+           (if (equal look asm)
+               (mv nil state)
+             (mv (msg "Error: name ~s0 already in use." fnname) state)))
+          (let* ((libfnname    (str::cat "lib" asm.fnname))
+                 (libfnname.so (str::cat "lib" asm.fnname ".so"))
+                 (lisp-fn      (gensym))
+                 (entry        (make-llvm-registry-entry :asm asm :lisp-fn lisp-fn)))
+            (handler-case
+              (progn
+                (let ((cffi:*foreign-library-directories* (list tmpdir)))
+                  (cffi:use-foreign-library libfnname)
+                  (cffi:defcfun (fnname fn) :void (ins (:pointer int64)) (outs (:pointer int64)))
+                  
+                (mv nil state))
+              (error (condition)
+                     (let ((condition-str (format nil "~a" condition)))
+                       (mv (msg "Error loading ~s0: ~s1" libfnname.so condition-str)
+                           state))))))
+
+
+;; code that works:::
 
 (let ((cffi:*foreign-library-directories*
        (list "/home/jared/xb/acl2/books/projects/nativearith/llvm/narith_tmp/")))
@@ -89,19 +115,5 @@
 
 
 
-;; (defun llvm-load-shared-library (asm)
-;;   "Returns (mv errmsg? state)"
-;;   (b* (((llvmasm asm))
-;;        (libfnname    (str::cat "lib" asm.fnname))
-;;        (libfnname.so (str::cat "lib" asm.fnname ".so")))
-;;     (handler-case
-;;       (progn
-;;         (let ((cffi:*foreign-library-directories* (list "./narith_tmp")))
-;;           (cffi:use-foreign-library libfnname))
-;;         (mv nil state))
-;;       (error (condition)
-;;              (let ((condition-str (format nil "~a" condition)))
-;;                (mv (msg "Error loading ~s0: ~s1" libfnname.so condition-str)
-;;                    state))))))
 
 

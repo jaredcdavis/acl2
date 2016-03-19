@@ -39,6 +39,17 @@ demo.o : demo.s
 	ls -l demo.o
 
 
+tmp.o : tmp.c
+	$(CC) $(CCFLAGS) -c tmp.c
+
+tmp : tmp.o narith_tmp/libfoo.so
+	$(CC) $(CCFLAGS) -o tmp tmp.o -Lnarith_tmp -l foo
+
+.PHONY: runtmp
+runtmp:
+	@LD_LIBRARY_PATH=./narith_tmp:$(LD_LIBRARY_PATH) ./tmp
+
+
 .PHONY: run
 run:
 	@LD_LIBRARY_PATH=.:$(LD_LIBRARY_PATH) ./main

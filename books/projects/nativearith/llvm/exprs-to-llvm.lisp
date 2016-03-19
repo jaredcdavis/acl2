@@ -81,8 +81,8 @@
 <li>A list of @(see smallexprs) to be compiled.</li>
 </ul>
 
-<p>We then produce an @(see llvmcompiled) structure that contains LLVM assembly
-code for a function with a C signature like:</p>
+<p>We then produce an @(see llvmasm) structure that contains LLVM assembly code
+for a function with a C signature like:</p>
 
 @({
      void myfn (const int64_t* ins, int64_t* outs);
@@ -92,7 +92,7 @@ code for a function with a C signature like:</p>
 64-bit integers.  These arrays must be 8-byte aligned and must not overlap.</p>
 
 <p>The input array corresponds to the variables of your expression.  The
-particular ordering used can be found in @('llvmcompiled') structure and is
+particular ordering used can be found in @('llvmasm') structure and is
 represented as an @(see llvmvmap), which is a fast alist that binds the
 variable names to the indices they have been assigned.</p>
 
@@ -130,7 +130,7 @@ That's probably really bad if both branches are expensive.</p>")
 (local (xdoc::set-default-parents smallexprs-to-llvm))
 
 (xdoc::order-subtopics smallexprs-to-llvm
-                       (smallexprs-to-llvm-top llvmcompiled))
+                       (smallexprs-to-llvm-top llvmasm))
 
 
 (defalist llvmvarmap
@@ -321,7 +321,7 @@ to write the result of @('a') to indices 0 and 2.</p>")
         nil)
        ((list fn args) (car optable)))
     (hons-acons fn
-                (cons (cat "narith_" (str::downcase-string (symbol-name fn)))
+                (cons (cat "@narith_" (str::downcase-string (symbol-name fn)))
                       (len args))
                 (make-smallops-to-llvm (cdr optable)))))
 
@@ -362,10 +362,10 @@ to write the result of @('a') to indices 0 and 2.</p>")
        ;; that there are no more than 2^32 outputs, so using i32 here is
        ;; justified and this can't wrap around.
 
-       ;; %o{outnum} = getelementptr i64 %out, i32 {outnum}
+       ;; %o{outnum} = getelementptr i64* %out, i32 {outnum}
        (code (revappend-chars "%o" code))
        (code (revappend-natchars outnum code))
-       (code (revappend-chars " = getelementptr i64 %out, i32 " code))
+       (code (revappend-chars " = getelementptr i64* %out, i32 " code))
        (code (revappend-natchars outnum code))
        (code (cons #\Newline code))
 
@@ -382,7 +382,7 @@ to write the result of @('a') to indices 0 and 2.</p>")
     (add-output-stores tempnum (cdr indices) code)))
 
 (define add-argument-list
-  :short "Argument list for an @('narith_xxx') call, e.g., @('%n37, %n42, %n74')."
+  :short "Argument list for an @('@narith_xxx') call, e.g., @('%n37, %n42, %n74')."
   ((args  smallexprlist-p  "The expressions being given to this function.")
    (temps llvmtemps-p      "Temp map for looking up the @('%n') numbers for each argument.")
    (code  character-listp  "LLVM assembly code fragment we are building."))
@@ -468,7 +468,7 @@ to write the result of @('a') to indices 0 and 2.</p>")
                              ;; in the varmap.
                              (nfix (raise "Missing var binding: ~x0" x.var))))
 
-                 ;; %i{varnum} = getelementptr i64 %in, i32 {varnum}
+                 ;; %i{varnum} = getelementptr i64* %in, i32 {varnum}
                  (code (revappend-chars "%i" code))
                  (code (revappend-natchars varnum code))
                  ;; Note that after constructing the variable map, we explicitly
@@ -557,9 +557,9 @@ to write the result of @('a') to indices 0 and 2.</p>")
 
 
 
-(defprod llvmcompiled
-  :short "Result of compiling @(see smallexpr) to LLVM."
-  :tag :llvmcompiled
+(defprod llvmasm
+  :short "LLVM assembly code for some @(see smallexpr)s."
+  :tag :llvmasm
   ((fnname stringp :rule-classes :type-prescription
            "Name of the LLVM function that was generated.")
    (code stringp :rule-classes :type-prescription
@@ -579,7 +579,7 @@ to write the result of @('a') to indices 0 and 2.</p>")
   :short "Top level compiler from small expressions to LLVM."
   ((fnname stringp         "Name of the LLVM function to produce.")
    (x      smallexprlist-p "Expressions to compile."))
-  :returns (compiled llvmcompiled-p)
+  :returns (compiled llvmasm-p)
 
   (b* (;; Construct input mapping (variables to input array indices)
        ((mv num-inputs varmap seen)
@@ -610,6 +610,8 @@ to write the result of @('a') to indices 0 and 2.</p>")
         (smallexprlist-llvm-compile-main x varmap temps outs
                                          num-temps ;; seen table -- just a size hint
                                          code))
+       (code (str::revappend-chars "ret void" code))
+       (code (cons #\Newline code))
        (code (str::revappend-chars "}" code))
        (code (cons #\Newline code)))
 
@@ -617,9 +619,9 @@ to write the result of @('a') to indices 0 and 2.</p>")
     (fast-alist-free seen)
     (fast-alist-free temps)
     (fast-alist-free outs)
-    (make-llvmcompiled :fnname fnname
-                       :code (str::rchars-to-string code)
-                       :outs x
-                       :varmap varmap)))
+    (make-llvmasm :fnname fnname
+                  :code (str::rchars-to-string code)
+                  :outs x
+                  :varmap varmap)))
 
 
