@@ -34,7 +34,7 @@
 (include-book "../svex/compose")
 (include-book "centaur/misc/hons-extra" :dir :system)
 (include-book "centaur/vl/util/cwtime" :dir :system)
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (include-book "std/lists/resize-list" :dir :system))
 (local (include-book "std/lists/take" :dir :system))
 (local (include-book "std/osets/under-set-equiv" :dir :system))
@@ -281,8 +281,7 @@ svex-assigns-compose)).</li>
       (implies (maybe-svar-fix x)
                (svar-p (maybe-svar-fix x))))))
 
-(acl2::def-1d-arr
-  :arrname indnamememo
+(acl2::def-1d-arr indnamememo
   :slotname indname
   :pred maybe-svar-p
   :fix maybe-svar-fix$inline

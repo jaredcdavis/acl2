@@ -34,12 +34,12 @@
 (include-book "../svex/4vmask")
 (include-book "../svex/vars")
 (include-book "../svex/rsh-concat")
-(include-book "centaur/misc/1d-arr" :dir :system)
-(include-book "tools/clone-stobj" :dir :system)
+(include-book "std/stobjs/1d-arr" :dir :system)
+(include-book "std/stobjs/clone" :dir :system)
 (include-book "std/alists/hons-remove-assoc" :dir :system) ;; bozo
 (include-book "defsort/defsort" :dir :system)
 (local (include-book "std/lists/acl2-count" :dir :system))
-(local (include-book "centaur/misc/arith-equivs" :dir :system))
+(local (include-book "std/basic/arith-equivs" :dir :system))
 (local (include-book "arithmetic/top-with-meta" :dir :system))
 (local (include-book "centaur/bitops/equal-by-logbitp" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
@@ -1617,6 +1617,17 @@ the order given (LSBs-first).</p>")
                 ((concat rsh signx)
                  (change-svex-call x :args (svexlist-lhs-preproc x.args)))
 
+                ((partsel)
+                 (b* (((unless (and (eql (len x.args) 3)
+                                    (svex-case (first x.args) :quote)
+                                    (4vec-index-p (svex-quote->val (first x.args)))))
+                       x))
+                   (svcall concat
+                           (second x.args)
+                           (svcall rsh (first x.args)
+                                   (svex-lhs-preproc (third x.args)))
+                           0)))
+
                 (zerox
                  (b* (((unless (eql (len x.args) 2)) x))
                    (svcall concat
@@ -1667,6 +1678,14 @@ the order given (LSBs-first).</p>")
                     (equal (4vec-bit-extract n x) (4vec-concat 1 (4vec-rsh n x) 0)))
            :hints(("Goal" :in-theory (enable 4vec-bit-extract 4vec-concat 4vec-rsh
                                              4vec-bit-index)))))
+
+  (local (defthm 4vec-part-select-to-concat
+           (implies (4vec-index-p lsb)
+                    (equal (4vec-part-select lsb width x)
+                           (4vec-concat width (4vec-rsh lsb x) 0)))
+           :hints(("Goal" :in-theory (enable 4vec-part-select))
+                  (and stable-under-simplificationp
+                       '(:in-theory (enable 4vec-concat))))))
 
   (defthm-svex-lhs-preproc-flag
     (defthm svex-lhs-preproc-correct
@@ -2072,8 +2091,7 @@ bits of @('foo'):</p>
 
 
 
-(acl2::def-1d-arr
-  :arrname lhsarr
+(acl2::def-1d-arr lhsarr
   :slotname lhs
   :pred lhs-p
   :fix lhs-fix$inline
@@ -2217,8 +2235,7 @@ bits of @('foo'):</p>
 
 
 
-(acl2::def-1d-arr
-  :arrname svexarr
+(acl2::def-1d-arr svexarr
   :slotname svex
   :pred svex-p
   :fix svex-fix$inline
