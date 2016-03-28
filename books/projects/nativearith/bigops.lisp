@@ -66,12 +66,14 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   :measure (bigint-count a)
   :verify-guards nil
   (b* (((bigint a))
-       (first (lognot a.first))
+       (first (i64bitnot a.first))
        ((when a.endp)
         (bigint-singleton first)))
     (bigint-cons first (bigint-lognot a.rest)))
   ///
   (verify-guards bigint-lognot)
+
+  (local (in-theory (enable i64bitnot)))
 
   (local (defun my-induct (n a)
            (if (zp n)
