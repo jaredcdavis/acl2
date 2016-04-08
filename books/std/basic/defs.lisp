@@ -70,8 +70,11 @@ expands to just @('b')."
 (defsection bitp-basics
   :extension bitp
 
-  (defthm bitp-bfix
-    (bitp (bfix b)))
+  ;; [Jared] 2016-04-08: this should now be handled by the type-prescription
+  ;; rule for bfix.
+
+  ;; (defthm bitp-bfix
+  ;;   (bitp (bfix b)))
 
   (defthm bfix-bitp
     (implies (bitp b)
@@ -94,7 +97,7 @@ satisfies @('maybe-bitp'), then either it is a @(see bitp) or nothing.</p>"
   (defthm maybe-bitp-compound-recognizer
     (implies (maybe-bitp x)
              (or (not x)
-                 (natp x)))
+                 (bitp x)))
     :rule-classes :compound-recognizer))
 
 (defsection lnfix

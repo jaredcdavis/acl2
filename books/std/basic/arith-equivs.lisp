@@ -646,7 +646,6 @@
 (defcong nat-equiv equal (logmask n) 1)
 
 
-
 (encapsulate
   ()
 
@@ -682,12 +681,16 @@
 
   (defcong iff equal (bool->bit x) 1)
 
-  (defthm bitp-of-bool->bit
-    (bitp (bool->bit x)))
+  ;; [Jared] 2016-04-08: this should just be handled by the bitp
+  ;; type-prescription inferred for bool->bit, now.
+  ;; (defthm bitp-of-bool->bit
+  ;;   (bitp (bool->bit x)))
 
-  (defthm bool->bit-bound
-    (< (bool->bit x) 2)
-    :rule-classes :linear)
+  ;; [Jared] 2016-04-08: I don't think we should need this anymore,
+  ;; thanks for bit type-prescription stuff.
+  ;; (defthm bool->bit-bound
+  ;;   (< (bool->bit x) 2)
+  ;;   :rule-classes :linear)
 
   (defthm bfix-when-bit->bool
     (implies (bit->bool x)
