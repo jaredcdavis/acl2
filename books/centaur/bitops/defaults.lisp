@@ -43,6 +43,7 @@ naturals)."
   :long "<p>We tend not to include this any more, because it should mostly be
 subsumed by the @('nat-equiv') and @('int-equiv') congruence reasoning.</p>")
 
+
 (defsection logbitp-defaults
   :parents (bitops/defaults logbitp)
   :short "Behavior of @(see logbitp) on bad inputs."
@@ -72,7 +73,6 @@ subsumed by the @('nat-equiv') and @('int-equiv') congruence reasoning.</p>")
                     -1))
     :hints(("Goal" :in-theory (enable lognot**)))
     :rule-classes ((:rewrite :backchain-limit-lst 0))))
-
 
 
 (defsection logand-defaults
@@ -181,3 +181,66 @@ subsumed by the @('nat-equiv') and @('int-equiv') congruence reasoning.</p>")
                     (logxor x 0)))
     :hints(("Goal" :in-theory (enable logxor**)))
     :rule-classes ((:rewrite :backchain-limit-lst 0))))
+
+
+(defsection loghead-defaults
+  :parents (bitops/defaults loghead)
+  :short "Behavior of @(see loghead) on bad inputs."
+
+  (defthm loghead-default-1
+    (implies (not (natp n))
+             (equal (loghead n x)
+                    0))
+    :rule-classes ((:rewrite :backchain-limit-lst 0))
+    :hints(("Goal" :in-theory (enable* loghead**))))
+
+  (defthm loghead-default-2
+    (implies (not (integerp x))
+             (equal (loghead n x)
+                    0))
+    :rule-classes ((:rewrite :backchain-limit-lst 0))
+    :hints(("Goal" :in-theory (enable* loghead**)))))
+
+
+(defsection logapp-defaults
+  :parents (bitops/defaults logapp)
+  :short "Behavior of @(see logapp) on bad inputs."
+
+  (defthm logapp-default-1
+    (implies (not (natp n))
+             (equal (logapp n x y)
+                    (ifix y)))
+    :rule-classes ((:rewrite :backchain-limit-lst 0))
+    :hints(("Goal" :in-theory (enable logapp**))))
+
+  (defthm logapp-default-2
+    (implies (not (integerp x))
+             (equal (logapp n x y)
+                    (logapp n 0 y)))
+    :rule-classes ((:rewrite :backchain-limit-lst 0))
+    :hints(("Goal" :in-theory (enable logapp**))))
+
+  (defthm logapp-default-3
+    (implies (not (integerp y))
+             (equal (logapp n x y)
+                    (loghead n x)))
+    :rule-classes ((:rewrite :backchain-limit-lst 0))
+    :hints(("Goal" :in-theory (enable logapp**)))))
+
+
+(defsection logext-defaults
+  :parents (bitops/defaults logext)
+  :short "Behavior of @(see logext) on bad inputs."
+
+  (defthm logext-default-1
+    (implies (not (natp n))
+             (equal (logext n x)
+                    (logext 0 x)))
+    :rule-classes ((:rewrite :backchain-limit-lst 0))
+    :hints(("Goal" :in-theory (enable logext**))))
+
+  (defthm logext-default-2
+    (implies (not (integerp x))
+             (equal (logext n x) 0))
+    :rule-classes ((:rewrite :backchain-limit-lst 0))
+    :hints(("Goal" :in-theory (enable logext**)))))
