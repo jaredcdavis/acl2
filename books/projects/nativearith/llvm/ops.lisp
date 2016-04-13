@@ -103,6 +103,8 @@ corresponds to its ACL2 definition; see the file
 
 (def-narith-op i64bitnot ((a i64-p :type (signed-byte 64))))
 (def-narith-op i64sminus ((a i64-p :type (signed-byte 64))))
+(def-narith-op i64logcar ((a i64-p :type (signed-byte 64))))
+(def-narith-op i64logcdr ((a i64-p :type (signed-byte 64))))
 
 (def-narith-op i64eql    ((a i64-p :type (signed-byte 64)) (b i64-p :type (signed-byte 64))))
 (def-narith-op i64neq    ((a i64-p :type (signed-byte 64)) (b i64-p :type (signed-byte 64))))

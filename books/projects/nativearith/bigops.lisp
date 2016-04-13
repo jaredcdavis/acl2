@@ -39,6 +39,7 @@
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "centaur/bitops/equal-by-logbitp" :dir :system))
+(local (include-book "centaur/bitops/defaults" :dir :system))
 (local (include-book "std/lists/len" :dir :system))
 (local (include-book "misc/assert" :dir :system))
 (local (include-book "arith"))
@@ -102,7 +103,7 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   :verify-guards nil
   (b* (((bigint a))
        ((bigint b))
-       (first (logand a.first b.first))
+       (first (i64bitand a.first b.first))
        ((when (and a.endp b.endp))
         (bigint-singleton first)))
     (bigint-cons first
@@ -115,6 +116,7 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
            (logand (bigint->val a)
                    (bigint->val b)))
     :induct (two-bigints-induct a b)
+    :enable (i64bitand)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -126,7 +128,7 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   :verify-guards nil
   (b* (((bigint a))
        ((bigint b))
-       (first (logior a.first b.first))
+       (first (i64bitor a.first b.first))
        ((when (and a.endp b.endp))
         (bigint-singleton first)))
     (bigint-cons first
@@ -139,6 +141,7 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
            (logior (bigint->val a)
                    (bigint->val b)))
     :induct (two-bigints-induct a b)
+    :enable (i64bitor)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -150,7 +153,7 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   :verify-guards nil
   (b* (((bigint a))
        ((bigint b))
-       (first (logxor a.first b.first))
+       (first (i64bitxor a.first b.first))
        ((when (and a.endp b.endp))
         (bigint-singleton first)))
     (bigint-cons first
@@ -163,6 +166,7 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
            (logxor (bigint->val a)
                    (bigint->val b)))
     :induct (two-bigints-induct a b)
+    :enable (i64bitxor)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -174,7 +178,7 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
   :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
        ((bigint b))
-       ((unless (eql a.first b.first))
+       ((unless (bit->bool (i64eql a.first b.first)))
         nil)
        ((when (and a.endp b.endp))
         t))
@@ -184,6 +188,7 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
     (equal (bigint-equalp a b)
            (equal (bigint->val a) (bigint->val b)))
     :induct (two-bigints-induct a b)
+    :enable (i64eql)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -209,7 +214,7 @@ answer says whether @('a') and @('b') have the same @(see bigint->val)s.</p>"
   :measure (+ (bigint-count a) (bigint-count b))
   (b* (((bigint a))
        ((bigint b))
-       ((unless (eql a.first b.first))
+       ((unless (bit->bool (i64eql a.first b.first)))
         t)
        ((when (and a.endp b.endp))
         nil))
@@ -219,6 +224,7 @@ answer says whether @('a') and @('b') have the same @(see bigint->val)s.</p>"
     (equal (bigint-not-equalp a b)
            (not (equal (bigint->val a) (bigint->val b))))
     :induct (two-bigints-induct a b)
+    :enable (i64eql)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -235,7 +241,6 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
     (equal (bigint-not-equal a b)
            (bool->bigint (not (equal (bigint->val a) (bigint->val b)))))))
 
-
 (define bigint-scmp ((a bigint-p)
                      (b bigint-p))
   :parents (bigint-<-p bigint-<=-p bigint->-p bigint->=-p)
@@ -245,16 +250,15 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   (b* (((bigint a))
        ((bigint b))
        ((when (and a.endp b.endp))
-        (cond ((eql a.first b.first) :equal)
-              ((< a.first b.first)   :less)
-              (t                     :greater)))
+        (cond ((bit->bool (i64eql a.first b.first)) :equal)
+              ((bit->bool (i64slt a.first b.first)) :less)
+              (t                                    :greater)))
        (rest-scmp (bigint-scmp a.rest b.rest))
        ((unless (eql rest-scmp :equal))
         rest-scmp)
-       ((when (eql a.first b.first))
+       ((when (bit->bool (i64eql a.first b.first)))
         :equal)
-       ((when (< (loghead 64 a.first)
-                 (loghead 64 b.first)))
+       ((when (bit->bool (i64ult a.first b.first)))
         :less))
     :greater)
   ///
@@ -266,6 +270,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
                    ((< av bv)     :less)
                    (t             :greater))))
     :induct (two-bigints-induct a b)
+    :enable (i64eql i64slt i64ult)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -277,17 +282,17 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   (b* (((bigint a))
        ((bigint b))
        ((when (and a.endp b.endp))
-        (< a.first b.first))
+        (bit->bool (i64slt a.first b.first)))
        (rest-cmp (bigint-scmp a.rest b.rest)))
     (or (eq rest-cmp :less)
         (and (eq rest-cmp :equal)
-             (< (loghead 64 a.first)
-                (loghead 64 b.first)))))
+             (bit->bool (i64ult a.first b.first)))))
   ///
   (defrule bigint-<-p-correct
     (equal (bigint-<-p a b)
            (< (bigint->val a) (bigint->val b)))
     :do-not-induct t
+    :enable (i64ult i64slt)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -310,17 +315,17 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   (b* (((bigint a))
        ((bigint b))
        ((when (and a.endp b.endp))
-        (<= a.first b.first))
+        (bit->bool (i64sle a.first b.first)))
        (rest-cmp (bigint-scmp a.rest b.rest)))
     (or (eq rest-cmp :less)
         (and (eq rest-cmp :equal)
-             (<= (loghead 64 a.first)
-                 (loghead 64 b.first)))))
+             (bit->bool (i64ule a.first b.first)))))
   ///
   (defrule bigint-<=-p-correct
     (equal (bigint-<=-p a b)
            (<= (bigint->val a) (bigint->val b)))
     :do-not-induct t
+    :enable (i64sle i64ule)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -343,17 +348,17 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   (b* (((bigint a))
        ((bigint b))
        ((when (and a.endp b.endp))
-        (> a.first b.first))
+        (bit->bool (i64sgt a.first b.first)))
        (rest-cmp (bigint-scmp a.rest b.rest)))
     (or (eq rest-cmp :greater)
         (and (eq rest-cmp :equal)
-             (> (loghead 64 a.first)
-                (loghead 64 b.first)))))
+             (bit->bool (i64ugt a.first b.first)))))
   ///
   (defrule bigint->-p-correct
     (equal (bigint->-p a b)
            (> (bigint->val a) (bigint->val b)))
     :do-not-induct t
+    :enable (i64sgt i64ugt)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -376,17 +381,17 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   (b* (((bigint a))
        ((bigint b))
        ((when (and a.endp b.endp))
-        (>= a.first b.first))
+        (bit->bool (i64sge a.first b.first)))
        (rest-cmp (bigint-scmp a.rest b.rest)))
     (or (eq rest-cmp :greater)
         (and (eq rest-cmp :equal)
-             (>= (loghead 64 a.first)
-                 (loghead 64 b.first)))))
+             (bit->bool (i64uge a.first b.first)))))
   ///
   (defrule bigint->=-p-correct
     (equal (bigint->=-p a b)
            (>= (bigint->val a) (bigint->val b)))
     :do-not-induct t
+    :enable (i64sge i64uge)
     :expand ((bigint->val a)
              (bigint->val b))))
 
@@ -484,7 +489,10 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
      :enable (bigint-plus-cout0 i64upluscarry recursive-plus-correct)
      :disable (plus-ucarryout-n-as-unsigned-byte-p)
      :use ((:instance plus-ucarryout-n-as-unsigned-byte-p
-            (n 64) (cin 0) (a (loghead 64 a)) (b (loghead 64 b)))))
+            (n 64)
+            (cin 0)
+            (a (loghead 64 a))
+            (b (loghead 64 b)))))
 
    (defrule bigint-plus-cout0-correct
      (equal (bigint-plus-cout0 cin a b)
@@ -510,11 +518,17 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   ///
   (local (in-theory (enable i64plus i64-fix)))
 
-  (defrule loghead-64-of-bigint-plus-sum0
-    (equal (loghead 64 (bigint-plus-sum0 cin afirst bfirst))
-           (loghead 64 (+ (bfix cin)
-                          (i64-fix afirst)
-                          (i64-fix bfirst))))))
+  (defrule bigint-plus-sum0-correct
+    (equal (bigint-plus-sum0 cin afirst bfirst)
+           (logext 64 (+ (bfix cin)
+                         (i64-fix afirst)
+                         (i64-fix bfirst))))))
+
+  ;; (defrule loghead-64-of-bigint-plus-sum0
+  ;;   (equal (loghead 64 (bigint-plus-sum0 cin afirst bfirst))
+  ;;          (loghead 64 (+ (bfix cin)
+  ;;                         (i64-fix afirst)
+  ;;                         (i64-fix bfirst))))))
 
 (define bigint-plus-aux ((cin bitp)
                          (a bigint-p)
@@ -638,6 +652,28 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
                   (i64-p (- n 64)))
          :enable (i64-p signed-byte-p)))
 
+;; (local (defrule i64-fix-of-loghead-when-fewer-than-64-bits
+;;          (implies (and (<= 0 n)
+;;                        (< n 64))
+;;                   (equal (i64-fix (loghead n x))
+;;                          (loghead n x)))
+;;          :enable (i64-fix)
+;;          :prep-lemmas
+;;          ((defrule logext-64-of-loghead-smaller
+;;             (implies (and (<= 0 n) (< n 64))
+;;                      (equal (logext 64 (loghead n x))
+;;                             (loghead n x)))
+;;             :enable (ihsext-inductions ihsext-recursive-redefs)))))
+
+;; (local (defrule i64-fix-when-0-to-64
+;;          (implies (and (<= 0 n)
+;;                        (<= n 64))
+;;                   (equal (i64-fix n)
+;;                          (ifix n)))
+;;          :enable (i64-fix signed-byte-p)
+;;          :disable (acl2::logext-identity)
+;;          :use ((:instance acl2::logext-identity (size 64) (i n)))))
+
 (define bigint-loghead-aux ((n i64-p)
                             (a bigint-p))
   :returns (ans bigint-p)
@@ -646,13 +682,14 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
           into 64 bits (to avoid @(see bigint) operations on @('n'))."
   :measure (nfix (i64-fix n))
   :verify-guards nil
+  :prepwork ((local (in-theory (enable i64-fix i64slt i64sle i64minus))))
   (b* ((n (i64-fix n))
-       ((when (<= n 64))
-        (cond ((<= n 0)
+       ((when (bit->bool (i64sle n 64)))
+        (cond ((bit->bool (i64sle n 0))
                ;; Special degenerate case, loghead with a negative or zero
                ;; width is just always 0.
                (bigint-0))
-              ((< n 64)
+              ((bit->bool (i64slt n 64))
                ;; We have enough bits to zero extend in a single chunk.
                (bigint-singleton (loghead n (bigint->first a))))
               (t
@@ -676,7 +713,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
          (raise "Trying to take ~x0 bits of a negative integer seems like a ~
                  bad idea." n))
     (bigint-cons (bigint->first a)
-                 (bigint-loghead-aux (- n 64) (bigint->rest a))))
+                 (bigint-loghead-aux (i64minus n 64) (bigint->rest a))))
   ///
   (verify-guards bigint-loghead-aux)
 
@@ -740,16 +777,17 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
           into 64 bits (to avoid @(see bigint) operations on @('n'))."
   :measure (nfix (i64-fix n))
   :verify-guards nil
+  :prepwork ((local (in-theory (enable i64-fix i64sle i64slt i64minus i64logcar))))
   (b* ((n (i64-fix n))
        ((bigint a))
-       ((when (<= n 64))
-        (cond ((<= n 0)
+       ((when (bit->bool (i64sle n 64)))
+        (cond ((bit->bool (i64sle n 0))
                ;; Special degenerate case, logext with a negative or zero width
                ;; is the sign extension of the lsb.
-               (if (bit->bool (logcar a.first))
+               (if (bit->bool (i64logcar a.first))
                    (bigint-minus1)
                  (bigint-0)))
-              ((< n 64)
+              ((bit->bool (i64slt n 64))
                ;; We have enough bits to zero extend in a single chunk.
                (bigint-singleton (logext n a.first)))
               (t
@@ -758,7 +796,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
                ;; we need 64 bits of 1s, followed by a zero so that we don't
                ;; interpret the result as negative.
                (bigint-cons a.first
-                            (if (< a.first 0)
+                            (if (bit->bool (i64slt a.first 0))
                                 (bigint-minus1)
                               (bigint-0)))))))
     ;; Otherwise, we want more than 64 bits so keep the entire first chunk
@@ -770,7 +808,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
          (raise "Trying to take ~x0 bits of a negative integer seems like a ~
                  bad idea." n))
     (bigint-cons a.first
-                 (bigint-logext-aux (- n 64) a.rest)))
+                 (bigint-logext-aux (i64minus n 64) a.rest)))
   ///
   (verify-guards bigint-logext-aux)
 
@@ -801,13 +839,13 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
   :short "Analogue of @(see logext) for @(see bigint)s."
   :measure (nfix (bigint->val n))
   :verify-guards nil
-  :prepwork ((local (in-theory (enable i64-p signed-byte-p))))
+  :prepwork ((local (in-theory (enable i64-p signed-byte-p i64logcar))))
   (b* (((when (bigint-<=-p n (bigint-i64max)))
         (if (bigint-<=-p n (bigint-0))
             ;; Special degenerate case of logext by a negative or 0.  We know
             ;; the answer but don't know that N is an i64, so just return it
             ;; directly instead of calling the aux function.
-            (if (bit->bool (logcar (bigint->first a)))
+            (if (bit->bool (i64logcar (bigint->first a)))
                 (bigint-minus1)
               (bigint-0))
           ;; Else it must be an i64, so call the aux function.
@@ -849,3 +887,53 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
            (logext (bigint->val n) (bigint->val a)))
     :induct (bigint-logext n a)
     :expand ((bigint->val a))))
+
+
+
+
+
+; Implemented:
+;
+;   lognot
+;   logand
+;   logior
+;   logxor
+;   equal
+;   not-equal
+;   <
+;   <=
+;   >
+;   >=
+;   +
+;   - (binary)
+;   nfix
+;   loghead
+;   logext
+;
+;
+;
+; Not Yet Implemented:
+;
+;   - (unary)
+;   *
+;   /
+;   %
+;   expt
+;   clog2
+;
+;   logbit
+;   logapp
+;   rsh
+;   lsh
+;   parity
+;   logeqv
+;   pos-fix
+;   logandc1
+;   logandc2
+;   logorc1
+;   logorc2
+;   integer-length
+;
+;   conversion to/from decimal, hex, binary, octal
+;
+;   

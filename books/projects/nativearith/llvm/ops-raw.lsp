@@ -63,6 +63,8 @@
 
 (cffi:defcfun "narith_i64bitnot" :int64 (a :int64))
 (cffi:defcfun "narith_i64sminus" :int64 (a :int64))
+(cffi:defcfun "narith_i64logcar" :int64 (a :int64))
+(cffi:defcfun "narith_i64logcdr" :int64 (a :int64))
 
 (cffi:defcfun "narith_i64bitand"     :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64bitor"      :int64 (a :int64) (b :int64))

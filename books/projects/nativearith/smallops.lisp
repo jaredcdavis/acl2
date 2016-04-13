@@ -143,6 +143,27 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
             a
           (the (signed-byte 64) (- a))))
 
+(def-i64-arith1 i64logcar
+  :short "64-bit @(see logcar), i.e., the @('a & 1'), i.e., least significant bit."
+  :logic (logcar a)
+  :exec (the bit (logand a 1))
+  :prepwork
+  ((local (defrule logand-1-is-logcar
+            (equal (logand a 1)
+                   (logcar a))
+            :enable (ihsext-recursive-redefs)))))
+
+(def-i64-arith1 i64logcdr
+  :short "64-bit @(see logcdr), i.e., the <b>arithmetic</b> shift right by 1
+          place, sometimes written as @('a >>> 1')."
+  :logic (logcdr a)
+  :exec (the (signed-byte 64) (ash a -1))
+  :prepwork
+  ((local (defrule ash-minus1-is-logcdr
+            (equal (ash a -1)
+                   (logcdr a))
+            :enable (ihsext-recursive-redefs)))))
+
 
 (defmacro def-i64-cmp2 (name &key short long logic exec prepwork
                              guard-hints (fix 'logext) rest)

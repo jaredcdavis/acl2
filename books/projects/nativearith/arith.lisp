@@ -33,7 +33,7 @@
 (in-package "NATIVEARITH")
 (include-book "ihs/basic-definitions" :dir :system)
 (include-book "std/util/defrule" :dir :system)
-(include-book "centaur/misc/arith-equiv-defs" :dir :system)
+(include-book "std/basic/arith-equiv-defs" :dir :system)
 (local (include-book "arithmetic/top-with-meta" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))

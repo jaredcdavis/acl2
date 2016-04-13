@@ -148,6 +148,8 @@
 
 (test-unaryop i64bitnot)
 (test-unaryop i64sminus)
+(test-unaryop i64logcar)
+(test-unaryop i64logcdr)
 
 
 (defmacro test-binop (op)

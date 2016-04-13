@@ -123,6 +123,18 @@ define i64 @narith_i64sminus (i64 %a)
     ret i64 %ans
 }
 
+define i64 @narith_i64logcar (i64 %a)
+{
+    %ans = and i64 1, %a
+    ret i64 %ans
+}
+
+define i64 @narith_i64logcdr (i64 %a)
+{
+    %ans = ashr i64 %a, 1
+    ret i64 %ans
+}
+
 define i64 @narith_i64bitand (i64 %a, i64 %b)
 {
     %ans = and i64 %a, %b

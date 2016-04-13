@@ -33,7 +33,7 @@
 (in-package "NATIVEARITH")
 (include-book "std/basic/defs" :dir :system)
 (include-book "centaur/fty/fixtype" :dir :system)
-(include-book "centaur/misc/arith-equiv-defs" :dir :system)
+(include-book "std/basic/arith-equiv-defs" :dir :system)
 ;; BOZO consider integrating this all into centaur/fty/basetypes
 
 (defthm maybe-integerp-when-integerp

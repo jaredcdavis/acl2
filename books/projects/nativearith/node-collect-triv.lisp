@@ -34,7 +34,7 @@
 (include-book "std/util/define" :dir :system)
 (include-book "std/util/defines" :dir :system)
 (include-book "std/util/defrule" :dir :system)
-(include-book "std/misc/two-nats-measure" :dir :system)
+(include-book "std/basic/two-nats-measure" :dir :system)
 (include-book "std/lists/list-defuns" :dir :system)
 (local (include-book "std/lists/equiv" :dir :system))
 (local (include-book "tools/do-not" :dir :system))
