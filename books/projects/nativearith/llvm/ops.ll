@@ -153,6 +153,68 @@ define i64 @narith_i64bitxor (i64 %a, i64 %b)
     ret i64 %ans
 }
 
+define i64 @narith_i64loghead (i64 %a, i64 %b)
+{
+    ;; Since this is a variable width loghead, I don't think we can use the
+    ;; LLVM zext operation because that extends one type to another.  Instead,
+    ;; the simplest way I see to do this is shift left then right (logical) to
+    ;; clear out the high bits.
+    ;;
+    ;; Three cases to consider.
+    ;;   Toosmall case. (loghead a b) where A <= 0.   We must return 0.
+    ;;   Toobig case.   (loghead a b) where A >= 64.  We must return B.
+    ;;   Usual case.    (loghead a b) otherwise.      We need to zero part of B.
+    ;;
+    ;; As an example of the usual case, suppose A is 5.  Then we want to keep
+    ;; only the low 5 bits of B.  Since B is 64 bits, we want to shift left and
+    ;; then right by 64 - A bits.  That is, we should do:
+    ;;
+    ;;      ((B << 59) >> 59)
+    ;;
+    ;; Because 64 - 5 == 59 bits.
+    ;;
+    ;; Does this shifting approach happen to work out for the toobig and/or
+    ;; toosmall cases?  Unfortunately no.  Per the LLVM manual, the shift
+    ;; instructions treat the shift amount as an unsigned value, and if the
+    ;; shift amount is larger than the width of B, the result is undefined.
+    ;; So, we have to have explicit bounds checks here.
+    %a.toobig = icmp sgt i64 %a, 64
+    br i1 %a.toobig, label %case.toobig, label %case.nottoobig
+  case.toobig:
+    ret i64 %b
+  case.nottoobig:
+    %a.toosmall = icmp sle i64 %a, 0
+    br i1 %a.toosmall, label %case.toosmall, label %case.normal
+  case.toosmall:
+    ret i64 0
+  case.normal:
+    %amt = sub i64 64, %a
+    %tmp = shl i64 %b, %amt
+    %ans = lshr i64 %tmp, %amt
+    ret i64 %ans
+}
+
+define i64 @narith_i64logext (i64 %a, i64 %b)
+{
+    ;; Basically similar to loghead.
+    %a.toobig = icmp sgt i64 %a, 64
+    br i1 %a.toobig, label %case.toobig, label %case.nottoobig
+  case.toobig:
+    ret i64 %b
+  case.nottoobig:
+    %a.toosmall = icmp sle i64 %a, 0
+    br i1 %a.toosmall, label %case.toosmall, label %case.normal
+  case.toosmall:
+    %lsb = trunc i64 %b to i1
+    %ext = sext i1 %lsb to i64
+    ret i64 %ext
+  case.normal:
+    %amt = sub i64 64, %a
+    %tmp = shl i64 %b, %amt
+    %ans = ashr i64 %tmp, %amt
+    ret i64 %ans
+}
+
 define i64 @narith_i64plus (i64 %a, i64 %b)
 {
        %ans = add i64 %a, %b

@@ -236,6 +236,9 @@
 (test-binop i64minus)
 (test-binop i64times)
 
+(test-binop i64loghead)
+(test-binop i64logext)
+
 (test-binop i64sdiv)
 (test-binop i64udiv)
 

@@ -36,6 +36,7 @@
 (include-book "std/strings/cat" :dir :system)
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
+(local (include-book "centaur/bitops/defaults" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 (local (in-theory (enable i64-p i64-fix)))
 
@@ -312,6 +313,63 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
          are interpreted as signed or unsigned.</p>"
   :logic (logxor a b)
   :exec (logxor a b))
+
+(def-i64-arith2 i64loghead
+  :short "64-bit integer @(see loghead) (zero extension) operation."
+  :long "<p>When @('a') is 64 or greater this just leaves @('b') unchanged.
+         When @('a') is negative we just return 0.  Otherwise we zero out the
+         most significant portion of @('b') starting at bit @('a').</p>"
+  :logic (logext 64 (loghead a b))
+  :exec (let ((a-chop
+               ;; Loghead will create a huge mask if we give it a huge A.  To
+               ;; avoid that (and hence make it possible to even test
+               ;; i64loghead against its LLVM counterpart), we explicitly check
+               ;; if A is huge and chop it down to a reasonable size if so.
+               (cond ((> a 64) 64)
+                     ((< a 0) 0)
+                     (t a))))
+          (fast-logext 64 (loghead a-chop b)))
+  :prepwork ((local (in-theory (disable signed-byte-p)))
+             (local (defrule l0
+                      (implies (and (signed-byte-p n b)
+                                    (natp a)
+                                    (< n a))
+                               (equal (logext n (loghead a b))
+                                      b))
+                      :disable (signed-byte-p)
+                      :enable (ihsext-recursive-redefs
+                               ihsext-inductions)))))
+
+(def-i64-arith2 i64logext
+  :short "64-bit integer @(see logext) (sign extension) operation."
+  :long "<p>When @('a') is 64 or greater this just leaves @('b') unchanged.
+         When @('a') is negative we sign extend the least significant bit of
+         @('b').  Otherwise we sign extend bit @('b') at position @('a').</p>"
+  :logic (logext a b)
+  :exec (let ((a-chop
+               ;; As in loghead, avoid creating huge masks by chopping down A
+               ;; if it's bigger than is sensible.
+               (cond ((> a 64) 64)
+                     ((<= a 0) 1)
+                     (t a))))
+          (fast-logext a-chop b))
+  :prepwork
+  ((local (in-theory (disable signed-byte-p unsigned-byte-p)))
+
+   (local (defrule logext-when-degenerate
+            (implies (zp n)
+                     (equal (logext n a)
+                            (if (bit->bool (logcar a))
+                                -1
+                              0)))
+            :enable (logext**)))
+
+   (local (defrule signed-byte-p-of-logext-when-already-signed-byte-p
+            (implies (signed-byte-p n x)
+                     (signed-byte-p n (logext m x)))
+            :enable (ihsext-inductions
+                     ihsext-recursive-redefs)))))
+
 
 (def-i64-arith2 i64plus
   :short "64-bit integer addition, i.e., @('a + b')."
