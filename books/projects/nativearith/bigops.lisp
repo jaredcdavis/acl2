@@ -682,7 +682,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
           into 64 bits (to avoid @(see bigint) operations on @('n'))."
   :measure (nfix (i64-fix n))
   :verify-guards nil
-  :prepwork ((local (in-theory (enable i64-fix i64slt i64sle i64minus))))
+  :prepwork ((local (in-theory (enable i64-fix i64slt i64sle i64minus i64loghead))))
   (b* ((n (i64-fix n))
        ((when (bit->bool (i64sle n 64)))
         (cond ((bit->bool (i64sle n 0))
@@ -691,7 +691,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
                (bigint-0))
               ((bit->bool (i64slt n 64))
                ;; We have enough bits to zero extend in a single chunk.
-               (bigint-singleton (loghead n (bigint->first a))))
+               (bigint-singleton (i64loghead n (bigint->first a))))
               (t
                ;; Special case where we need another digit because we're right
                ;; at the boundary.  For instance, to zero-extend -1 to 64 bits,
@@ -777,7 +777,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
           into 64 bits (to avoid @(see bigint) operations on @('n'))."
   :measure (nfix (i64-fix n))
   :verify-guards nil
-  :prepwork ((local (in-theory (enable i64-fix i64sle i64slt i64minus i64logcar))))
+  :prepwork ((local (in-theory (enable i64-fix i64sle i64slt i64minus i64logcar i64logext))))
   (b* ((n (i64-fix n))
        ((bigint a))
        ((when (bit->bool (i64sle n 64)))
@@ -789,7 +789,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
                  (bigint-0)))
               ((bit->bool (i64slt n 64))
                ;; We have enough bits to zero extend in a single chunk.
-               (bigint-singleton (logext n a.first)))
+               (bigint-singleton (i64logext n a.first)))
               (t
                ;; Special case where we need another digit because we're right
                ;; at the boundary.  For instance, to zero-extend -1 to 64 bits,
