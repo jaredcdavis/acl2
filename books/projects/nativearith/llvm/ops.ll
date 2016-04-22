@@ -215,6 +215,20 @@ define i64 @narith_i64logext (i64 %a, i64 %b)
     ret i64 %ans
 }
 
+define i64 @narith_i64shl (i64 %a, i64 %b)
+{
+    ;; Similar to loghead, we need an explicit bounds check on the shift
+    ;; amount.  We can use an unsigned bounds check since our shl operation
+    ;; interprets b as unsigned.
+    %b.toobig = icmp uge i64 %b, 64
+    br i1 %b.toobig, label %case.toobig, label %case.nottoobig
+  case.toobig:
+    ret i64 0
+  case.nottoobig:
+    %ans = shl i64 %a, %b
+    ret i64 %ans
+}
+
 define i64 @narith_i64plus (i64 %a, i64 %b)
 {
        %ans = add i64 %a, %b
