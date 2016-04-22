@@ -125,6 +125,7 @@ corresponds to its ACL2 definition; see the file
 (def-narith-op i64loghead    ((a i64-p :type (signed-byte 64)) (b i64-p :type (signed-byte 64))))
 (def-narith-op i64logext     ((a i64-p :type (signed-byte 64)) (b i64-p :type (signed-byte 64))))
 (def-narith-op i64shl        ((a i64-p :type (signed-byte 64)) (b i64-p :type (signed-byte 64))))
+(def-narith-op i64shr        ((a i64-p :type (signed-byte 64)) (b i64-p :type (signed-byte 64))))
 
 (def-narith-op i64plus       ((a i64-p :type (signed-byte 64)) (b i64-p :type (signed-byte 64))))
 (def-narith-op i64upluscarry ((a i64-p :type (signed-byte 64)) (b i64-p :type (signed-byte 64))))

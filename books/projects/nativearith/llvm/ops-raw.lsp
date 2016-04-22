@@ -72,6 +72,7 @@
 (cffi:defcfun "narith_i64loghead"    :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64logext"     :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64shl"        :int64 (a :int64) (b :int64))
+(cffi:defcfun "narith_i64shr"        :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64plus"       :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64upluscarry" :int64 (a :int64) (b :int64))
 (cffi:defcfun "narith_i64minus"      :int64 (a :int64) (b :int64))

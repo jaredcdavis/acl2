@@ -39,6 +39,7 @@
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (include-book "centaur/bitops/integer-length" :dir :system))
 (local (include-book "centaur/bitops/defaults" :dir :system))
+(local (include-book "arith"))
 (local (std::add-default-post-define-hook :fix))
 (local (in-theory (enable i64-p i64-fix)))
 
@@ -371,128 +372,6 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
                      (signed-byte-p n (logext m x)))
             :enable (ihsext-inductions ihsext-recursive-redefs)))))
 
-
-(defsection logext-of-ash-helpers
-
-  (local (in-theory (disable signed-byte-p unsigned-byte-p)))
-
-  (local (defrule l0
-           (implies (and (signed-byte-p n a)
-                         (<= 0 a))
-                    (equal (loghead n a)
-                           a))
-           :enable (ihsext-inductions ihsext-recursive-redefs)))
-
-  (local (defrule l1
-           (implies (equal (logext n j) 0)
-                    (equal (logext n (logcons 0 j)) 0))
-           :enable (ihsext-inductions ihsext-recursive-redefs)))
-
-  (local (defrule l2
-           (IMPLIES (and (equal (logext n x) (logext n y))
-                         (syntaxp (term-order y x)))
-                    (equal (logext n (logcons b x))
-                           (logext n (logcons b y))))
-           :enable (ihsext-recursive-redefs ihsext-inductions)
-           :expand ((logext n (logcons b x))
-                    (logext n (logcons b y)))))
-
-  (local (defrule max-size-case
-           (implies (posp n)
-                    (equal (logext n (ash a n))
-                           0))
-           :enable (ihsext-inductions ihsext-recursive-redefs)))
-
-  (local (defrule too-big-case
-           (implies (and (<= n (ifix b))
-                         (posp n))
-                    (equal (logext n (ash a b))
-                           0))
-           :enable (ihsext-inductions ihsext-recursive-redefs)))
-
-  ;; Negative case
-
-  (local (defrule logbitp-of-msb-when-signed-byte-p
-           (implies (and (signed-byte-p n b)
-                         (< b 0))
-                    (logbitp (+ -1 n) b))
-           :enable (ihsext-inductions ihsext-recursive-redefs)))
-
-  (local (defrule integer-length-bounded-by-logbitp
-           (implies (and (logbitp n b)
-                         (<= 0 b))
-                    (<= (+ 1 (nfix n)) (integer-length b)))
-           :rule-classes :linear
-           :enable (ihsext-inductions ihsext-recursive-redefs)))
-
-  (local (defruled lower-bound-by-logbitp-of-msb-help
-           (implies (and (logbitp n b)
-                         (posp b))
-                    (<= (expt 2 (nfix n)) b))
-           :rule-classes :linear
-           ;; Follows from this and bitops::integer-length-bounded-by-expt
-           :disable (integer-length-bounded-by-logbitp)
-           :use ((:instance integer-length-bounded-by-logbitp))))
-
-  (local (defrule lower-bound-by-logbitp-of-msb
-           (implies (and (logbitp n b)
-                         (<= 0 b))
-                    (<= (expt 2 (nfix n)) b))
-           :rule-classes :linear
-           :cases ((equal 0 b))
-           :use ((:instance lower-bound-by-logbitp-of-msb-help))))
-
-  (local (defrule signed-byte-p-forward-to-posp-n
-           (implies (signed-byte-p n x)
-                    (posp n))
-           :rule-classes :forward-chaining
-           :enable (signed-byte-p)))
-
-  (local (defrule lower-bound-of-loghead-when-negative
-           (implies (and (signed-byte-p n b)
-                         (< b 0))
-                    (<= (expt 2 (1- (nfix n))) (loghead n b)))
-           :rule-classes :linear
-           :do-not-induct t
-           :disable (logbitp-of-msb-when-signed-byte-p
-                     lower-bound-by-logbitp-of-msb
-                     bitops::logbitp-of-loghead-in-bounds)
-           :use ((:instance logbitp-of-msb-when-signed-byte-p)
-                 (:instance lower-bound-by-logbitp-of-msb
-                  (n (+ -1 n))
-                  (b (loghead n b)))
-                 (:instance bitops::logbitp-of-loghead-in-bounds
-                  (pos (+ -1 n))
-                  (size n)
-                  (i b)))))
-
-  (local (defrule weaker-lower-bound-of-loghead-when-negative
-           (implies (and (signed-byte-p n b)
-                         (< b 0))
-                    (<= n (loghead n b)))
-           :rule-classes :linear))
-
-  (local (defrule negative-case
-           (implies (and (signed-byte-p n b)
-                         (< b 0))
-                    (equal (logext n (ash a (loghead n b)))
-                           0))))
-
-  (defruled logext-of-ash-by-loghead-split
-    (implies (signed-byte-p n b)
-             (equal (logext n (ash a (loghead n b)))
-                    (cond ((< b 0)  0)
-                          ((<= n b) 0)
-                          (t        (logext n (ash a b)))))))
-
-  (defrule logext-of-ash-of-loghead-in-bounds
-    (implies (and (<= b n)
-                  (posp n)
-                  (natp b))
-             (equal (logext n (ash (loghead n a) b))
-                    (logext n (ash a b))))
-    :enable (ihsext-inductions ihsext-recursive-redefs)))
-
 (def-i64-arith2 i64shl
   :short "64-bit integer left-shift operation, i.e., @('a << b')."
   :long "<p>We interpret @('b') as unsigned.  When @('b') is 64 or greater this
@@ -503,8 +382,27 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
   :exec (cond ((>= b 64) 0)
               ((< b 0)  0)
               (t (fast-logext 64 (ash a b))))
-  :prepwork ((local (in-theory (e/d (logext-of-ash-by-loghead-split)
-                                    (signed-byte-p unsigned-byte-p))))))
+  :prepwork ((local (in-theory (disable signed-byte-p unsigned-byte-p)))))
+
+(def-i64-arith2 i64shr
+  :short "64-bit integer logical right-shift operation, i.e., @('a >> b')."
+  :long "<p>We interpret @('b') as unsigned.  When @('b') is 64 or greater this
+         returns zero.  Otherwise we shift @('a') right by @('b') places and
+         chop the result back down to 64 bits.  This is a logical shift, not an
+         arithmetic shift, i.e., we shift in 0s regardless of the sign bit of
+         @('a').</p>"
+  :fix loghead
+  :logic (logext 64 (ash a (- b)))
+  :exec (cond ((>= b 64) 0)
+              ((< b 0)   0)
+              (t (fast-logext 64 (ash (loghead 64 a) (- b)))))
+  :prepwork
+  ((local (in-theory (disable signed-byte-p unsigned-byte-p)))
+   (local (defthm loghead-default-1-unlimited
+            (implies (not (natp n))
+                     (equal (loghead n x)
+                            0))))))
+
 
 (def-i64-arith2 i64plus
   :short "64-bit integer addition, i.e., @('a + b')."

@@ -229,6 +229,17 @@ define i64 @narith_i64shl (i64 %a, i64 %b)
     ret i64 %ans
 }
 
+define i64 @narith_i64shr (i64 %a, i64 %b)
+{
+    %b.toobig = icmp uge i64 %b, 64
+    br i1 %b.toobig, label %case.toobig, label %case.nottoobig
+  case.toobig:
+    ret i64 0
+  case.nottoobig:
+    %ans = lshr i64 %a, %b
+    ret i64 %ans
+}
+
 define i64 @narith_i64plus (i64 %a, i64 %b)
 {
        %ans = add i64 %a, %b

@@ -38,6 +38,8 @@
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (include-book "centaur/bitops/equal-by-logbitp" :dir :system))
+(local (include-book "centaur/bitops/integer-length" :dir :system))
+(local (include-book "centaur/bitops/defaults" :dir :system))
 (local (include-book "centaur/fty/fixequiv" :dir :system))
 (local (include-book "tools/do-not" :dir :system))
 (local (acl2::do-not generalize fertilize))
@@ -658,3 +660,121 @@
                     (loghead n (+ a b c1))))
     :use ((:instance |(loghead n (+ a b (loghead n c)))|
            (c (logapp n c1 c2))))))
+
+
+;; ---------------------------------------------------------------------------
+;;
+;; Boundary theorems for ash
+;;
+;; ---------------------------------------------------------------------------
+
+(defrule logbitp-of-msb-when-signed-byte-p
+  (implies (and (signed-byte-p n b)
+                (< b 0))
+           (logbitp (+ -1 n) b))
+  :enable (ihsext-inductions ihsext-recursive-redefs))
+
+(defrule integer-length-bounded-by-logbitp
+  (implies (and (logbitp n b)
+                (<= 0 b))
+           (<= (+ 1 (nfix n)) (integer-length b)))
+  :rule-classes :linear
+  :enable (ihsext-inductions ihsext-recursive-redefs))
+
+(defrule lower-bound-by-logbitp-of-msb
+  (implies (and (logbitp n b)
+                (<= 0 b))
+           (<= (expt 2 (nfix n)) b))
+  :rule-classes :linear
+  :cases ((equal 0 b))
+  :use ((:instance l0))
+  :prep-lemmas
+  ((defruled l0
+     (implies (and (logbitp n b)
+                   (posp b))
+              (<= (expt 2 (nfix n)) b))
+     :rule-classes :linear
+     ;; Follows from this and bitops::integer-length-bounded-by-expt
+     :disable (integer-length-bounded-by-logbitp)
+     :use ((:instance integer-length-bounded-by-logbitp)))))
+
+(defrule lower-bound-of-loghead-when-negative
+  (implies (and (signed-byte-p n b)
+                (< b 0))
+           (<= (expt 2 (1- (nfix n))) (loghead n b)))
+  :rule-classes :linear
+  :do-not-induct t
+  :disable (logbitp-of-msb-when-signed-byte-p
+            lower-bound-by-logbitp-of-msb
+            bitops::logbitp-of-loghead-in-bounds)
+  :use ((:instance logbitp-of-msb-when-signed-byte-p)
+        (:instance lower-bound-by-logbitp-of-msb
+         (n (+ -1 n))
+         (b (loghead n b)))
+        (:instance bitops::logbitp-of-loghead-in-bounds
+         (pos (+ -1 n))
+         (size n)
+         (i b))))
+
+(defrule lower-bound-of-loghead-when-negative-weaker
+  (implies (and (signed-byte-p n b)
+                (< b 0))
+           (<= n (loghead n b)))
+  :rule-classes :linear)
+
+(defrule loghead-when-positive-signed-byte-p
+  (implies (and (signed-byte-p n a)
+                (<= 0 a))
+           (equal (loghead n a)
+                  a))
+  :enable (ihsext-inductions ihsext-recursive-redefs))
+
+(defsection logext-of-ash-lemmas
+
+  (local (defrule l1
+           (implies (equal (logext n j) 0)
+                    (equal (logext n (logcons 0 j)) 0))
+           :enable (ihsext-inductions ihsext-recursive-redefs)))
+
+  (local (defrule l2
+           (IMPLIES (and (equal (logext n x) (logext n y))
+                         (syntaxp (term-order y x)))
+                    (equal (logext n (logcons b x))
+                           (logext n (logcons b y))))
+           :enable (ihsext-recursive-redefs ihsext-inductions)
+           :expand ((logext n (logcons b x))
+                    (logext n (logcons b y)))))
+
+  (local (defrule max-size-case
+           (implies (posp n)
+                    (equal (logext n (ash a n))
+                           0))
+           :enable (ihsext-inductions ihsext-recursive-redefs)))
+
+  (local (defrule too-big-case
+           (implies (and (<= n (ifix b))
+                         (posp n))
+                    (equal (logext n (ash a b))
+                           0))
+           :enable (ihsext-inductions ihsext-recursive-redefs)))
+
+  (local (defrule negative-case
+           (implies (and (signed-byte-p n b)
+                         (< b 0))
+                    (equal (logext n (ash a (loghead n b)))
+                           0))))
+
+  (defrule logext-of-ash-by-loghead-split
+    (implies (signed-byte-p n b)
+             (equal (logext n (ash a (loghead n b)))
+                    (cond ((< b 0)  0)
+                          ((<= n b) 0)
+                          (t        (logext n (ash a b)))))))
+
+  (defrule logext-of-ash-of-loghead-in-bounds
+    (implies (and (<= b n)
+                  (posp n)
+                  (natp b))
+             (equal (logext n (ash (loghead n a) b))
+                    (logext n (ash a b))))
+    :enable (ihsext-inductions ihsext-recursive-redefs)))
