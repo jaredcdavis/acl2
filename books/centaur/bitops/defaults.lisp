@@ -188,10 +188,10 @@ subsumed by the @('nat-equiv') and @('int-equiv') congruence reasoning.</p>")
   :short "Behavior of @(see loghead) on bad inputs."
 
   (defthm loghead-default-1
-    (implies (not (natp n))
+    (implies (not (posp n))
              (equal (loghead n x)
                     0))
-    :rule-classes ((:rewrite :backchain-limit-lst 0))
+    :rule-classes ((:rewrite :backchain-limit-lst 1))
     :hints(("Goal" :in-theory (enable* loghead**))))
 
   (defthm loghead-default-2
@@ -207,10 +207,10 @@ subsumed by the @('nat-equiv') and @('int-equiv') congruence reasoning.</p>")
   :short "Behavior of @(see logapp) on bad inputs."
 
   (defthm logapp-default-1
-    (implies (not (natp n))
+    (implies (not (posp n))
              (equal (logapp n x y)
                     (ifix y)))
-    :rule-classes ((:rewrite :backchain-limit-lst 0))
+    :rule-classes ((:rewrite :backchain-limit-lst 1))
     :hints(("Goal" :in-theory (enable logapp**))))
 
   (defthm logapp-default-2
