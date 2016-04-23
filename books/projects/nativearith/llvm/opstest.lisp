@@ -239,7 +239,8 @@
 (test-binop i64loghead)
 (test-binop i64logext)
 (test-binop i64shl)
-(test-binop i64shr)
+(test-binop i64lshr)
+(test-binop i64ashr)
 
 (test-binop i64sdiv)
 (test-binop i64udiv)

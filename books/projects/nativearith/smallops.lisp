@@ -318,7 +318,7 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
   :exec (logxor a b))
 
 (def-i64-arith2 i64loghead
-  :short "64-bit integer @(see loghead) (zero extension) operation."
+  :short "64-bit integer @(see loghead) operation, i.e., zero extension."
   :long "<p>When @('a') is 64 or greater this just leaves @('b') unchanged.
          When @('a') is negative we just return 0.  Otherwise we zero out the
          most significant portion of @('b') starting at bit @('a').</p>"
@@ -344,7 +344,7 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
                                ihsext-inductions)))))
 
 (def-i64-arith2 i64logext
-  :short "64-bit integer @(see logext) (sign extension) operation."
+  :short "64-bit integer @(see logext) operation, i.e., sign extension."
   :long "<p>When @('a') is 64 or greater this just leaves @('b') unchanged.
          When @('a') is negative we sign extend the least significant bit of
          @('b').  Otherwise we sign extend bit @('b') at position @('a').</p>"
@@ -379,12 +379,13 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
          chop the result back down to 64 bits.</p>"
   :fix loghead
   :logic (logext 64 (ash a b))
-  :exec (cond ((>= b 64) 0)
-              ((< b 0)  0)
-              (t (fast-logext 64 (ash a b))))
+  :exec (if (or (>= b 64)
+                (< b 0))
+            0
+          (fast-logext 64 (ash a b)))
   :prepwork ((local (in-theory (disable signed-byte-p unsigned-byte-p)))))
 
-(def-i64-arith2 i64shr
+(def-i64-arith2 i64lshr
   :short "64-bit integer logical right-shift operation, i.e., @('a >> b')."
   :long "<p>We interpret @('b') as unsigned.  When @('b') is 64 or greater this
          returns zero.  Otherwise we shift @('a') right by @('b') places and
@@ -393,15 +394,31 @@ semantics so that @($- (-2^{63})$) is just @($-2^{63}$).</p>"
          @('a').</p>"
   :fix loghead
   :logic (logext 64 (ash a (- b)))
-  :exec (cond ((>= b 64) 0)
-              ((< b 0)   0)
-              (t (fast-logext 64 (ash (loghead 64 a) (- b)))))
+  :exec (if (or (>= b 64)
+                (< b 0))
+            0
+          (fast-logext 64 (ash (loghead 64 a) (- b))))
   :prepwork
   ((local (in-theory (disable signed-byte-p unsigned-byte-p)))
    (local (defthm loghead-default-1-unlimited
             (implies (not (natp n))
                      (equal (loghead n x)
                             0))))))
+
+(def-i64-arith2 i64ashr
+  :short "64-bit integer arithmetic right-shift operation, i.e., @('a >>> b')."
+  :long "<p>We interpret @('b') as unsigned.  When @('b') is 64 or greater this
+         returns either -1 or 0, depending on the sign of @('a').  Otherwise we
+         arithmetically shift @('a') right by @('b') places, and chop the
+         result back down to 64 bits.</p>"
+  :fix loghead
+  :logic (ash (logext 64 a) (- b))
+  :exec (if (or (>= b 64)
+                (< b 0))
+            (if (< a 0) -1 0)
+          (ash a (- b)))
+  :prepwork
+  ((local (in-theory (disable signed-byte-p unsigned-byte-p)))))
 
 
 (def-i64-arith2 i64plus

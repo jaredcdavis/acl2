@@ -229,7 +229,7 @@ define i64 @narith_i64shl (i64 %a, i64 %b)
     ret i64 %ans
 }
 
-define i64 @narith_i64shr (i64 %a, i64 %b)
+define i64 @narith_i64lshr (i64 %a, i64 %b)
 {
     %b.toobig = icmp uge i64 %b, 64
     br i1 %b.toobig, label %case.toobig, label %case.nottoobig
@@ -237,6 +237,22 @@ define i64 @narith_i64shr (i64 %a, i64 %b)
     ret i64 0
   case.nottoobig:
     %ans = lshr i64 %a, %b
+    ret i64 %ans
+}
+
+define i64 @narith_i64ashr (i64 %a, i64 %b)
+{
+    %b.toobig = icmp uge i64 %b, 64
+    br i1 %b.toobig, label %case.toobig, label %case.nottoobig
+  case.toobig:
+    %a.negp = icmp slt i64 %a, 0
+    br i1 %a.negp, label %case.minus1, label %case.zero
+  case.minus1:
+    ret i64 -1
+  case.zero:
+    ret i64 0
+  case.nottoobig:
+    %ans = ashr i64 %a, %b
     ret i64 %ans
 }
 
