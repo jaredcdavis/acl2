@@ -170,6 +170,116 @@ operations can be implemented, which we can then use in our @(see bigexpr) to
     :expand ((bigint->val a)
              (bigint->val b))))
 
+(define bigint-logandc1 ((a bigint-p)
+                         (b bigint-p))
+  :short "Analogue of @(see logandc1) for @(see bigint)s."
+  :returns (ans bigint-p)
+  :measure (+ (bigint-count a) (bigint-count b))
+  :verify-guards nil
+  (b* (((bigint a))
+       ((bigint b))
+       (first (i64bitand (i64bitnot a.first) b.first))
+       ((when (and a.endp b.endp))
+        (bigint-singleton first)))
+    (bigint-cons first
+                 (bigint-logandc1 a.rest b.rest)))
+  ///
+  (verify-guards bigint-logandc1)
+
+  (defrule bigint-logandc1-correct
+    (equal (bigint->val (bigint-logandc1 a b))
+           (logandc1 (bigint->val a)
+                     (bigint->val b)))
+    :induct (two-bigints-induct a b)
+    :enable (i64bitand i64bitnot)
+    :expand ((bigint->val a)
+             (bigint->val b))))
+
+(define bigint-logandc2 ((a bigint-p)
+                         (b bigint-p))
+  :short "Analogue of @(see logandc2) for @(see bigint)s."
+  :returns (ans bigint-p)
+  :inline t
+  (bigint-logandc1 b a)
+  ///
+  (defrule bigint-logandc2-correct
+    (equal (bigint->val (bigint-logandc2 a b))
+           (logandc2 (bigint->val a)
+                     (bigint->val b)))))
+
+(define bigint-logorc1 ((a bigint-p)
+                        (b bigint-p))
+  :short "Analogue of @(see logorc1) for @(see bigint)s."
+  :returns (ans bigint-p)
+  :measure (+ (bigint-count a) (bigint-count b))
+  :verify-guards nil
+  (b* (((bigint a))
+       ((bigint b))
+       (first (i64bitor (i64bitnot a.first) b.first))
+       ((when (and a.endp b.endp))
+        (bigint-singleton first)))
+    (bigint-cons first
+                 (bigint-logorc1 a.rest b.rest)))
+  ///
+  (verify-guards bigint-logorc1)
+
+  (defrule bigint-logorc1-correct
+    (equal (bigint->val (bigint-logorc1 a b))
+           (logorc1 (bigint->val a)
+                    (bigint->val b)))
+    :induct (two-bigints-induct a b)
+    :enable (i64bitor i64bitnot)
+    :expand ((bigint->val a)
+             (bigint->val b))))
+
+(define bigint-logorc2 ((a bigint-p)
+                        (b bigint-p))
+  :short "Analogue of @(see logorc2) for @(see bigint)s."
+  :returns (ans bigint-p)
+  :inline t
+  (bigint-logorc1 b a)
+  ///
+  (defrule bigint-logorc2-correct
+    (equal (bigint->val (bigint-logorc2 a b))
+           (logorc2 (bigint->val a)
+                    (bigint->val b)))))
+
+(define bigint-logeqv ((a bigint-p)
+                       (b bigint-p))
+  :short "Analogue of @(see logeqv) for @(see bigint)s."
+  :returns (ans bigint-p)
+  :measure (+ (bigint-count a) (bigint-count b))
+  :verify-guards nil
+  (b* (((bigint a))
+       ((bigint b))
+       (first (i64bitnot (i64bitxor a.first b.first)))
+       ((when (and a.endp b.endp))
+        (bigint-singleton first)))
+    (bigint-cons first
+                 (bigint-logeqv a.rest b.rest)))
+  ///
+  (local (include-book "centaur/bitops/congruences" :dir :system))
+  (local (in-theory (enable* bitops-congruences)))
+
+  (local (defrule l0
+           (equal (logeqv a b)
+                  (lognot (logxor a b)))))
+
+  (local (defrule l1
+           (equal (loghead n (lognot (logxor (logapp n a b) c)))
+                  (loghead n (lognot (logxor a c))))))
+
+  (verify-guards bigint-logeqv)
+
+  (defrule bigint-logeqv-correct
+    (equal (bigint->val (bigint-logeqv a b))
+           (logeqv (bigint->val a)
+                   (bigint->val b)))
+    :induct (two-bigints-induct a b)
+    :enable (i64bitxor i64bitnot)
+    :expand ((bigint->val a)
+             (bigint->val b))))
+
 (define bigint-equalp ((a bigint-p)
                        (b bigint-p))
   :parents (bigint-equal)
@@ -898,6 +1008,11 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 ;   logand
 ;   logior
 ;   logxor
+;   logandc1
+;   logandc2
+;   logorc1
+;   logorc2
+;   logeqv
 ;   equal
 ;   not-equal
 ;   <
@@ -926,12 +1041,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 ;   rsh
 ;   lsh
 ;   parity
-;   logeqv
 ;   pos-fix
-;   logandc1
-;   logandc2
-;   logorc1
-;   logorc2
 ;   integer-length
 ;
 ;   conversion to/from decimal, hex, binary, octal

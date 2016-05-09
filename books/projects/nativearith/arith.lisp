@@ -46,6 +46,9 @@
 (local (in-theory (disable signed-byte-p unsigned-byte-p acl2::zip-open)))
 (local (std::add-default-post-define-hook :fix))
 
+(local (in-theory (disable acl2::logext-bounds
+                           bitops::logcdr-natp)))
+
 (defrule logext-64-of-bfix
   (equal (logext 64 (bfix b))
          (bfix b))
@@ -142,6 +145,12 @@
 (defrule logapp-of-logext-same
   (equal (logapp n (logext n x) y)
          (logapp n x y)))
+
+(defrule lognot-of-logapp
+  (equal (lognot (logapp n a b))
+         (logapp n (lognot a) (lognot b)))
+  :enable (ihsext-inductions logapp**)
+  :induct (logapp n a b))
 
 (defrule equal-of-expanded-logapp
   (implies (natp n)
