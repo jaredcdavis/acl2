@@ -756,6 +756,18 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
     (equal (bigint->val (bigint-nfix n))
            (nfix (bigint->val n)))))
 
+(define bigint-pos-fix ((n bigint-p))
+  :returns (ans bigint-p)
+  :short "Analogue of @(see pos-fix) for @(see bigint)s."
+  (if (bigint-<-p (bigint-0) n)
+      (bigint-fix n)
+    (bigint-1))
+  ///
+  (defrule bigint-pos-fix-correct
+    (equal (bigint->val (bigint-pos-fix n))
+           (pos-fix (bigint->val n)))
+    :enable (pos-fix)))
+
 (local (defrule i64-p-of-subtract-64-from-positive
          (implies (and (i64-p n)
                        (<= 0 n))
@@ -999,7 +1011,106 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
     :expand ((bigint->val a))))
 
 
+(encapsulate
+  ()
+  (local (defrule minus-of-minus
+           (equal (- (- a))
+                  (fix a))))
 
+  (local (defrule big-logbit
+           (implies (and (<= n (nfix big))
+                         (signed-byte-p n a))
+                    (equal (logbitp big a)
+                           (< a 0)))
+           :enable (ihsext-inductions ihsext-recursive-redefs)))
+
+  (local (defrule big-logbit-specialized-to-64
+           (implies (and (<= 64 (nfix big))
+                         (signed-byte-p 64 a))
+                    (equal (logbitp big a)
+                           (< a 0)))
+           :use ((:instance big-logbit (n 64)))))
+
+  (local (defrule logbit-degenerate
+           (implies (and (<= n 0)
+                         (syntaxp (not (quotep n))))
+                    (equal (logbitp n a)
+                           (logbitp 0 a)))
+           :enable (logbitp**)))
+
+  (local (defrule loghead-1-to-logbit-0
+           (equal (loghead 1 x)
+                  (logbit 0 x))
+           :enable (ihsext-recursive-redefs)))
+
+
+  (define bigint-logbit-aux ((n i64-p)
+                             (a bigint-p))
+    :returns (ans bigint-p)
+    :parents (bigint-logbit)
+    :short "Implementation of @(see bigint-logbit) when we know that @('n')
+            fits into 64 bits (to avoid @(see bigint) operations on @('n'))."
+    :measure (nfix (i64-fix n))
+    :prepwork ((local (in-theory (enable i64-fix i64slt i64sle i64minus))))
+    (b* ((n (i64-fix n))
+         ((bigint a))
+         ((when (bit->bool (i64slt n 64)))
+          ;; Since N is (strictly) less than 64, the bit we want is in the first
+          ;; block.
+          (cond ((bit->bool (i64sle n 0))
+                 ;; Special degenerate case, logbit with a negative or zero width
+                 ;; is just the LSB of A.
+                 (bigint-singleton (i64bitand 1 a.first)))
+                (t
+                 (bigint-singleton (i64bitand 1 (i64lshr a.first n))))))
+
+         ((when (bigint->endp a))
+          ;; This case isn't strictly necessary, but in case of huge N it will
+          ;; allow us to successfully return the bit without having to decrement
+          ;; N all the way down to zero.
+          (if (bit->bool (i64slt a.first 0))
+              (bigint-1)
+            (bigint-0))))
+
+      ;; Else N is at least 64, so the bit we want is in some later block.
+      (bigint-logbit-aux (i64minus n 64) a.rest))
+    ///
+    (defrule bigint-logbit-aux-correct
+      (equal (bigint->val (bigint-logbit-aux n a))
+             (logbit (i64-fix n) (bigint->val a)))
+      :induct (bigint-logbit-aux n a)
+      :expand ((bigint->val a))
+      :enable (i64bitand i64lshr)))
+
+  (define bigint-logbit ((n bigint-p)
+                         (a bigint-p))
+    :returns (ans bigint-p)
+    :short "Analogue of @(see logbit) for @(see bigint)s."
+    :measure (nfix (bigint->val n))
+    :prepwork ((local (in-theory (enable i64-p signed-byte-p))))
+    (b* (((when (bigint-<=-p n (bigint-i64max)))
+          (if (bigint-<=-p n (bigint-0))
+              ;; Special degenerate case, logbit with a negative or zero width is
+              ;; just the LSB of A.
+              (bigint-singleton (i64bitand 1 (bigint->first a)))
+            ;; Positive index which is small enough to use our aux function.
+            (bigint-logbit-aux (bigint->val-when-i64 n) a)))
+         ((when (bigint->endp a))
+          ;; As in the aux function, this case isn't strictly necessary, but in
+          ;; case of huge N it will allow us to successfully return the bit
+          ;; without having to decrement N all the way down to zero.
+          (if (bit->bool (i64slt (bigint->first a) 0))
+              (bigint-1)
+            (bigint-0))))
+      (bigint-logbit (bigint-minus n (bigint-64))
+                     (bigint->rest a)))
+    ///
+    (defrule bigint-logbit-correct
+      (equal (bigint->val (bigint-logbit n a))
+             (logbit (bigint->val n) (bigint->val a)))
+      :induct (bigint-logbit n a)
+      :expand ((bigint->val a))
+      :enable (i64bitand i64slt))))
 
 
 ; Implemented:
@@ -1013,6 +1124,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 ;   logorc1
 ;   logorc2
 ;   logeqv
+;
 ;   equal
 ;   not-equal
 ;   <
@@ -1022,8 +1134,11 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 ;   +
 ;   - (binary)
 ;   nfix
+;   pos-fix
+;
 ;   loghead
 ;   logext
+;   logbit
 ;
 ;
 ;
@@ -1036,12 +1151,10 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 ;   expt
 ;   clog2
 ;
-;   logbit
 ;   logapp
 ;   rsh
 ;   lsh
 ;   parity
-;   pos-fix
 ;   integer-length
 ;
 ;   conversion to/from decimal, hex, binary, octal
