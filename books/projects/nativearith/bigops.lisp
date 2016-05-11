@@ -35,6 +35,7 @@
 (include-book "i64")
 (include-book "smallops")
 (include-book "std/util/defrule" :dir :system)
+(include-book "std/util/defval" :dir :system)
 (local (include-book "tools/do-not" :dir :system))
 (local (include-book "centaur/bitops/signed-byte-p" :dir :system))
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
@@ -1013,10 +1014,6 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 
 (encapsulate
   ()
-  (local (defrule minus-of-minus
-           (equal (- (- a))
-                  (fix a))))
-
   (local (defrule big-logbit
            (implies (and (<= n (nfix big))
                          (signed-byte-p n a))
@@ -1113,6 +1110,187 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
       :enable (i64bitand i64slt))))
 
 
+(define bigint-shift-left.unaligned ((n  posp      "Places to shift.")
+                                     (in i64-p     "Bits to shift in.")
+                                     (a  bigint-p  "Bigint to shift."))
+  :returns (ans bigint-p)
+  :parents (bigint-shl)
+  :short "Shift the blocks of the bigint @('a') left by @('n') places, where
+          @('n') is in @('[1, 63]').  This is the tricky case where we have to
+          split each block up and form new blocks."
+  :measure (bigint-count a)
+  :guard (and (< n 64)
+              (unsigned-byte-p n in))
+  :verify-guards nil
+  (b* ((n  (pos-fix n))
+       (in (i64-fix in))
+       ((bigint a))
+
+       ;; We'll split A into low bits (to be kept in this block) and high bits
+       ;; (to be moved into the next block), based on how many input bits there
+       ;; are, i.e., based on N.
+
+       ;; The new, least significant block of the answer is then just the
+       ;; concatenation of the input bits with the low bits of A.
+       (a-low<<n  (i64shl a.first n))
+       (new-first (i64bitor in a-low<<n))
+
+       ((when a.endp)
+        ;; Do an arithmetic shift since we're at the end.
+        (b* ((out-bits (i64ashr a.first (i64minus 64 n)))
+             (main-ans (bigint-cons new-first (bigint-singleton out-bits))))
+          ;; In certain cases we may not need the extra block, e.g., if the top
+          ;; block was, e.g., #xABCD, and we are shifting left by 4 places,
+          ;; then the new-first might be, #xABCD0, but its top 4 bits are
+          ;; already 0s, so we don't need to create [#xABCD0, 0], we can just
+          ;; use [#xABCD0].
+          (bigint-clean main-ans)))
+
+       ;; We kept the N low bits of a.first in new-first.  Now we need the rest
+       ;; of a.first, i.e., the high 64-N bits.  So a.first >> (64-N) gives us
+       ;; those high bits.
+       (out-bits (i64lshr a.first (i64minus 64 n))))
+
+    (bigint-cons new-first (bigint-shift-left.unaligned n out-bits a.rest)))
+  ///
+  (local (in-theory (enable bigint-shift-left.unaligned)))
+
+  (local (defrule l0
+           (implies (and (natp n)
+                         (< n 64))
+                    (i64-p n))
+           :enable (i64-p signed-byte-p)))
+
+  (verify-guards bigint-shift-left.unaligned
+    :hints(("Goal" :in-theory (enable i64lshr i64minus))))
+
+  (local (defrule logext-of-smaller-logtail
+           (implies (and (signed-byte-p width x)
+                         (< (nfix n) width))
+                    (equal (logext width (logtail n x))
+                           (logtail n x)))
+           :enable (ihsext-recursive-redefs ihsext-inductions)))
+
+  (local (defrule case-split-logior-ash
+           (implies (and (case-split (posp n))
+                         (case-split (unsigned-byte-p n a1))
+                         (case-split (unsigned-byte-p n a2)))
+                    (equal (equal (logior a1 (ash b1 n))
+                                  (logior a2 (ash b2 n)))
+                           (and (equal a1 a2)
+                                (equal (ifix b1) (ifix b2)))))
+           :enable (ihsext-recursive-redefs ihsext-inductions)))
+
+  (local (defrule case-split-logior-ash-2
+           (implies (and (case-split (posp n))
+                         (case-split (unsigned-byte-p n a1))
+                         (case-split (unsigned-byte-p n a2))
+                         (case-split (unsigned-byte-p n a3)))
+                    (equal (equal (logior a1 a2 (ash b1 n))
+                                  (logior a3 (ash b2 n)))
+                           (and (equal (logior a1 a2) a3)
+                                (equal (ifix b1) (ifix b2)))))
+           :disable (case-split-logior-ash)
+           :use ((:instance case-split-logior-ash
+                  (a1 (logior a1 a2))
+                  (a2 a3)))))
+
+  (local (defrule ash-of-logior-of-ash
+           (implies (and (natp width1)
+                         (natp width2))
+                    (equal (ash (logior a (ash b width1)) width2)
+                           (logior (ash a width2)
+                                   (ash b (+ width1 width2)))))
+           :hints((bitops::logbitp-reasoning))))
+
+  (defrule bigint-shift-left.unaligned-correct
+    (implies (and (posp n)
+                  (< n 64)
+                  (unsigned-byte-p n in))
+             (equal (bigint->val (bigint-shift-left.unaligned n in a))
+                    (logior in (ash (bigint->val a) n))))
+    :induct (bigint-shift-left.unaligned n in a)
+    :enable (i64bitor i64shl i64lshr i64ashr i64minus i64-fix logapp-redef)
+    :hints((bitops::logbitp-reasoning :passes 1))))
+
+(define bigint-shl-aux ((a bigint-p)
+                        (n i64-p))
+  :guard (< 0 n)
+  :returns (ans bigint-p)
+  :parents (bigint-shl)
+  :short "Shift left by some @(see i64) number of bits."
+  :measure (nfix (i64-fix n))
+  :hints (("Goal" :in-theory (enable i64sle i64eql i64-fix)))
+  :verify-guards nil
+  (b* ((n (i64-fix n))
+       (a (bigint-fix a))
+       ((when (bit->bool (i64sle n 64)))
+        (if (bit->bool (i64eql n 64))
+            ;; Shifting by exactly 64 -- just cons a new 0 block onto
+            ;; the start.
+            (bigint-cons 0 a)
+          ;; Shifting by less than 64 -- enter the unaligned case
+          (bigint-shift-left.unaligned n 0 a))))
+    ;; Shifting by more than 64 -- cons a 0 onto the recursive shift.
+    (bigint-cons 0 (bigint-shl-aux a (- n 64))))
+  ///
+  (verify-guards bigint-shl-aux
+    :hints (("Goal" :in-theory (enable i64sle i64eql i64-fix))))
+
+  (defrule bigint-shl-aux-correct
+    (implies (and (force (i64-p n))
+                  (force (< 0 n)))
+             (equal (bigint->val (bigint-shl-aux a n))
+                    (ash (bigint->val a) n)))
+    :induct (bigint-shl-aux a n)
+    :enable (i64sle i64eql)))
+
+(defval *bigint-shl-limit*
+  :parents (bigint-shl)
+  :short "Size cutoff for actually computing left shifts."
+  (bigint-singleton (ash 1 30)))
+
+(define bigint-shl ((a bigint-p)
+                    (b bigint-p))
+  :returns (ans bigint-p)
+  :short "Left shift operation for @(see bigint)s, i.e., @('a << b')."
+  :measure (nfix (bigint->val b))
+  :verify-guards nil
+  ;; Basic goal is to do (ash a (nfix b))
+  (b* (((unless (bigint-<=-p b *bigint-shl-limit*))
+        ;; Yikes, we want to shift left by some huge amount.  The only time
+        ;; this is OK is if we're shifting 0 left.  Otherwise we're about to
+        ;; allocate a huge pile of memory, so let's cause a clean error
+        ;; instead.
+        (if (bigint-equalp a (bigint-0))
+            ;; The special 0 << huge case is OK.
+            (bigint-0)
+          (progn$
+           (raise "Shifting left by ~x0 bits seems like a bad idea." (bigint->val b))
+           (bigint-cons 0 (bigint-shl a (bigint-minus b (bigint-64)))))))
+
+       ;; Otherwise B is small enough that we will do the shift.
+       ((when (bigint-<=-p b (bigint-0)))
+        ;; Special degenerate case where B is negative, so we're just going to
+        ;; treat it as a shift by zero and leave A unchanged.
+        (bigint-fix a)))
+
+    (bigint-shl-aux a (bigint->val-when-i64 b)))
+  ///
+  (local (defruled bigint->val-when-i64-force
+           (implies (force (i64-p (bigint->val a)))
+                    (equal (bigint->val-when-i64 a)
+                           (bigint->val a)))))
+
+  (defrule bigint-shl-correct
+    (equal (bigint->val (bigint-shl a b))
+           (ash (bigint->val a)
+                (nfix (bigint->val b))))
+    :induct (bigint-shl a b)
+    :enable (nfix i64-p signed-byte-p bigint->val-when-i64-force)
+    :hints((bitops::logbitp-reasoning))))
+
+
 ; Implemented:
 ;
 ;   lognot
@@ -1139,6 +1317,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 ;   loghead
 ;   logext
 ;   logbit
+;   lsh
 ;
 ;
 ;
@@ -1153,7 +1332,7 @@ answer says whether @('a') and @('b') have a different @(see bigint->val)s.</p>"
 ;
 ;   logapp
 ;   rsh
-;   lsh
+
 ;   parity
 ;   integer-length
 ;

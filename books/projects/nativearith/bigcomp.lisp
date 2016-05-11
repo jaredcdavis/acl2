@@ -312,9 +312,6 @@ getting N bits out.</p>")
     (equal (len (explode-bigint-to-len len big))
            (nfix len)))
 
-  (local (defrule a0
-           (equal (- (- x)) (fix x))))
-
   (local (defrule a1
            (equal (* -1 n) (- n))))
 

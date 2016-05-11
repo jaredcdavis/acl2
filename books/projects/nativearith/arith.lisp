@@ -49,6 +49,14 @@
 (local (in-theory (disable acl2::logext-bounds
                            bitops::logcdr-natp)))
 
+(defrule minus-of-minus
+  (equal (- (- a))
+         (fix a)))
+
+(defrule plus-of-minus-same
+  (equal (+ a (- a) b)
+         (fix b)))
+
 (defrule logext-64-of-bfix
   (equal (logext 64 (bfix b))
          (bfix b))
